@@ -2474,7 +2474,6 @@
           </svg>
         </span>
         Employee Wall
-        <span class="nav-badge" id="wallTotalBadge">0</span>
       </a>
 
     </nav>
@@ -2979,10 +2978,23 @@
       renderAll();
     }
 
+    // The backend sends timestamps as UTC ISO strings (e.g. from a MySQL
+    // TIMESTAMP column serialized by JSON.stringify). Rendering that string
+    // as-is shows the UTC clock time instead of the viewer's local time, so
+    // always parse it into a Date and format it in the browser's own timezone.
+    function formatDisplayTime(value) {
+      if (!value) return "Just now";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      return date.toLocaleString(undefined, {
+        month: "short", day: "numeric", hour: "numeric", minute: "2-digit"
+      });
+    }
+
     function buildCommentTree(comments) {
       const commentMap = new Map(comments.map(comment => [comment.id, {
         ...comment,
-        time: comment.timestamp || "Just now",
+        time: formatDisplayTime(comment.timestamp),
         reactions: comment.reactions || {},
         userReactions: comment.userReactions || [],
         replies: []
@@ -3424,7 +3436,7 @@
                   ${anonTagHtml}
                 </div>
                 <div class="post-timestamp-row">
-                  <span class="post-timestamp">${post.timestamp} ${post.isEdited ? '<span class="edited-badge">• (Edited)</span>' : ''}</span>
+                  <span class="post-timestamp">${formatDisplayTime(post.timestamp)} ${post.isEdited ? '<span class="edited-badge">• (Edited)</span>' : ''}</span>
                 </div>
               </div>
             </div>
