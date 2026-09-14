@@ -641,54 +641,15 @@
       color: var(--text-main);
     }
 
-    /* Emoji Reaction Bar & Comment Toggle Button */
+    /* Comment Toggle Button */
     .card-footer-actions {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: flex-end;
       gap: 12px;
       padding-top: 14px;
       border-top: 1px solid var(--border-light);
       flex-wrap: wrap;
-    }
-
-    .emoji-reactions-bar {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-
-    .reaction-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      padding: 5px 11px;
-      border-radius: var(--radius-full);
-      background: var(--bg-subtle);
-      border: 1px solid var(--border-color);
-      font-size: 0.82rem;
-      font-weight: 600;
-      color: var(--text-muted);
-      transition: all var(--transition-fast);
-      user-select: none;
-    }
-
-    .reaction-chip:hover {
-      background: #E2E8F0;
-      transform: scale(1.05);
-    }
-
-    .reaction-chip.active {
-      background: var(--accent-cyan-light);
-      border-color: var(--accent-cyan);
-      color: var(--accent-cyan);
-      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.15);
-    }
-
-    .reaction-chip .emoji-icon {
-      font-size: 0.95rem;
-      line-height: 1;
     }
 
     /* Enhanced Comment Action Button */
@@ -816,44 +777,12 @@
       line-height: 1.5;
     }
 
-    /* Comment Reaction Chips & Actions */
     .comment-footer-actions {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: flex-end;
       gap: 6px;
       margin-top: 4px;
-    }
-
-    .comment-reactions-group {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .comment-reaction-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 2px 7px;
-      border-radius: var(--radius-full);
-      background: #FFFFFF;
-      border: 1px solid var(--border-color);
-      font-size: 0.74rem;
-      font-weight: 600;
-      color: var(--text-muted);
-      transition: all var(--transition-fast);
-    }
-
-    .comment-reaction-btn:hover {
-      background: #F1F5F9;
-      transform: scale(1.05);
-    }
-
-    .comment-reaction-btn.active {
-      background: var(--accent-cyan-light);
-      border-color: var(--accent-cyan);
-      color: var(--accent-cyan);
     }
 
     .comment-action-icons {
@@ -1881,19 +1810,45 @@
     .feedbacks-group-expand-btn:hover { color: var(--text-main); }
 
     /* Sub-groups: plain clickable text rows, no icon box — "just a text box
-       you can press" — nested under their (expanded) parent. */
+       you can press" — nested under their (expanded) parent, connected to it
+       by a tree-style guide line instead of floating unattached. */
+    .feedbacks-subgroup-list {
+      position: relative;
+      margin-left: 26px;
+      border-left: 2px solid var(--border-light);
+    }
+
+    .feedbacks-subgroup-row {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      position: relative;
+      padding-left: 18px;
+    }
+
+    .feedbacks-subgroup-row::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 50%;
+      width: 12px;
+      height: 2px;
+      background: var(--border-light);
+    }
+
     .feedbacks-subgroup-textrow {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      width: 100%;
-      padding: 7px 10px 7px 32px;
+      flex: 1;
+      min-width: 0;
+      padding: 7px 10px;
       border-radius: var(--radius-md);
       text-align: left;
     }
 
     .feedbacks-subgroup-textrow:hover { background: var(--bg-subtle); }
-    .feedbacks-subgroup-textrow.active { background: var(--accent-cyan-light); }
+    .feedbacks-subgroup-row.active .feedbacks-subgroup-textrow { background: var(--accent-cyan-light); }
     .feedbacks-subgroup-textrow-name { font-size: 0.85rem; color: var(--text-main); }
 
     .feedbacks-subgroup-add-btn {
@@ -1903,6 +1858,24 @@
       font-weight: 600;
       color: var(--text-subtle);
     }
+
+    .feedbacks-group-edit-btn {
+      flex-shrink: 0;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-subtle);
+      border-radius: var(--radius-md);
+      opacity: 0;
+      transition: opacity var(--transition-fast);
+    }
+
+    .feedbacks-group-block-row:hover .feedbacks-group-edit-btn,
+    .feedbacks-subgroup-row:hover .feedbacks-group-edit-btn { opacity: 1; }
+
+    .feedbacks-group-edit-btn:hover { color: var(--accent-cyan); background: var(--bg-subtle); }
 
     .feedbacks-subgroup-add-btn:hover { color: var(--accent-cyan); }
 
@@ -1956,13 +1929,27 @@
       color: var(--text-main);
     }
 
-    .feedbacks-messages-scroll, .oversight-messages-scroll {
+    .feedbacks-detail-title-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .feedbacks-messages-scroll {
       flex: 1;
       overflow-y: auto;
       padding: 20px;
       display: flex;
       flex-direction: column;
       gap: 10px;
+    }
+
+    .oversight-topic-messages {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 4px 4px 4px 12px;
     }
 
     .feedbacks-empty-state {
@@ -1973,18 +1960,23 @@
       max-width: 320px;
     }
 
-    /* Flat, full-width message rows (no chat-bubble box) — each one spans
-       the whole messages area, like a feed/list rather than Messenger-style
-       bubbles, separated by a hairline instead of a background/border box. */
+    /* Messenger-style layout: my own messages align to the right, everyone
+       else's align to the left, so a back-and-forth reads like a chat
+       instead of a flat feed. The messages scroll container is already a
+       flex column (below), so alignment is just align-self per row. */
     .chat-message-row {
-      width: 100%;
-      padding: 10px 4px;
-      border-bottom: 1px solid var(--border-light);
-      border-left: 3px solid transparent;
-      padding-left: 12px;
+      max-width: 74%;
+      align-self: flex-start;
+      padding: 8px 14px;
+      border-radius: var(--radius-lg);
+      background: var(--bg-subtle);
     }
 
-    .chat-message-row.mine { border-left-color: var(--accent-cyan); }
+    .chat-message-row.mine {
+      align-self: flex-end;
+      background: var(--accent-cyan-light);
+    }
+
     .chat-message-row.pending { opacity: 0.6; }
 
     .chat-message-meta {
@@ -1993,6 +1985,8 @@
       align-items: baseline;
       margin-bottom: 3px;
     }
+
+    .chat-message-row.mine .chat-message-meta { flex-direction: row-reverse; }
 
     .chat-message-sender { font-size: 0.76rem; font-weight: 700; color: var(--text-main); }
     .chat-message-time { font-size: 0.7rem; color: var(--text-subtle); }
@@ -2102,6 +2096,27 @@
 
     .group-modal-submit { width: 100%; margin-top: 16px; justify-content: center; }
 
+    .group-modal-rename-btn {
+      margin-top: 8px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      padding: 6px 0;
+    }
+
+    .group-modal-rename-btn:hover { text-decoration: underline; }
+
+    .group-modal-member-remove {
+      flex-shrink: 0;
+      color: var(--text-subtle);
+      font-size: 1rem;
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: var(--radius-full);
+    }
+
+    .group-modal-member-remove:hover { color: #E11D48; background: var(--bg-subtle); }
+
     /* Profile modal (placeholder) */
     .profile-modal-body { text-align: center; }
     .profile-modal-note { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 18px; }
@@ -2118,33 +2133,51 @@
 
     .btn-logout:hover { opacity: 0.9; }
 
-    /* Admin/manager oversight panel inside the Wall modal */
-    .oversight-panel {
-      margin: 20px 0;
-      border: 1px solid rgba(180, 35, 24, 0.25);
-      border-radius: var(--radius-md);
-      background: rgba(180, 35, 24, 0.04);
-      padding: 14px 16px;
-    }
-
-    .oversight-panel-title {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 0.86rem;
-      font-weight: 700;
-      color: var(--text-main);
+    /* Admin/manager oversight section inside the Wall modal: private
+       conversations grouped by counterpart, then by topic. */
+    .oversight-conversations {
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border-light);
     }
 
     .oversight-panel-subtitle {
       font-size: 0.78rem;
       color: var(--text-muted);
-      margin: 4px 0 10px;
+      margin: 4px 0 14px;
     }
 
-    .oversight-messages-scroll {
-      max-height: 260px;
-      padding: 4px;
+    .oversight-counterpart-block {
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-lg);
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      background: var(--bg-subtle);
+    }
+
+    .oversight-counterpart-header {
+      font-size: 0.9rem;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-bottom: 8px;
+    }
+
+    .oversight-topic-block {
+      border-left: 2px solid var(--border-color);
+      margin-left: 4px;
+      padding-left: 10px;
+      margin-bottom: 10px;
+    }
+
+    .oversight-topic-block:last-child { margin-bottom: 0; }
+
+    .oversight-topic-header {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--text-subtle);
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      margin-bottom: 6px;
     }
 
     .private-remark-display:empty {
@@ -2814,8 +2847,11 @@
       <!-- Modal Body -->
       <div class="modal-scrollable-body">
 
-        <!-- Write Feedback Form Panel -->
-        <div class="write-feedback-panel">
+        <!-- Write Feedback Form Panel: only for the Company Wall (public
+             workplace suggestions). An employee's own wall is oversight-only
+             for admins/managers now — feedback to a person happens through
+             the Feedbacks tab's private messaging instead. -->
+        <div class="write-feedback-panel" id="writeFeedbackPanel">
           <div class="write-panel-title" id="writePanelTitle">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -2881,19 +2917,11 @@
           <div class="private-remark-display" id="privateRemarkDisplay"></div>
         </div>
 
-        <!-- Oversight panel: admins/managers only. Read-only view of this
-             employee's private feedback (DMs and their Organization thread) —
-             the "admins/managers can view everything" oversight requirement. -->
-        <div class="oversight-panel" id="oversightPanel" hidden>
-          <div class="oversight-panel-title">
-            <span aria-hidden="true">🛡️</span>
-            Private feedback (admin/manager view)
-          </div>
-          <div class="oversight-panel-subtitle">Direct messages and Organization thread involving this employee. Visible only to admins and managers.</div>
-          <div class="feedbacks-messages-scroll oversight-messages-scroll" id="oversightMessages"></div>
-        </div>
-
-        <!-- Target Wall Feed -->
+        <!-- Praise & Feedback: everything involving this employee in one
+             page — public wall posts, plus (admins/managers only) every
+             private conversation, grouped by who it's with and then by
+             topic, so a back-and-forth reads as its own separate thread
+             instead of one flat interleaved list. -->
         <div>
           <div class="modal-feed-title" id="modalFeedTitle">
             Wall Activity & Feedback
@@ -2914,6 +2942,12 @@
           <div class="feed-cards-list" id="modalTargetFeed" style="margin-top: 14px;">
             <!-- Rendered by JS -->
           </div>
+        </div>
+
+        <div class="oversight-conversations" id="oversightConversations" hidden>
+          <div class="modal-feed-title">Private conversations</div>
+          <div class="oversight-panel-subtitle">Every direct message and Organization thread involving this employee. Visible only to admins and managers.</div>
+          <div id="oversightConversationsBody"></div>
         </div>
 
       </div>
@@ -2940,8 +2974,13 @@
         <div id="groupModalNameField">
           <label class="group-modal-label" for="groupModalNameInput">Group name</label>
           <input type="text" id="groupModalNameInput" class="group-modal-name-input" placeholder="e.g. Frontend" />
+          <button type="button" class="group-modal-rename-btn" id="groupModalRenameBtn" onclick="submitGroupRename()" hidden>Save name</button>
         </div>
-        <label class="group-modal-label">Members</label>
+        <div id="groupModalCurrentMembersField" hidden>
+          <label class="group-modal-label">Current members</label>
+          <div class="group-modal-member-list" id="groupModalCurrentMembersList"></div>
+        </div>
+        <label class="group-modal-label" id="groupModalAddLabel">Members</label>
         <div class="search-input-wrapper">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="11" cy="11" r="8"></circle>
@@ -2951,6 +2990,30 @@
         </div>
         <div class="group-modal-member-list" id="groupModalMemberList"></div>
         <button type="button" class="btn-submit-feedback group-modal-submit" id="groupModalSubmitBtn" onclick="submitGroupModal()">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Topic modal: name a new topic inside the open container — replaces
+       window.prompt(), which silently blocks automated testing and looks
+       out of place next to the app's other modals. -->
+  <div class="modal-overlay" id="topicModalOverlay" onclick="handleTopicModalBackdropClick(event)">
+    <div class="modal-content-card group-modal-card" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div class="modal-target-profile">
+          <h3>New topic</h3>
+        </div>
+        <button class="btn-modal-close" onclick="closeTopicModal()" title="Close dialog">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-scrollable-body">
+        <label class="group-modal-label" for="topicModalNameInput">Topic name</label>
+        <input type="text" id="topicModalNameInput" class="group-modal-name-input" placeholder="e.g. Sprint 12 retro" onkeydown="handleTopicModalKeydown(event)" />
+        <button type="button" class="btn-submit-feedback group-modal-submit" onclick="submitTopicModal()">Create</button>
       </div>
     </div>
   </div>
@@ -3001,6 +3064,18 @@
       avatar: ""
     };
 
+    // Shown in place of a missing profile picture, everywhere an avatar is
+    // rendered as an <img> — a plain silhouette so a blank/empty avatar
+    // never shows as a broken-image icon.
+    const DEFAULT_AVATAR = "data:image/svg+xml;utf8," + encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">'
+      + '<rect width="40" height="40" rx="20" fill="#C9D3DD"/>'
+      + '<circle cx="20" cy="16" r="7" fill="#ffffff"/>'
+      + '<path d="M6 35c0-8.5 6.3-14 14-14s14 5.5 14 14" fill="#ffffff"/>'
+      + '</svg>'
+    );
+    function avatarSrc(url) { return url && String(url).trim() ? url : DEFAULT_AVATAR; }
+
     let currentRoleView = "employee"; // "employee" | "manager" | "admin"
     let currentMainTab = "feedbacks"; // "feedbacks" | "wall"
     let selectedDepartment = "All";
@@ -3039,7 +3114,7 @@
       if (sidebarName) sidebarName.textContent = CURRENT_USER.name || "No User Selected";
       if (sidebarRole) sidebarRole.textContent = CURRENT_USER.role || "--";
       if (sidebarAvatar) {
-        sidebarAvatar.src = CURRENT_USER.avatar || "";
+        sidebarAvatar.src = avatarSrc(CURRENT_USER.avatar);
         sidebarAvatar.alt = CURRENT_USER.name || "User";
       }
 
@@ -3109,8 +3184,6 @@
           const list = Array.isArray(fbJson) ? fbJson : (fbJson.data || []);
           FEEDBACKS.splice(0, FEEDBACKS.length, ...list.map(f => ({
             ...f,
-            reactions: f.reactions || { "❤️": 0, "👏": 0, "💡": 0, "🙌": 0 },
-            userReactions: f.userReactions || [],
             comments: buildCommentTree(f.comments || [])
           })));
         } else {
@@ -3234,8 +3307,6 @@
       const commentMap = new Map(comments.map(comment => [comment.id, {
         ...comment,
         time: formatDisplayTime(comment.timestamp),
-        reactions: comment.reactions || {},
-        userReactions: comment.userReactions || [],
         replies: []
       }]));
       const roots = [];
@@ -3375,18 +3446,27 @@
       `;
     }
 
+    const EDIT_PENCIL_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
+    function groupEditButtonHtml(groupId) {
+      return `<button type="button" class="feedbacks-group-edit-btn" onclick="event.stopPropagation(); editGroupPrompt('${groupId}')" title="Edit group">${EDIT_PENCIL_SVG}</button>`;
+    }
+
     // Sub-groups render as plain clickable text, no icon box — just a row
-    // you can press, nested under their expanded parent.
+    // you can press, nested under their expanded parent, with an edit
+    // button alongside so they're not just a floating unlabeled name.
     function subgroupTextRowHtml(sub) {
       const summary = containerSummary(topicsForGroup(sub.id));
       const active = activeContainer?.type === "group" && activeContainer?.id === sub.id;
       const safeName = escapeHtml(sub.name || "");
       return `
-        <button type="button" class="feedbacks-subgroup-textrow${active ? " active" : ""}"
-          onclick="openContainer('group', '${escapeHtml(sub.id)}', '${safeName.replace(/'/g, "&#039;")}')">
-          <span class="feedbacks-subgroup-textrow-name">${safeName}</span>
-          ${summary.unread ? `<span class="feedbacks-unread-dot">${summary.unread}</span>` : ""}
-        </button>
+        <div class="feedbacks-subgroup-row${active ? " active" : ""}">
+          <button type="button" class="feedbacks-subgroup-textrow"
+            onclick="openContainer('group', '${escapeHtml(sub.id)}', '${safeName.replace(/'/g, "&#039;")}')">
+            <span class="feedbacks-subgroup-textrow-name">${safeName}</span>
+            ${summary.unread ? `<span class="feedbacks-unread-dot">${summary.unread}</span>` : ""}
+          </button>
+          ${groupEditButtonHtml(sub.id)}
+        </div>
       `;
     }
 
@@ -3428,9 +3508,10 @@
         const expandToggle = subgroups.length
           ? `<button type="button" class="feedbacks-group-expand-btn" onclick="toggleGroupExpanded('${group.id}')" title="${expanded ? "Collapse" : "Expand"} sub-groups">${expanded ? "▾" : "▸"}</button>`
           : `<span class="feedbacks-group-expand-spacer"></span>`;
-        const subgroupsHtml = expanded ? subgroups.map(subgroupTextRowHtml).join("") : "";
+        const subgroupsHtml = expanded && subgroups.length
+          ? `<div class="feedbacks-subgroup-list">${subgroups.map(subgroupTextRowHtml).join("")}</div>` : "";
         return `<div class="feedbacks-group-block">
-          <div class="feedbacks-group-block-row">${expandToggle}${row}</div>
+          <div class="feedbacks-group-block-row">${expandToggle}${row}${groupEditButtonHtml(group.id)}</div>
           ${subgroupsHtml}
           <button type="button" class="feedbacks-subgroup-add-btn" onclick="createSubgroupPrompt('${group.id}')">+ Sub-group</button>
         </div>`;
@@ -3473,31 +3554,101 @@
       if (!activeContainer || activeContainer.type !== "group") return;
       openGroupModal({ mode: "addMember", targetGroupId: activeContainer.id });
     }
+    function editGroupPrompt(groupId) {
+      const group = myGroups.find(g => g.id === groupId) || allGroupsDirectory.find(g => g.id === groupId);
+      openGroupModal({ mode: "edit", targetGroupId: groupId, initialName: group?.name || "" });
+    }
 
-    // ---- Group modal: create a group/sub-group, or add members to one —
-    // a real searchable employee picker instead of window.prompt(). ----
-    let groupModalMode = null; // "create" | "addMember"
+    // ---- Group modal: create a group/sub-group, add members to one, or
+    // edit one (rename + manage members) — a real searchable employee
+    // picker instead of window.prompt(). ----
+    let groupModalMode = null; // "create" | "addMember" | "edit"
     let groupModalParentId = null;
     let groupModalTargetGroupId = null;
     let groupModalSearch = "";
     let groupModalSelectedIds = new Set();
+    let groupModalCurrentMembers = []; // fetched for "addMember"/"edit" so existing members aren't offered as candidates
 
-    function openGroupModal({ mode, parentGroupId = null, targetGroupId = null }) {
+    async function openGroupModal({ mode, parentGroupId = null, targetGroupId = null, initialName = "" }) {
       groupModalMode = mode;
       groupModalParentId = parentGroupId;
       groupModalTargetGroupId = targetGroupId;
       groupModalSearch = "";
       groupModalSelectedIds = new Set();
+      groupModalCurrentMembers = [];
 
       document.getElementById("groupModalTitle").textContent =
-        mode === "addMember" ? "Add members" : parentGroupId ? "Create sub-group" : "Create group";
+        mode === "edit" ? "Edit group" : mode === "addMember" ? "Add members" : parentGroupId ? "Create sub-group" : "Create group";
       document.getElementById("groupModalNameField").hidden = mode === "addMember";
-      document.getElementById("groupModalNameInput").value = "";
+      document.getElementById("groupModalNameInput").value = mode === "edit" ? initialName : "";
+      document.getElementById("groupModalRenameBtn").hidden = mode !== "edit";
+      document.getElementById("groupModalCurrentMembersField").hidden = mode !== "edit";
+      document.getElementById("groupModalAddLabel").textContent = mode === "create" ? "Members" : "Add members";
       document.getElementById("groupModalMemberSearch").value = "";
-      document.getElementById("groupModalSubmitBtn").textContent = mode === "addMember" ? "Add" : "Create";
+      document.getElementById("groupModalSubmitBtn").textContent = mode === "create" ? "Create" : "Add";
       renderGroupModalMemberList();
       document.getElementById("groupModalOverlay").classList.add("open");
       document.body.style.overflow = "hidden";
+
+      if (mode === "addMember" || mode === "edit") {
+        await refreshGroupModalCurrentMembers();
+      }
+    }
+
+    async function refreshGroupModalCurrentMembers() {
+      try {
+        const response = await fetch(`${API_BASE_URL}/groups/${groupModalTargetGroupId}/members`);
+        const json = response.ok ? await response.json() : { data: [] };
+        groupModalCurrentMembers = json.data || [];
+      } catch (error) {
+        groupModalCurrentMembers = [];
+      }
+      if (groupModalMode === "edit") renderGroupModalCurrentMembers();
+      renderGroupModalMemberList();
+    }
+
+    function renderGroupModalCurrentMembers() {
+      const listEl = document.getElementById("groupModalCurrentMembersList");
+      if (!listEl) return;
+      listEl.innerHTML = groupModalCurrentMembers.length ? groupModalCurrentMembers.map(m => `
+        <div class="group-modal-member-row">
+          <img src="${avatarSrc(m.avatar)}" alt="${escapeHtml(m.name)}" class="group-modal-member-avatar" />
+          <span class="group-modal-member-name">${escapeHtml(m.name)}</span>
+          <button type="button" class="group-modal-member-remove" onclick="removeGroupModalMember('${m.id}')" title="Remove from group">&times;</button>
+        </div>
+      `).join("") : `<div class="feedbacks-section-empty">No members yet.</div>`;
+    }
+
+    async function removeGroupModalMember(userId) {
+      if (!groupModalTargetGroupId) return;
+      try {
+        const response = await fetch(`${API_BASE_URL}/groups/${groupModalTargetGroupId}/members/${userId}`, { method: "DELETE" });
+        if (!response.ok) throw new Error("Could not remove member");
+        await refreshGroupModalCurrentMembers();
+        await loadFeedbacksData();
+      } catch (error) {
+        showToast("Could not remove that member. Please try again.");
+      }
+    }
+
+    async function submitGroupRename() {
+      if (!groupModalTargetGroupId) return;
+      const name = document.getElementById("groupModalNameInput").value.trim();
+      if (!name) { showToast("Please enter a group name."); return; }
+      try {
+        const response = await fetch(`${API_BASE_URL}/groups/${groupModalTargetGroupId}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name })
+        });
+        if (!response.ok) throw new Error("Rename failed");
+        showToast("Group renamed.");
+        if (activeContainer && activeContainer.id === groupModalTargetGroupId) {
+          activeContainer.name = name;
+          renderTopicList();
+        }
+        await loadFeedbacksData();
+      } catch (error) {
+        showToast("Could not rename the group. Please try again.");
+      }
     }
 
     function closeGroupModal() {
@@ -3524,7 +3675,8 @@
       const listEl = document.getElementById("groupModalMemberList");
       if (!listEl) return;
       const query = groupModalSearch.toLowerCase().trim();
-      const candidates = EMPLOYEES.filter(e => e.id !== CURRENT_USER.id && (!query || e.name.toLowerCase().includes(query)));
+      const existingIds = new Set(groupModalCurrentMembers.map(m => m.id));
+      const candidates = EMPLOYEES.filter(e => e.id !== CURRENT_USER.id && !existingIds.has(e.id) && (!query || e.name.toLowerCase().includes(query)));
       listEl.innerHTML = candidates.length ? candidates.map(e => {
         const selected = groupModalSelectedIds.has(e.id);
         const avatarHtml = e.avatar
@@ -3567,7 +3719,7 @@
         } catch (error) {
           showToast(error.message || "Could not create the group. Please try again.");
         }
-      } else if (groupModalMode === "addMember") {
+      } else if (groupModalMode === "addMember" || groupModalMode === "edit") {
         if (!groupModalSelectedIds.size) { showToast("Select at least one employee."); return; }
         try {
           await Promise.all([...groupModalSelectedIds].map(memberId =>
@@ -3576,9 +3728,14 @@
             })
           ));
           const count = groupModalSelectedIds.size;
-          closeGroupModal();
+          groupModalSelectedIds = new Set();
           showToast(`Added ${count} member${count === 1 ? "" : "s"}.`);
           await loadFeedbacksData();
+          if (groupModalMode === "edit") {
+            await refreshGroupModalCurrentMembers();
+          } else {
+            closeGroupModal();
+          }
         } catch (error) {
           showToast("Could not add members. Please try again.");
         }
@@ -3615,17 +3772,39 @@
       renderTopicList();
     }
 
-    async function createTopicPrompt() {
+    function openTopicModal() {
       if (!activeContainer) return;
-      const name = window.prompt("Name this topic:");
-      if (!name || !name.trim()) return;
+      document.getElementById("topicModalNameInput").value = "";
+      document.getElementById("topicModalOverlay").classList.add("open");
+      document.body.style.overflow = "hidden";
+      setTimeout(() => document.getElementById("topicModalNameInput").focus(), 50);
+    }
+
+    function closeTopicModal() {
+      document.getElementById("topicModalOverlay").classList.remove("open");
+      document.body.style.overflow = "";
+    }
+
+    function handleTopicModalBackdropClick(event) {
+      if (event.target.id === "topicModalOverlay") closeTopicModal();
+    }
+
+    function handleTopicModalKeydown(event) {
+      if (event.key === "Enter") { event.preventDefault(); submitTopicModal(); }
+    }
+
+    async function submitTopicModal() {
+      if (!activeContainer) return;
+      const name = document.getElementById("topicModalNameInput").value.trim();
+      if (!name) { showToast("Please enter a topic name."); return; }
       try {
         const response = await fetch(`${API_BASE_URL}/topics`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ targetType: activeContainer.type, targetId: activeContainer.id, name: name.trim() })
+          body: JSON.stringify({ targetType: activeContainer.type, targetId: activeContainer.id, name })
         });
         if (!response.ok) throw new Error("Topic creation failed");
         const topic = await response.json();
+        closeTopicModal();
         await refreshContainerTopics();
         openTopicById(topic.id);
       } catch (error) {
@@ -3719,7 +3898,7 @@
       scroll.innerHTML = `
         <div class="topic-list-toolbar">
           <input type="text" class="topic-search-input" placeholder="Search topics..." value="${escapeHtml(topicSearchQuery)}" oninput="handleTopicSearch(this.value)" />
-          <button type="button" class="feedbacks-new-group-btn" onclick="createTopicPrompt()">+ New topic</button>
+          <button type="button" class="feedbacks-new-group-btn" onclick="openTopicModal()">+ New topic</button>
         </div>
         ${filtered.length ? filtered.map(topicListItemHtml).join("") : '<div class="feedbacks-empty-state">No topics yet — start one.</div>'}
       `;
@@ -3733,8 +3912,10 @@
 
       header.hidden = false;
       header.innerHTML = `
-        <button type="button" class="topic-back-btn" onclick="backToTopicList()" title="Back to topics">&larr;</button>
-        <div class="feedbacks-detail-title">${escapeHtml(activeTopic.name)}</div>
+        <div class="feedbacks-detail-title-group">
+          <button type="button" class="topic-back-btn" onclick="backToTopicList()" title="Back to topics">&larr;</button>
+          <div class="feedbacks-detail-title">${escapeHtml(activeTopic.name)}</div>
+        </div>
       `;
 
       composeBar.hidden = false;
@@ -3803,7 +3984,7 @@
     // Placeholder profile modal — just identity + sign out, until a real
     // profile page exists to link this to.
     function openProfileModal() {
-      document.getElementById("profileModalAvatar").src = CURRENT_USER.avatar || "";
+      document.getElementById("profileModalAvatar").src = avatarSrc(CURRENT_USER.avatar);
       document.getElementById("profileModalAvatar").alt = CURRENT_USER.name || "User";
       document.getElementById("profileModalName").textContent = CURRENT_USER.name || "No User Selected";
       document.getElementById("profileModalRole").textContent = CURRENT_USER.role
@@ -3906,7 +4087,7 @@
         return `
           <div class="single-comment nested-comment" id="comment_${reply.id}">
             <div class="comment-avatar ${replyAuthor.isMasked ? 'anon-avatar' : ''}">
-              ${replyAuthor.isMasked ? '👤' : `<img src="${replyAuthor.avatar}" alt="${replyAuthor.name}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`}
+              ${replyAuthor.isMasked ? '👤' : `<img src="${avatarSrc(replyAuthor.avatar)}" alt="${replyAuthor.name}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`}
             </div>
             <div class="comment-content">
               <div class="comment-header">
@@ -4012,24 +4193,6 @@
         bodyContentHtml = `<div class="feedback-body-text">${escapeHtml(post.content)}</div>`;
       }
 
-      // Reactions buttons on post
-      const emojiList = ["❤️", "👏", "💡", "🙌"];
-      let reactionChipsHtml = emojiList.map(emoji => {
-        const count = (post.reactions && post.reactions[emoji]) || 0;
-        const isActive = post.userReactions && post.userReactions.includes(emoji);
-        return `
-          <button 
-            type="button" 
-            class="reaction-chip ${isActive ? 'active' : ''}" 
-            onclick="toggleReaction('${post.id}', '${emoji}')"
-            title="React with ${emoji}"
-          >
-            <span class="emoji-icon">${emoji}</span>
-            <span>${count}</span>
-          </button>
-        `;
-      }).join("");
-
       // Comments list rendering
       const comments = post.comments || [];
       const commentCount = comments.length;
@@ -4104,22 +4267,6 @@
             commentBodyHtml = `<div class="comment-text">${escapeHtml(c.text)}</div>`;
           }
 
-          // Comment reaction buttons
-          let cReactionsHtml = emojiList.map(emoji => {
-            const cCount = (c.reactions && c.reactions[emoji]) || 0;
-            const cIsActive = c.userReactions && c.userReactions.includes(emoji);
-            return `
-              <button 
-                type="button" 
-                class="comment-reaction-btn ${cIsActive ? 'active' : ''}" 
-                onclick="toggleCommentReaction('${post.id}', '${c.id}', '${emoji}')"
-              >
-                <span>${emoji}</span>
-                ${cCount > 0 ? `<span>${cCount}</span>` : ''}
-              </button>
-            `;
-          }).join("");
-
           return `
             <div class="single-comment" id="comment_${c.id}">
               <div class="comment-avatar ${cAuthor.isMasked ? 'anon-avatar' : ''}">
@@ -4129,7 +4276,7 @@
                     <line x1="1" y1="1" x2="23" y2="23"></line>
                   </svg>
                 ` : `
-                  <img src="${cAuthor.avatar}" alt="${cAuthor.name}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">
+                  <img src="${avatarSrc(cAuthor.avatar)}" alt="${cAuthor.name}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">
                 `}
               </div>
               <div class="comment-content">
@@ -4145,9 +4292,6 @@
                 </div>
                 ${commentBodyHtml}
                 <div class="comment-footer-actions">
-                  <div class="comment-reactions-group">
-                    ${cReactionsHtml}
-                  </div>
                   <button type="button" class="comment-reply-btn" onclick="toggleReplyBox('${post.id}', '${c.id}', this)">Reply</button>
                 </div>
                 <div class="reply-input-box" id="reply_box_${c.id}" style="display:none;">
@@ -4176,7 +4320,7 @@
                     <line x1="1" y1="1" x2="23" y2="23"></line>
                   </svg>
                 ` : `
-                  <img src="${authorInfo.avatar}" alt="${authorInfo.name}">
+                  <img src="${avatarSrc(authorInfo.avatar)}" alt="${authorInfo.name}">
                 `}
               </div>
               <div class="author-meta">
@@ -4196,10 +4340,6 @@
           ${bodyContentHtml}
 
           <div class="card-footer-actions">
-            <div class="emoji-reactions-bar">
-              ${reactionChipsHtml}
-            </div>
-
             <!-- Comment indicator / toggle button with live count -->
             <button 
               class="btn-comment-toggle" 
@@ -4298,7 +4438,7 @@
         return `
           <div class="employee-tile-card" onclick="openWallModal('${emp.id}')">
             <div class="employee-avatar-box">
-              <img src="${emp.avatar}" alt="${emp.name}" />
+              <img src="${avatarSrc(emp.avatar)}" alt="${emp.name}" />
             </div>
             <h3 class="employee-name">${emp.name}</h3>
             <p class="employee-role-tag">${emp.role}</p>
@@ -4391,7 +4531,7 @@
         if (emp) {
           headerContainer.innerHTML = `
             <div class="modal-target-avatar">
-              <img src="${emp.avatar}" alt="${emp.name}" />
+              <img src="${avatarSrc(emp.avatar)}" alt="${emp.name}" />
             </div>
             <div class="modal-target-info">
               <h3>${emp.name}<button type="button" class="personal-remark-link" id="personalRemarkToggle" onclick="togglePersonalRemark()" aria-expanded="false">Personal remark</button></h3>
@@ -4407,6 +4547,11 @@
         }
       }
 
+      // Write Feedback stays only for the public Company Wall — an
+      // employee's own wall is oversight-only now (no way to post to it
+      // from here; feedback for a person happens via the Feedbacks tab).
+      document.getElementById("writeFeedbackPanel").hidden = targetId !== "company";
+
       // Reset form fields
       personalRemarkOpen = false;
       feedbackSearchQuery = "";
@@ -4416,7 +4561,7 @@
       document.getElementById("feedbackFeedSearch").value = "";
       document.getElementById("feedbackFeedSort").value = feedbackSortOrder;
       renderPrivateRemarkPanel(targetId);
-      renderOversightPanel(targetId);
+      renderOversightConversations(targetId);
 
       renderModalWallFeed(targetId);
       overlay.classList.add("open");
@@ -4455,19 +4600,22 @@
 
     // Admin/manager oversight: "admins and managers can view the feedbacks
     // from the Employee Wall tab" — every private DM and Organization
-    // message involving this employee, read-only. Two lookups because
-    // participantId only matches DM (target_type='user') rows by design,
-    // while targetId also catches this employee's own Organization thread
-    // (target_type='org', keyed by their own id); merged and de-duped here.
-    async function renderOversightPanel(targetId) {
-      const panel = document.getElementById("oversightPanel");
-      const messagesEl = document.getElementById("oversightMessages");
-      if (!panel || !messagesEl) return;
+    // message involving this employee, read-only, grouped by who it's with
+    // and then by topic (so "EMP B messaged EMP A" reads as its own
+    // conversation, not interleaved with everything else). Two lookups
+    // because participantId only matches DM (target_type='user') rows by
+    // design, while targetId also catches this employee's own Organization
+    // thread (target_type='org', keyed by their own id); merged and
+    // de-duped here.
+    async function renderOversightConversations(targetId) {
+      const panel = document.getElementById("oversightConversations");
+      const body = document.getElementById("oversightConversationsBody");
+      if (!panel || !body) return;
       const canOversee = isPrivilegedViewer() && targetId && targetId !== "company";
       panel.hidden = !canOversee;
       if (!canOversee) return;
 
-      messagesEl.innerHTML = `<div class="feedbacks-empty-state">Loading…</div>`;
+      body.innerHTML = `<div class="feedbacks-empty-state">Loading…</div>`;
       try {
         const [dmResponse, targetResponse] = await Promise.all([
           fetch(`${API_BASE_URL}/feedback?visibility=private&participantId=${encodeURIComponent(targetId)}`),
@@ -4477,12 +4625,45 @@
         const targetJson = targetResponse.ok ? await targetResponse.json() : { data: [] };
         const byId = new Map();
         [...(dmJson.data || []), ...(targetJson.data || [])].forEach(row => byId.set(row.id, row));
-        const rows = [...byId.values()].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-        messagesEl.innerHTML = rows.length
-          ? rows.map(chatMessageBubbleHtml).join("")
-          : `<div class="feedbacks-empty-state">No private feedback involving this employee.</div>`;
+        const rows = [...byId.values()];
+
+        if (!rows.length) {
+          body.innerHTML = `<div class="feedbacks-empty-state">No private feedback involving this employee.</div>`;
+          return;
+        }
+
+        // counterpart label -> Map(topicId -> { topicName, messages[] })
+        const byCounterpart = new Map();
+        rows.forEach(row => {
+          const counterpartLabel = row.targetType === "org"
+            ? "Organization"
+            : (row.senderId === targetId ? row.targetName : row.senderName) || "Unknown";
+          if (!byCounterpart.has(counterpartLabel)) byCounterpart.set(counterpartLabel, new Map());
+          const topicsMap = byCounterpart.get(counterpartLabel);
+          const topicId = row.topicId || "general";
+          if (!topicsMap.has(topicId)) topicsMap.set(topicId, { topicName: row.topicName || "General", messages: [] });
+          topicsMap.get(topicId).messages.push(row);
+        });
+
+        body.innerHTML = [...byCounterpart.entries()].map(([counterpartLabel, topicsMap]) => {
+          const topicsHtml = [...topicsMap.values()].map(({ topicName, messages }) => {
+            const sorted = messages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            return `
+              <div class="oversight-topic-block">
+                <div class="oversight-topic-header">${escapeHtml(topicName)}</div>
+                <div class="oversight-topic-messages">${sorted.map(chatMessageBubbleHtml).join("")}</div>
+              </div>
+            `;
+          }).join("");
+          return `
+            <div class="oversight-counterpart-block">
+              <div class="oversight-counterpart-header">${escapeHtml(counterpartLabel)}</div>
+              ${topicsHtml}
+            </div>
+          `;
+        }).join("");
       } catch (error) {
-        messagesEl.innerHTML = `<div class="feedbacks-empty-state">Could not load private feedback.</div>`;
+        body.innerHTML = `<div class="feedbacks-empty-state">Could not load private feedback.</div>`;
       }
     }
 
@@ -4841,65 +5022,8 @@
     }
 
     /* ==========================================================================
-       INTERACTIONS: EMOJI REACTIONS & THREADED COMMENTS
+       INTERACTIONS: THREADED COMMENTS
        ========================================================================== */
-    function applyReactionToggle(bucket, emoji) {
-      if (!bucket.reactions) bucket.reactions = {};
-      if (!bucket.userReactions) bucket.userReactions = [];
-      const count = bucket.reactions[emoji] || 0;
-      if (bucket.userReactions.includes(emoji)) {
-        bucket.reactions[emoji] = Math.max(0, count - 1);
-        bucket.userReactions = bucket.userReactions.filter(e => e !== emoji);
-      } else {
-        bucket.reactions[emoji] = count + 1;
-        bucket.userReactions.push(emoji);
-      }
-    }
-
-    async function persistReaction(postId, emoji, commentId) {
-      if (!CURRENT_USER.id) { showToast("You need to be signed in to react."); return; }
-      try {
-        const response = await fetch(`${API_BASE_URL}/feedback/${postId}/reactions`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(commentId ? { reaction: emoji, commentId } : { reaction: emoji })
-        });
-        if (!response.ok) throw new Error("Reaction could not be saved");
-      } catch (error) {
-        showToast("Could not save your reaction.");
-        await loadBackendData();
-        if (activeModalTargetId) renderModalWallFeed(activeModalTargetId);
-      }
-    }
-
-    function toggleReaction(postId, emoji) {
-      const post = FEEDBACKS.find(f => f.id === postId);
-      if (!post) return;
-      applyReactionToggle(post, emoji);
-      if (activeModalTargetId) renderModalWallFeed(activeModalTargetId);
-      persistReaction(postId, emoji, null);
-    }
-
-    function toggleCommentReaction(postId, commentId, emoji) {
-      const post = FEEDBACKS.find(f => f.id === postId);
-      if (!post || !post.comments) return;
-      const comment = findComment(post.comments, commentId);
-      if (!comment) return;
-      applyReactionToggle(comment, emoji);
-      persistReaction(postId, emoji, commentId);
-
-      if (activeModalTargetId) {
-        renderModalWallFeed(activeModalTargetId);
-      }
-
-      setTimeout(() => {
-        const thread = document.getElementById(`comments_${postId}`);
-        if (thread) thread.classList.add("open");
-        const btn = document.getElementById(`comment_btn_${postId}`);
-        if (btn) btn.classList.add("active");
-      }, 30);
-    }
-
     /* Toggle comments on any post */
     function toggleCommentsThread(postId, button) {
       const card = button ? button.closest('.feedback-card') : null;

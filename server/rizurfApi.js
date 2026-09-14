@@ -81,9 +81,15 @@ const openapi = {
       get: operation('List project groups.', 'feedback:read', discovery('List Groups', 'Read project groups, optionally restricted to the caller\'s own.', ['mine', 'limit', 'offset'], ['data'])),
       post: operation('Create a project group.', 'feedback:write', discovery('Create Group', 'Create a project group; the caller becomes its first member.', ['name'], ['id'], ['GET /api/groups']))
     },
+    '/api/groups/{groupId}': {
+      patch: operation('Rename a project group.', 'feedback:write', discovery('Rename Group', 'Rename a project group.', ['groupId', 'name'], ['id'], ['GET /api/groups']))
+    },
     '/api/groups/{groupId}/members': {
       get: operation('List a group\'s members.', 'feedback:read', discovery('List Group Members', 'Read who belongs to a project group.', ['groupId'], ['data'])),
       post: operation('Add a member to a group.', 'feedback:write', discovery('Add Group Member', 'Add any employee to a project group; open to any signed-in caller.', ['groupId', 'userId'], [], ['GET /api/groups/{groupId}/members']))
+    },
+    '/api/groups/{groupId}/members/{userId}': {
+      delete: operation('Remove a group member.', 'feedback:write', discovery('Remove Group Member', 'Remove an employee from a project group.', ['groupId', 'userId'], [], ['GET /api/groups/{groupId}/members']))
     },
     '/api/topics': {
       get: operation('List topics.', 'feedback:read', discovery('List Topics', 'Read topics in one conversation, or every topic the caller participates in.', ['mine', 'targetType', 'targetId', 'search'], ['data'])),
@@ -100,7 +106,9 @@ function routeKey(pathname) {
   if (/^\/api\/feedback\/[^/]+\/comments$/.test(pathname)) return '/api/feedback/{feedbackId}/comments';
   if (/^\/api\/feedback\/[^/]+\/reactions$/.test(pathname)) return '/api/feedback/{feedbackId}/reactions';
   if (/^\/api\/private-remarks\/[^/]+$/.test(pathname)) return '/api/private-remarks/{remarkId}';
+  if (/^\/api\/groups\/[^/]+\/members\/[^/]+$/.test(pathname)) return '/api/groups/{groupId}/members/{userId}';
   if (/^\/api\/groups\/[^/]+\/members$/.test(pathname)) return '/api/groups/{groupId}/members';
+  if (/^\/api\/groups\/[^/]+$/.test(pathname)) return '/api/groups/{groupId}';
   if (/^\/api\/topics\/[^/]+\/read$/.test(pathname)) return '/api/topics/{topicId}/read';
   return null;
 }
@@ -505,6 +513,37 @@ app.post('/api/groups/:groupId/members', async (request, response, next) => {
     const addedBy = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
     await feedbacks.addGroupMember({ groupId: request.params.groupId, userId, addedBy });
     return response.status(204).end();
+  } catch (error) { return next(error); }
+});
+app.delete('/api/groups/:groupId/members/:userId', async (request, response, next) => {
+  const auth = request.auth || {};
+  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+  try {
+    if (!await feedbacks.getGroupById(request.params.groupId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
+    const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+    const callerUser = await feedbacks.getUserById(callerId);
+    const callerIsPrivileged = isPrivilegedRole(callerUser?.permissionRole);
+    if (!callerIsPrivileged && !await feedbacks.isGroupMember(request.params.groupId, callerId)) {
+      return sendError(response, request, 403, 'FORBIDDEN', 'You must be a member of this group to remove members.');
+    }
+    await feedbacks.removeGroupMember({ groupId: request.params.groupId, userId: request.params.userId });
+    return response.status(204).end();
+  } catch (error) { return next(error); }
+});
+app.patch('/api/groups/:groupId', async (request, response, next) => {
+  const auth = request.auth || {};
+  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+  const { name } = request.body || {};
+  if (!validText(name)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'name is required.', { fields: ['name'] });
+  try {
+    if (!await feedbacks.getGroupById(request.params.groupId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
+    const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+    const callerUser = await feedbacks.getUserById(callerId);
+    const callerIsPrivileged = isPrivilegedRole(callerUser?.permissionRole);
+    if (!callerIsPrivileged && !await feedbacks.isGroupMember(request.params.groupId, callerId)) {
+      return sendError(response, request, 403, 'FORBIDDEN', 'You must be a member of this group to rename it.');
+    }
+    return sendJson(response, 200, await feedbacks.renameGroup({ groupId: request.params.groupId, name: name.trim() }));
   } catch (error) { return next(error); }
 });
 

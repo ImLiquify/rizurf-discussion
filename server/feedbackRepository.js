@@ -425,6 +425,15 @@ export async function addGroupMember({ groupId, userId, addedBy }) {
   );
 }
 
+export async function removeGroupMember({ groupId, userId }) {
+  await pool.execute('DELETE FROM group_members WHERE group_id = ? AND user_id = ?', [groupId, userId]);
+}
+
+export async function renameGroup({ groupId, name }) {
+  await pool.execute('UPDATE feedback_groups SET name = ? WHERE id = ?', [name, groupId]);
+  return getGroupById(groupId);
+}
+
 // `mine` (a viewer id) restricts to groups that viewer belongs to, for the
 // Feedbacks tab's sidebar; omitted, this is an open directory for
 // discovery — the same "fully open" shape /api/employees already has.
