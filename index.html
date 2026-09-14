@@ -1654,14 +1654,31 @@
     /* ==========================================================================
        FEEDBACKS TAB — private chat-style inbox
        ========================================================================== */
+    /* Flush white pane, not a floating card: the real scrollable content
+       area is .content-area (flex:1, 28px padding on every side) — the old
+       .app-main-content wrapper inside it has its own padding/max-width
+       zeroed out by the sidebar-dashboard override below, so it's just a
+       pass-through, auto-height box. A negative top/side margin bleeds
+       through .content-area's 28px padding on those edges (auto-width
+       block sizing resolves negative left/right margins symmetrically);
+       the bottom edge instead comes from height alone reaching all the way
+       to the viewport bottom, since an auto-height parent's box doesn't
+       extend for a child's negative bottom margin the way it does for a
+       negative top margin. */
+    /* .feedbacks-layout's own height exactly matches .content-area's
+       available height, which on some sub-pixel roundings is enough for
+       .content-area's own overflow-y:auto to add a scrollbar (shrinking
+       this pane's usable width and defeating the edge-to-edge fill).
+       .feedbacks-layout already scrolls internally, so suppress the outer
+       scrollbar while this pane is the active one. */
+    .content-area:has(#feedbacksViewPane.active) { overflow: hidden; }
+
     .feedbacks-layout {
       display: flex;
-      height: calc(100vh - 140px);
+      height: calc(100vh - 64px);
       min-height: 480px;
-      background: var(--bg-surface);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-md);
+      background: #FFFFFF;
+      margin: -28px -28px 0 -28px;
       overflow: hidden;
     }
 
@@ -2134,56 +2151,57 @@
     .btn-logout:hover { opacity: 0.9; }
 
     /* Admin/manager oversight section inside the Wall modal: private
-       conversations split into Given/Received, then grouped by counterpart
-       (or group), then by topic. */
+       conversations, filtered by a Given/Received tab, drilling down from a
+       list of people/groups -> that person's topics -> the conversation. */
     .oversight-conversations {
       margin-top: 20px;
       padding-top: 20px;
       border-top: 1px solid var(--border-light);
     }
 
-    .oversight-bucket { margin-bottom: 22px; }
-    .oversight-bucket:last-child { margin-bottom: 0; }
-
-    .oversight-bucket-title {
-      font-family: var(--font-heading);
-      font-size: 1rem;
-      font-weight: 800;
-      color: var(--text-main);
-      margin-bottom: 10px;
+    .oversight-bucket-tabs {
+      display: flex;
+      gap: 22px;
+      margin-bottom: 14px;
+      border-bottom: 1px solid var(--border-color);
     }
 
-    .oversight-counterpart-block {
-      border: 1px solid var(--border-light);
-      border-radius: var(--radius-lg);
-      padding: 12px 14px;
-      margin-bottom: 12px;
-      background: var(--bg-subtle);
-    }
-
-    .oversight-counterpart-header {
+    .oversight-bucket-tab {
+      padding: 8px 2px;
       font-size: 0.9rem;
-      font-weight: 800;
-      color: var(--text-main);
-      margin-bottom: 8px;
-    }
-
-    .oversight-topic-block {
-      border-left: 2px solid var(--border-color);
-      margin-left: 4px;
-      padding-left: 10px;
-      margin-bottom: 10px;
-    }
-
-    .oversight-topic-block:last-child { margin-bottom: 0; }
-
-    .oversight-topic-header {
-      font-size: 0.78rem;
       font-weight: 700;
-      color: var(--text-subtle);
-      text-transform: uppercase;
-      letter-spacing: 0.02em;
+      color: var(--text-muted);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+
+    .oversight-bucket-tab:hover { color: var(--text-main); }
+    .oversight-bucket-tab.active { color: var(--accent-cyan); border-bottom-color: var(--accent-cyan); }
+
+    .oversight-list { display: flex; flex-direction: column; }
+
+    .oversight-list-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: var(--radius-md);
+      text-align: left;
+      border: 1px solid var(--border-light);
+      background: var(--bg-subtle);
       margin-bottom: 6px;
+    }
+
+    .oversight-list-row:hover { background: var(--accent-cyan-light); }
+    .oversight-list-row-name { font-size: 0.88rem; font-weight: 700; color: var(--text-main); }
+    .oversight-list-row-meta { font-size: 0.76rem; color: var(--text-subtle); }
+
+    .oversight-drill-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
     }
 
     .private-remark-display:empty {
@@ -3086,6 +3104,23 @@
     let searchQuery = "";
     let activeModalTargetId = null; // target employee id or "company"
     let personalRemarkOpen = false;
+
+    // Employee Wall oversight nav state (admin/manager only): a Given/
+    // Received filter, drilling from a list of people/groups -> that
+    // person's topics -> the open conversation. Reset whenever a new
+    // employee's wall is opened.
+    let oversightRows = []; // every private feedback row fetched for the open wall target
+    let oversightBucket = "given"; // "given" | "received"
+    let oversightSelectedLabel = null; // the person/group name drilled into, or null
+    let oversightSelectedTopicId = null; // the topic drilled into, or null
+
+    const SENDER_COLOR_PALETTE = ["#2563EB", "#DC2626", "#059669", "#D97706", "#7C3AED", "#DB2777", "#0891B2", "#65A30D"];
+    function senderColorFor(id) {
+      const str = String(id || "");
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+      return SENDER_COLOR_PALETTE[hash % SENDER_COLOR_PALETTE.length];
+    }
     let feedbackSearchQuery = "";
     let feedbackSortOrder = "latest";
     const PRIVATE_REMARKS_STORAGE_KEY = "pulseFeedback.privateRemarks";
@@ -3854,7 +3889,7 @@
       return `
         <div class="chat-message-row${mine ? " mine" : ""}${message.pending ? " pending" : ""}">
           <div class="chat-message-meta">
-            <span class="chat-message-sender">${escapeHtml(message.senderName)}</span>
+            <span class="chat-message-sender" style="color:${senderColorFor(message.senderId)}">${escapeHtml(message.senderName)}</span>
             <span class="chat-message-time">${formatDisplayTime(message.timestamp)}</span>
           </div>
           <div class="chat-message-text">${escapeHtml(message.content)}</div>
@@ -4565,6 +4600,10 @@
       document.getElementById("feedbackFeedSearch").value = "";
       document.getElementById("feedbackFeedSort").value = feedbackSortOrder;
       renderPrivateRemarkPanel(targetId);
+      oversightRows = [];
+      oversightBucket = "given";
+      oversightSelectedLabel = null;
+      oversightSelectedTopicId = null;
       renderOversightConversations(targetId);
 
       renderModalWallFeed(targetId);
@@ -4604,15 +4643,16 @@
 
     // Admin/manager oversight: "admins and managers can view the feedbacks
     // from the Employee Wall tab" — every private DM, group, and
-    // Organization message involving this employee, read-only, split into
-    // Given (topics this employee started) and Received (topics someone
-    // else started with them), each grouped by who it's with (or which
-    // group), then by topic — a topic's own back-and-forth always stays
-    // together as one conversation, only the topic itself is bucketed.
-    // Two lookups because participantId only matches DM (target_type='user')
-    // rows by design, while targetId also catches this employee's own
-    // Organization thread (target_type='org', keyed by their own id);
-    // merged and de-duped here.
+    // Organization message involving this employee, read-only. A Given/
+    // Received filter tab narrows to topics this employee started vs. topics
+    // someone else started with them; picking a person-or-group, then a
+    // topic, drills down to the actual conversation — a topic's own
+    // back-and-forth always stays together as one thread, only the topic
+    // itself is bucketed. Two lookups because participantId only matches DM
+    // (target_type='user') rows by design, while targetId also catches this
+    // employee's own Organization thread (target_type='org', keyed by their
+    // own id); merged and de-duped here, then cached in oversightRows so
+    // switching tabs/drilling down re-renders instead of re-fetching.
     async function renderOversightConversations(targetId) {
       const panel = document.getElementById("oversightConversations");
       const body = document.getElementById("oversightConversationsBody");
@@ -4633,62 +4673,113 @@
         const groupJson = groupResponse.ok ? await groupResponse.json() : { data: [] };
         const byId = new Map();
         [...(dmJson.data || []), ...(targetJson.data || []), ...(groupJson.data || [])].forEach(row => byId.set(row.id, row));
-        const rows = [...byId.values()];
-
-        if (!rows.length) {
-          body.innerHTML = `<div class="feedbacks-empty-state">No private feedback involving this employee.</div>`;
-          return;
-        }
-
-        const buckets = { given: new Map(), received: new Map() };
-        rows.forEach(row => {
-          const bucketKey = row.topicCreatedBy === targetId ? "given" : "received";
-          const label = row.targetType === "org"
-            ? "Organization"
-            : row.targetType === "group"
-              ? (row.targetName || "Group")
-              : (row.senderId === targetId ? row.targetName : row.senderName) || "Unknown";
-          const byLabel = buckets[bucketKey];
-          if (!byLabel.has(label)) byLabel.set(label, new Map());
-          const topicsMap = byLabel.get(label);
-          const topicId = row.topicId || "general";
-          if (!topicsMap.has(topicId)) topicsMap.set(topicId, { topicName: row.topicName || "General", messages: [] });
-          topicsMap.get(topicId).messages.push(row);
-        });
-
-        const renderBucketBody = byLabel => [...byLabel.entries()].map(([label, topicsMap]) => {
-          const topicsHtml = [...topicsMap.values()].map(({ topicName, messages }) => {
-            const sorted = messages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-            return `
-              <div class="oversight-topic-block">
-                <div class="oversight-topic-header">${escapeHtml(topicName)}</div>
-                <div class="oversight-topic-messages">${sorted.map(chatMessageBubbleHtml).join("")}</div>
-              </div>
-            `;
-          }).join("");
-          return `
-            <div class="oversight-counterpart-block">
-              <div class="oversight-counterpart-header">${escapeHtml(label)}</div>
-              ${topicsHtml}
-            </div>
-          `;
-        }).join("");
-
-        body.innerHTML = [["given", "Given"], ["received", "Received"]].map(([bucketKey, bucketLabel]) => {
-          const byLabel = buckets[bucketKey];
-          const content = byLabel.size
-            ? renderBucketBody(byLabel)
-            : `<div class="feedbacks-empty-state">Nothing ${bucketLabel.toLowerCase()} yet.</div>`;
-          return `
-            <div class="oversight-bucket">
-              <div class="oversight-bucket-title">${bucketLabel}</div>
-              ${content}
-            </div>
-          `;
-        }).join("");
+        oversightRows = [...byId.values()];
       } catch (error) {
+        oversightRows = [];
         body.innerHTML = `<div class="feedbacks-empty-state">Could not load private feedback.</div>`;
+        return;
       }
+      renderOversightBody();
+    }
+
+    // buckets: { given: Map(label -> Map(topicId -> {topicName, messages[]})), received: ... }
+    function bucketOversightRows() {
+      const targetId = activeModalTargetId;
+      const buckets = { given: new Map(), received: new Map() };
+      oversightRows.forEach(row => {
+        const bucketKey = row.topicCreatedBy === targetId ? "given" : "received";
+        const label = row.targetType === "org"
+          ? "Organization"
+          : row.targetType === "group"
+            ? (row.targetName || "Group")
+            : (row.senderId === targetId ? row.targetName : row.senderName) || "Unknown";
+        const byLabel = buckets[bucketKey];
+        if (!byLabel.has(label)) byLabel.set(label, new Map());
+        const topicsMap = byLabel.get(label);
+        const topicId = row.topicId || "general";
+        if (!topicsMap.has(topicId)) topicsMap.set(topicId, { topicName: row.topicName || "General", messages: [] });
+        topicsMap.get(topicId).messages.push(row);
+      });
+      return buckets;
+    }
+
+    function setOversightBucket(bucket) {
+      oversightBucket = bucket;
+      oversightSelectedLabel = null;
+      oversightSelectedTopicId = null;
+      renderOversightBody();
+    }
+    function openOversightLabel(label) {
+      oversightSelectedLabel = label;
+      oversightSelectedTopicId = null;
+      renderOversightBody();
+    }
+    function openOversightTopic(topicId) {
+      oversightSelectedTopicId = topicId;
+      renderOversightBody();
+    }
+    function backOversightToLabels() {
+      oversightSelectedLabel = null;
+      oversightSelectedTopicId = null;
+      renderOversightBody();
+    }
+    function backOversightToTopics() {
+      oversightSelectedTopicId = null;
+      renderOversightBody();
+    }
+
+    function renderOversightBody() {
+      const body = document.getElementById("oversightConversationsBody");
+      if (!body) return;
+      const buckets = bucketOversightRows();
+      const tabsHtml = `
+        <div class="oversight-bucket-tabs">
+          <button type="button" class="oversight-bucket-tab${oversightBucket === "given" ? " active" : ""}" onclick="setOversightBucket('given')">Given</button>
+          <button type="button" class="oversight-bucket-tab${oversightBucket === "received" ? " active" : ""}" onclick="setOversightBucket('received')">Received</button>
+        </div>
+      `;
+      const byLabel = buckets[oversightBucket];
+      const topicsMap = oversightSelectedLabel ? byLabel.get(oversightSelectedLabel) : null;
+
+      if (!oversightSelectedLabel || !topicsMap) {
+        const rowsHtml = [...byLabel.entries()].map(([label, labelTopics]) => `
+          <button type="button" class="oversight-list-row" onclick="openOversightLabel('${escapeHtml(label).replace(/'/g, "&#039;")}')">
+            <span class="oversight-list-row-name">${escapeHtml(label)}</span>
+            <span class="oversight-list-row-meta">${labelTopics.size} topic${labelTopics.size === 1 ? "" : "s"}</span>
+          </button>
+        `).join("");
+        body.innerHTML = tabsHtml + (byLabel.size
+          ? `<div class="oversight-list">${rowsHtml}</div>`
+          : `<div class="feedbacks-empty-state">Nothing ${oversightBucket} yet.</div>`);
+        return;
+      }
+
+      if (!oversightSelectedTopicId || !topicsMap.has(oversightSelectedTopicId)) {
+        const topicsHtml = [...topicsMap.entries()].map(([topicId, { topicName, messages }]) => `
+          <button type="button" class="oversight-list-row" onclick="openOversightTopic('${topicId}')">
+            <span class="oversight-list-row-name">${escapeHtml(topicName)}</span>
+            <span class="oversight-list-row-meta">${messages.length} message${messages.length === 1 ? "" : "s"}</span>
+          </button>
+        `).join("");
+        body.innerHTML = tabsHtml + `
+          <div class="oversight-drill-header">
+            <button type="button" class="topic-back-btn" onclick="backOversightToLabels()" title="Back">&larr;</button>
+            <div class="feedbacks-detail-title">${escapeHtml(oversightSelectedLabel)}</div>
+          </div>
+          <div class="oversight-list">${topicsHtml}</div>
+        `;
+        return;
+      }
+
+      const topic = topicsMap.get(oversightSelectedTopicId);
+      const sorted = [...topic.messages].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      body.innerHTML = tabsHtml + `
+        <div class="oversight-drill-header">
+          <button type="button" class="topic-back-btn" onclick="backOversightToTopics()" title="Back">&larr;</button>
+          <div class="feedbacks-detail-title">${escapeHtml(topic.topicName)}</div>
+        </div>
+        <div class="oversight-topic-messages">${sorted.map(chatMessageBubbleHtml).join("")}</div>
+      `;
     }
 
     function togglePersonalRemark() {
