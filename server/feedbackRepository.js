@@ -5,18 +5,43 @@ import { pool } from './database.js';
 // never written to directly by end users — only upsertInternUsers() writes
 // to it, and only from data the intern-database service's API returned.
 export async function upsertInternUsers(interns) {
-  for (const intern of interns) {
-    const localId = `intern_${intern.externalId}`.slice(0, 50);
-    await pool.execute(
-      `INSERT INTO users (id, external_id, name, email, role_title, department, avatar, skills, source, synced_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'intern-api', CURRENT_TIMESTAMP)
-       ON DUPLICATE KEY UPDATE
-         name = VALUES(name), email = VALUES(email), role_title = VALUES(role_title),
-         department = VALUES(department), avatar = VALUES(avatar), skills = VALUES(skills),
-         source = 'intern-api', synced_at = CURRENT_TIMESTAMP`,
-      [localId, intern.externalId, intern.name, intern.email, intern.role, intern.department, intern.avatar, JSON.stringify(intern.skills)]
+  if (!interns.length) return;
+  // One multi-row statement instead of one round trip per intern — against a
+  // remote VPS database, N sequential INSERTs is N network round trips, and
+  // that (not the intern-database call) was most of the sync latency.
+  const rowParams = [];
+  const rowPlaceholders = interns.map(intern => {
+    rowParams.push(
+      `intern_${intern.externalId}`.slice(0, 50), intern.externalId, intern.name, intern.email,
+      intern.role, intern.department, intern.avatar, JSON.stringify(intern.skills)
     );
-  }
+    return `(?, ?, ?, ?, ?, ?, ?, ?, 'intern-api', CURRENT_TIMESTAMP)`;
+  });
+  await pool.query(
+    `INSERT INTO users (id, external_id, name, email, role_title, department, avatar, skills, source, synced_at)
+     VALUES ${rowPlaceholders.join(', ')}
+     ON DUPLICATE KEY UPDATE
+       name = VALUES(name), email = VALUES(email), role_title = VALUES(role_title),
+       department = VALUES(department), avatar = VALUES(avatar), skills = VALUES(skills),
+       source = 'intern-api', synced_at = CURRENT_TIMESTAMP`,
+    rowParams
+  );
+}
+
+// Backs the sync TTL in rizurfApi.js: whether the directory was synced
+// recently. Read from the database rather than process memory so the cache
+// survives a serverless cold start (a fresh instance has no in-memory state,
+// but the last sync is still recorded here) — and compare entirely in
+// MySQL's own clock (`NOW()` vs `synced_at`, both written by the same
+// server) rather than against Node's `Date.now()`, since the two clocks are
+// not guaranteed to agree (the VPS's is measurably off from real time).
+export async function isInternSyncFresh(ttlSeconds) {
+  const [rows] = await pool.query(
+    `SELECT (MAX(synced_at) IS NOT NULL AND MAX(synced_at) > (NOW() - INTERVAL ? SECOND)) AS isFresh
+     FROM users WHERE source = 'intern-api'`,
+    [ttlSeconds]
+  );
+  return Boolean(rows[0]?.isFresh);
 }
 
 // A person who signs in through the gateway (MICROAPP_AUTH.md sections 4 and

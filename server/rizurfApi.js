@@ -118,10 +118,35 @@ function pagination(request, response) {
   return { limit: Math.min(limit, MAX_LIMIT), offset };
 }
 function validText(value) { return typeof value === 'string' && value.trim(); }
-async function synchronizeInterns(correlationId) {
-  const interns = await fetchInterns({ correlationId });
-  await feedbacks.upsertInternUsers(interns);
-  return interns.length;
+
+// A real sync means: a token round trip to the gateway, a call to
+// intern-database, a call to the department directory, and a write to the
+// users table — each an external network hop, and on Vercel most requests
+// land on a cold instance with no warm in-memory cache to skip any of it.
+// That chain was most of the ~10s the intern directory took to load.
+//
+// Gate it on the database's own record of the last sync (survives a cold
+// start, unlike a process-memory cache) so routine polling reads the local
+// directory without repeating that chain every time, and de-dupe concurrent
+// callers on the same warm instance onto one in-flight sync.
+const INTERN_SYNC_TTL_MS = 60_000;
+let internSyncInFlight = null;
+
+async function synchronizeInterns(correlationId, { force = false } = {}) {
+  if (internSyncInFlight) return internSyncInFlight;
+  internSyncInFlight = (async () => {
+    try {
+      if (!force && await feedbacks.isInternSyncFresh(INTERN_SYNC_TTL_MS / 1000)) {
+        return 0;
+      }
+      const interns = await fetchInterns({ correlationId });
+      await feedbacks.upsertInternUsers(interns);
+      return interns.length;
+    } finally {
+      internSyncInFlight = null;
+    }
+  })();
+  return internSyncInFlight;
 }
 
 app.use((request, response, next) => {
@@ -190,7 +215,7 @@ app.get('/api/employees', async (request, response, next) => {
 });
 app.get('/api/interns', async (request, response, next) => {
   const page = pagination(request, response); if (!page) return;
-  try { const synced = await synchronizeInterns(request.correlationId); return sendJson(response, 200, { data: await feedbacks.listSyncedInterns(page), synced, ...page }); } catch (error) { return next(error); }
+  try { const synced = await synchronizeInterns(request.correlationId, { force: true }); return sendJson(response, 200, { data: await feedbacks.listSyncedInterns(page), synced, ...page }); } catch (error) { return next(error); }
 });
 app.get('/api/me', async (request, response, next) => {
   const auth = request.auth || {};
@@ -225,14 +250,14 @@ app.get('/api/feedback', async (request, response, next) => {
     // reactionsFor: "<feedbackId>\0<commentId>" -> { counts:{emoji:n}, mine:[emoji] }
     const reactionsFor = new Map();
     for (const row of reactions) {
-      const key = `${row.feedbackId} ${row.commentId || ''}`;
+      const key = `${row.feedbackId} ${row.commentId || ''}`;
       if (!reactionsFor.has(key)) reactionsFor.set(key, { counts: {}, mine: [] });
       const bucket = reactionsFor.get(key);
       bucket.counts[row.reaction] = Number(row.count);
       if (Number(row.mine)) bucket.mine.push(row.reaction);
     }
     const applyReactions = (target, feedbackId, commentId) => {
-      const bucket = reactionsFor.get(`${feedbackId} ${commentId || ''}`);
+      const bucket = reactionsFor.get(`${feedbackId} ${commentId || ''}`);
       target.reactions = bucket ? bucket.counts : {};
       target.userReactions = bucket ? bucket.mine : [];
     };
