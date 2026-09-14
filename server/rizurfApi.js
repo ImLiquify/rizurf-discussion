@@ -76,6 +76,14 @@ const openapi = {
     },
     '/api/private-remarks/{remarkId}': {
       delete: operation('Delete a private remark.', 'remark:write', discovery('Delete Private Remark', 'Remove one caller-owned private note.', ['remarkId', 'authorId'], [], ['GET /api/private-remarks']))
+    },
+    '/api/groups': {
+      get: operation('List project groups.', 'feedback:read', discovery('List Groups', 'Read project groups, optionally restricted to the caller\'s own.', ['mine', 'limit', 'offset'], ['data'])),
+      post: operation('Create a project group.', 'feedback:write', discovery('Create Group', 'Create a project group; the caller becomes its first member.', ['name'], ['id'], ['GET /api/groups']))
+    },
+    '/api/groups/{groupId}/members': {
+      get: operation('List a group\'s members.', 'feedback:read', discovery('List Group Members', 'Read who belongs to a project group.', ['groupId'], ['data'])),
+      post: operation('Add a member to a group.', 'feedback:write', discovery('Add Group Member', 'Add any employee to a project group; open to any signed-in caller.', ['groupId', 'userId'], [], ['GET /api/groups/{groupId}/members']))
     }
   }
 };
@@ -85,6 +93,7 @@ function routeKey(pathname) {
   if (/^\/api\/feedback\/[^/]+\/comments$/.test(pathname)) return '/api/feedback/{feedbackId}/comments';
   if (/^\/api\/feedback\/[^/]+\/reactions$/.test(pathname)) return '/api/feedback/{feedbackId}/reactions';
   if (/^\/api\/private-remarks\/[^/]+$/.test(pathname)) return '/api/private-remarks/{remarkId}';
+  if (/^\/api\/groups\/[^/]+\/members$/.test(pathname)) return '/api/groups/{groupId}/members';
   return null;
 }
 function sendJson(response, status, body) { response.status(status).type('application/json').json(body); }
@@ -118,6 +127,21 @@ function pagination(request, response) {
   return { limit: Math.min(limit, MAX_LIMIT), offset };
 }
 function validText(value) { return typeof value === 'string' && value.trim(); }
+
+// Only 'admin' and 'supervisor' (shown to the frontend as "manager") are
+// privileged — 'hr' and 'user' are plain employees. Mirrors the frontend's
+// mapRoleToView so Employee Wall visibility and API access agree.
+function isPrivilegedRole(role) { return role === 'admin' || role === 'supervisor'; }
+
+// Read-only viewer resolution for hot read paths (the feedback poll) that
+// must not write on every call — see findAccountIdByEmail's own comment.
+async function resolveViewerForRead(auth) {
+  const viewerId = await feedbacks.findAccountIdByEmail(auth?.email)
+    || (auth?.sub ? `gw_${auth.sub}`.slice(0, 50) : null);
+  if (!viewerId) return { viewerId: null, isPrivileged: false };
+  const user = await feedbacks.getUserById(viewerId);
+  return { viewerId, isPrivileged: isPrivilegedRole(user?.permissionRole) };
+}
 
 // A real sync means: a token round trip to the gateway, a call to
 // intern-database, a call to the department directory, and a write to the
@@ -237,11 +261,24 @@ app.get('/api/me', async (request, response, next) => {
 });
 app.get('/api/feedback', async (request, response, next) => {
   const page = pagination(request, response); if (!page) return;
+  const visibility = request.query.visibility === 'private' ? 'private' : 'public';
+  // `mine=1` populates the caller's own Feedbacks-tab inbox: every DM, group
+  // thread, and org thread they actually participate in — deliberately NOT
+  // privilege-bypassed, so an admin's own inbox looks like anyone else's.
+  // The privileged "see everything" bypass is reserved for an explicit
+  // participantId/targetId oversight lookup (the Employee Wall panel).
+  const mine = request.query.mine === '1' || request.query.mine === 'true';
   try {
-    const data = await feedbacks.listFeedback({ ...page, targetId: request.query.targetId, senderId: request.query.senderId });
+    const { viewerId, isPrivileged } = await resolveViewerForRead(request.auth);
+    if (visibility === 'private' && !viewerId) {
+      return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+    }
+    const data = await feedbacks.listFeedback({
+      ...page, targetId: request.query.targetId, senderId: request.query.senderId,
+      participantId: request.query.participantId, visibility, viewerId,
+      viewerIsPrivileged: mine ? false : isPrivileged
+    });
     const ids = data.map(item => item.id);
-    const viewerId = await feedbacks.findAccountIdByEmail(request.auth?.email)
-      || (request.auth?.sub ? `gw_${request.auth.sub}`.slice(0, 50) : null);
     const [comments, reactions] = await Promise.all([
       feedbacks.listCommentsForFeedback(ids),
       feedbacks.listReactionsForFeedback(ids, viewerId)
@@ -276,20 +313,102 @@ app.get('/api/feedback', async (request, response, next) => {
   } catch (error) { return next(error); }
 });
 app.post('/api/feedback', async (request, response, next) => {
-  const { senderId, targetId, targetName, content, isAnonymous = false } = request.body || {};
+  const body = request.body || {};
+  if (body.visibility === 'private') return createPrivateFeedback(request, response, next);
+  const { senderId, targetId, targetName, content, isAnonymous = false } = body;
   if (![senderId, targetId, targetName, content].every(validText)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'senderId, targetId, targetName, and content are required.', { fields: ['senderId', 'targetId', 'targetName', 'content'] });
   try { return sendJson(response, 201, await feedbacks.createFeedback({ id: `fb_${crypto.randomUUID()}`, senderId, targetId, targetName, content: content.trim(), isAnonymous: Boolean(isAnonymous) })); } catch (error) { return next(error); }
 });
+
+// Private feedback (DM / group / Organization). Unlike the public path
+// above, the sender identity and anonymity are never taken from the client —
+// a spoofed senderId here would be an actual privacy breach, not just
+// misattributed authorship. 'org' addresses the sender's own per-employee
+// thread with admins/managers (see feedback_groups schema comment for why
+// target_id is the employee's own id rather than a shared sentinel).
+async function createPrivateFeedback(request, response, next) {
+  const auth = request.auth || {};
+  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+  const { targetId, content, targetType } = request.body || {};
+  if (!['user', 'group', 'org'].includes(targetType)) {
+    return sendError(response, request, 422, 'VALIDATION_ERROR', 'targetType must be user, group, or org.', { fields: ['targetType'] });
+  }
+  if (!validText(content)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'content is required.', { fields: ['content'] });
+  try {
+    const senderId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+    let resolvedTargetId; let resolvedTargetName;
+    if (targetType === 'org') {
+      resolvedTargetId = senderId;
+      resolvedTargetName = 'Organization';
+    } else if (targetType === 'group') {
+      if (!validText(targetId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'targetId is required.', { fields: ['targetId'] });
+      const group = await feedbacks.getGroupById(targetId);
+      if (!group) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
+      const senderUser = await feedbacks.getUserById(senderId);
+      const senderIsPrivileged = isPrivilegedRole(senderUser?.permissionRole);
+      if (!senderIsPrivileged && !await feedbacks.isGroupMember(targetId, senderId)) {
+        return sendError(response, request, 403, 'FORBIDDEN', 'You must be a member of this group to post in it.');
+      }
+      resolvedTargetId = targetId;
+      resolvedTargetName = group.name;
+    } else {
+      if (!validText(targetId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'targetId is required.', { fields: ['targetId'] });
+      if (targetId === senderId) return sendError(response, request, 422, 'VALIDATION_ERROR', 'You cannot send private feedback to yourself.');
+      const targetUser = await feedbacks.getUserById(targetId);
+      if (!targetUser) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No user with that id.');
+      resolvedTargetId = targetId;
+      resolvedTargetName = targetUser.name;
+    }
+    const created = await feedbacks.createFeedback({
+      id: `fb_${crypto.randomUUID()}`, senderId, targetId: resolvedTargetId, targetName: resolvedTargetName,
+      content: content.trim(), isAnonymous: false, visibility: 'private', targetType
+    });
+    return sendJson(response, 201, created);
+  } catch (error) { return next(error); }
+}
+// Shared by the three per-id routes below: with private rows now sharing the
+// `feedback` table, an unguessable-but-known id is otherwise a bypass of
+// every privacy rule — feedbackExists alone used to be the only check.
+async function loadAccessibleFeedback(request, response, feedbackId) {
+  const meta = await feedbacks.getFeedbackMeta(feedbackId);
+  if (!meta) { sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No feedback item with that id.'); return null; }
+  if (meta.visibility !== 'private') return meta;
+  const { viewerId, isPrivileged } = await resolveViewerForRead(request.auth);
+  if (!viewerId) { sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.'); return null; }
+  if (!await feedbacks.canViewFeedback({ feedbackId, viewerId, viewerIsPrivileged: isPrivileged })) {
+    sendError(response, request, 403, 'FORBIDDEN', 'You do not have access to this feedback item.');
+    return null;
+  }
+  return meta;
+}
+
 app.get('/api/feedback/:feedbackId/comments', async (request, response, next) => {
   const page = pagination(request, response); if (!page) return;
-  try { if (!await feedbacks.feedbackExists(request.params.feedbackId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No feedback item with that id.');
-    return sendJson(response, 200, { data: await feedbacks.listComments({ feedbackId: request.params.feedbackId, ...page }), ...page }); } catch (error) { return next(error); }
+  try {
+    if (!await loadAccessibleFeedback(request, response, request.params.feedbackId)) return;
+    return sendJson(response, 200, { data: await feedbacks.listComments({ feedbackId: request.params.feedbackId, ...page }), ...page });
+  } catch (error) { return next(error); }
 });
 app.post('/api/feedback/:feedbackId/comments', async (request, response, next) => {
-  const { senderId, parentId = null, text, isAnonymous = false } = request.body || {};
-  if (![senderId, text].every(validText)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'senderId and text are required.', { fields: ['senderId', 'text'] });
-  try { if (!await feedbacks.feedbackExists(request.params.feedbackId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No feedback item with that id.');
-    return sendJson(response, 201, await feedbacks.createComment({ id: `cm_${crypto.randomUUID()}`, feedbackId: request.params.feedbackId, parentId, senderId, text: text.trim(), isAnonymous: Boolean(isAnonymous) })); } catch (error) { return next(error); }
+  const { parentId = null, text } = request.body || {};
+  if (!validText(text)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'text is required.', { fields: ['text'] });
+  try {
+    const meta = await loadAccessibleFeedback(request, response, request.params.feedbackId);
+    if (!meta) return;
+    let senderId; let isAnonymous;
+    if (meta.visibility === 'private') {
+      // A reply in a private thread: sender and anonymity are never taken
+      // from the client, same reasoning as createPrivateFeedback above.
+      const auth = request.auth || {};
+      senderId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+      isAnonymous = false;
+    } else {
+      senderId = request.body?.senderId;
+      if (!validText(senderId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'senderId is required.', { fields: ['senderId'] });
+      isAnonymous = Boolean(request.body?.isAnonymous);
+    }
+    return sendJson(response, 201, await feedbacks.createComment({ id: `cm_${crypto.randomUUID()}`, feedbackId: request.params.feedbackId, parentId, senderId, text: text.trim(), isAnonymous }));
+  } catch (error) { return next(error); }
 });
 const ALLOWED_REACTIONS = new Set(['❤️', '👏', '💡', '🙌']);
 app.post('/api/feedback/:feedbackId/reactions', async (request, response, next) => {
@@ -299,7 +418,7 @@ app.post('/api/feedback/:feedbackId/reactions', async (request, response, next) 
   if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
   const feedbackId = request.params.feedbackId;
   try {
-    if (!await feedbacks.feedbackExists(feedbackId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No feedback item with that id.');
+    if (!await loadAccessibleFeedback(request, response, feedbackId)) return;
     if (commentId && !await feedbacks.commentExists(commentId, feedbackId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No comment with that id on this feedback.');
     const userId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
     return sendJson(response, 200, await feedbacks.toggleReaction({ userId, feedbackId, commentId: commentId || '', reaction }));
@@ -319,6 +438,52 @@ app.delete('/api/private-remarks/:remarkId', async (request, response, next) => 
   if (!validText(request.query.authorId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'authorId is required.', { fields: ['authorId'] });
   try { if (!await feedbacks.deletePrivateRemark({ id: request.params.remarkId, authorId: request.query.authorId })) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No private remark with that id.');
     return response.status(204).end(); } catch (error) { return next(error); }
+});
+
+app.get('/api/groups', async (request, response, next) => {
+  const page = pagination(request, response); if (!page) return;
+  try {
+    let mine;
+    if (request.query.mine === '1' || request.query.mine === 'true') {
+      const { viewerId } = await resolveViewerForRead(request.auth);
+      if (!viewerId) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+      mine = viewerId;
+    }
+    return sendJson(response, 200, { data: await feedbacks.listGroups({ mine, ...page }), ...page });
+  } catch (error) { return next(error); }
+});
+app.post('/api/groups', async (request, response, next) => {
+  const auth = request.auth || {};
+  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+  const { name } = request.body || {};
+  if (!validText(name)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'name is required.', { fields: ['name'] });
+  try {
+    const createdBy = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+    return sendJson(response, 201, await feedbacks.createGroup({ id: `grp_${crypto.randomUUID()}`, name: name.trim(), createdBy }));
+  } catch (error) { return next(error); }
+});
+app.get('/api/groups/:groupId/members', async (request, response, next) => {
+  try {
+    if (!await feedbacks.getGroupById(request.params.groupId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
+    return sendJson(response, 200, { data: await feedbacks.listGroupMembers(request.params.groupId) });
+  } catch (error) { return next(error); }
+});
+app.post('/api/groups/:groupId/members', async (request, response, next) => {
+  // Intentionally open: any signed-in employee may add any existing user to
+  // any existing group — a product decision, not an oversight. Membership is
+  // a boundary against people who don't know the group exists, not against
+  // any employee who does.
+  const auth = request.auth || {};
+  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+  const { userId } = request.body || {};
+  if (!validText(userId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'userId is required.', { fields: ['userId'] });
+  try {
+    if (!await feedbacks.getGroupById(request.params.groupId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
+    if (!await feedbacks.getUserById(userId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No user with that id.');
+    const addedBy = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+    await feedbacks.addGroupMember({ groupId: request.params.groupId, userId, addedBy });
+    return response.status(204).end();
+  } catch (error) { return next(error); }
 });
 
 app.use('/assets', express.static(path.join(publicDist, 'assets'), { index: false }));

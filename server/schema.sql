@@ -6,16 +6,17 @@
 SET NAMES utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `users` (
-  `id`          varchar(50)  NOT NULL,
-  `external_id` varchar(50)  DEFAULT NULL,
-  `name`        varchar(120) NOT NULL,
-  `email`       varchar(190) DEFAULT NULL,
-  `role_title`  varchar(120) DEFAULT NULL,
-  `department`  varchar(80)  NOT NULL DEFAULT 'General',
-  `avatar`      varchar(500) DEFAULT NULL,
-  `skills`      text         DEFAULT NULL,
-  `source`      varchar(30)  NOT NULL DEFAULT 'local',
-  `synced_at`   timestamp    NULL DEFAULT NULL,
+  `id`               varchar(50)  NOT NULL,
+  `external_id`      varchar(50)  DEFAULT NULL,
+  `name`             varchar(120) NOT NULL,
+  `email`            varchar(190) DEFAULT NULL,
+  `role_title`       varchar(120) DEFAULT NULL,
+  `department`       varchar(80)  NOT NULL DEFAULT 'General',
+  `avatar`           varchar(500) DEFAULT NULL,
+  `skills`           text         DEFAULT NULL,
+  `source`           varchar(30)  NOT NULL DEFAULT 'local',
+  `synced_at`        timestamp    NULL DEFAULT NULL,
+  `permission_role`  varchar(20)  NOT NULL DEFAULT 'user',
   PRIMARY KEY (`id`),
   KEY `idx_users_external_id` (`external_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -28,6 +29,8 @@ CREATE TABLE IF NOT EXISTS `feedback` (
   `content`      text         NOT NULL,
   `is_anonymous` tinyint(1)   NOT NULL DEFAULT 0,
   `is_edited`    tinyint(1)   NOT NULL DEFAULT 0,
+  `visibility`   varchar(10)  NOT NULL DEFAULT 'public',
+  `target_type`  varchar(10)  NOT NULL DEFAULT 'user',
   `created_at`   timestamp    NOT NULL DEFAULT current_timestamp(),
   `updated_at`   timestamp    NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
@@ -78,4 +81,27 @@ CREATE TABLE IF NOT EXISTS `private_remarks` (
   KEY `fk_remarks_target`        (`target_id`),
   CONSTRAINT `fk_remarks_author` FOREIGN KEY (`author_id`) REFERENCES `users` (`id`),
   CONSTRAINT `fk_remarks_target` FOREIGN KEY (`target_id`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Project groups for the Feedbacks tab. Named `feedback_groups`, not
+-- `groups` — GROUPS is a reserved word in current MySQL/MariaDB.
+CREATE TABLE IF NOT EXISTS `feedback_groups` (
+  `id`         varchar(50)  NOT NULL,
+  `name`       varchar(160) NOT NULL,
+  `created_by` varchar(50)  NOT NULL,
+  `created_at` timestamp    NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_feedback_groups_created_by` (`created_by`),
+  CONSTRAINT `fk_feedback_groups_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `group_members` (
+  `group_id`   varchar(50) NOT NULL,
+  `user_id`    varchar(50) NOT NULL,
+  `added_by`   varchar(50) DEFAULT NULL,
+  `created_at` timestamp   NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`group_id`, `user_id`),
+  KEY `idx_group_members_user` (`user_id`),
+  CONSTRAINT `fk_group_members_group` FOREIGN KEY (`group_id`) REFERENCES `feedback_groups` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_group_members_user`  FOREIGN KEY (`user_id`)  REFERENCES `users` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

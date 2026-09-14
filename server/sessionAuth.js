@@ -58,6 +58,7 @@ export function readSession(request) {
 
 export function setSession(response, claims) {
   const session = { sid: claims.sid, sub: claims.sub, email: claims.email, name: claims.name,
+    role: claims.role || null,
     exp: Math.floor(Date.now() / 1000) + config.sessionTtlSeconds };
   const encoded = Buffer.from(JSON.stringify(session)).toString('base64url');
   response.setHeader('set-cookie', cookie(config.sessionTtlSeconds, `${encoded}.${sign(encoded)}`));
