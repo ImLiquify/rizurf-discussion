@@ -1865,11 +1865,40 @@
 
     .feedbacks-group-block { display: flex; flex-direction: column; }
 
-    .feedbacks-subgroup-row { padding-left: 22px; }
+    .feedbacks-group-block-row { display: flex; align-items: center; gap: 2px; }
+    .feedbacks-group-block-row .feedbacks-list-item { width: auto; flex: 1; min-width: 0; }
+
+    .feedbacks-group-expand-btn, .feedbacks-group-expand-spacer {
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .feedbacks-group-expand-btn { color: var(--text-subtle); font-size: 0.8rem; }
+    .feedbacks-group-expand-btn:hover { color: var(--text-main); }
+
+    /* Sub-groups: plain clickable text rows, no icon box — "just a text box
+       you can press" — nested under their (expanded) parent. */
+    .feedbacks-subgroup-textrow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 7px 10px 7px 32px;
+      border-radius: var(--radius-md);
+      text-align: left;
+    }
+
+    .feedbacks-subgroup-textrow:hover { background: var(--bg-subtle); }
+    .feedbacks-subgroup-textrow.active { background: var(--accent-cyan-light); }
+    .feedbacks-subgroup-textrow-name { font-size: 0.85rem; color: var(--text-main); }
 
     .feedbacks-subgroup-add-btn {
       align-self: flex-start;
-      margin: 2px 0 6px 46px;
+      margin: 2px 0 6px 32px;
       font-size: 0.72rem;
       font-weight: 600;
       color: var(--text-subtle);
@@ -1944,20 +1973,19 @@
       max-width: 320px;
     }
 
-    .chat-message-bubble {
-      align-self: flex-start;
-      max-width: 70%;
-      background: var(--bg-subtle);
-      border: 1px solid var(--border-light);
-      border-radius: var(--radius-md);
-      padding: 10px 14px;
+    /* Flat, full-width message rows (no chat-bubble box) — each one spans
+       the whole messages area, like a feed/list rather than Messenger-style
+       bubbles, separated by a hairline instead of a background/border box. */
+    .chat-message-row {
+      width: 100%;
+      padding: 10px 4px;
+      border-bottom: 1px solid var(--border-light);
+      border-left: 3px solid transparent;
+      padding-left: 12px;
     }
 
-    .chat-message-bubble.mine {
-      align-self: flex-end;
-      background: var(--accent-cyan-light);
-      border-color: rgba(37, 99, 235, 0.2);
-    }
+    .chat-message-row.mine { border-left-color: var(--accent-cyan); }
+    .chat-message-row.pending { opacity: 0.6; }
 
     .chat-message-meta {
       display: flex;
@@ -2000,6 +2028,95 @@
       .feedbacks-layout { flex-direction: column; height: auto; }
       .feedbacks-sidebar { width: auto; border-right: none; border-bottom: 1px solid var(--border-color); }
     }
+
+    /* Group modal (create / add members — a searchable employee picker) */
+    .group-modal-card, .profile-modal-card { max-width: 460px; }
+
+    .group-modal-label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin: 14px 0 6px;
+    }
+
+    .group-modal-label:first-of-type { margin-top: 0; }
+
+    .group-modal-name-input {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+      background: var(--bg-canvas);
+      color: var(--text-main);
+      font-size: 0.9rem;
+    }
+
+    .group-modal-name-input:focus { outline: none; border-color: var(--accent-cyan); }
+
+    .group-modal-member-list {
+      margin-top: 10px;
+      max-height: 260px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-md);
+      padding: 6px;
+    }
+
+    .group-modal-member-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: var(--radius-md);
+      text-align: left;
+    }
+
+    .group-modal-member-row:hover { background: var(--bg-subtle); }
+    .group-modal-member-row.selected { background: var(--accent-cyan-light); }
+
+    .group-modal-member-avatar, .group-modal-member-avatar-fallback {
+      width: 30px;
+      height: 30px;
+      border-radius: var(--radius-full);
+      flex-shrink: 0;
+      object-fit: cover;
+    }
+
+    .group-modal-member-avatar-fallback {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-subtle);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+
+    .group-modal-member-name { flex: 1; font-size: 0.88rem; color: var(--text-main); }
+    .group-modal-member-check { color: var(--accent-cyan); font-weight: 800; width: 16px; text-align: center; }
+
+    .group-modal-submit { width: 100%; margin-top: 16px; justify-content: center; }
+
+    /* Profile modal (placeholder) */
+    .profile-modal-body { text-align: center; }
+    .profile-modal-note { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 18px; }
+
+    .btn-logout {
+      width: 100%;
+      padding: 12px;
+      border-radius: var(--radius-md);
+      background: var(--status-danger, #E0533D);
+      color: #FFFFFF;
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+
+    .btn-logout:hover { opacity: 0.9; }
 
     /* Admin/manager oversight panel inside the Wall modal */
     .oversight-panel {
@@ -2554,7 +2671,7 @@
     </nav>
 
     <!-- Bottom User Badge — click to sign out -->
-    <button type="button" class="sidebar-user-badge" onclick="handleLogout()" title="Sign out">
+    <button type="button" class="sidebar-user-badge" onclick="openProfileModal()" title="Open profile">
       <div class="sidebar-user-avatar">
         <img src="" alt="User" />
         <div class="status-dot"></div>
@@ -2804,6 +2921,68 @@
     </div>
   </div>
 
+  <!-- Group modal: create a group/sub-group, or add members — a real
+       searchable employee picker instead of window.prompt(). -->
+  <div class="modal-overlay" id="groupModalOverlay" onclick="handleGroupModalBackdropClick(event)">
+    <div class="modal-content-card group-modal-card" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div class="modal-target-profile">
+          <h3 id="groupModalTitle">Create group</h3>
+        </div>
+        <button class="btn-modal-close" onclick="closeGroupModal()" title="Close dialog">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-scrollable-body">
+        <div id="groupModalNameField">
+          <label class="group-modal-label" for="groupModalNameInput">Group name</label>
+          <input type="text" id="groupModalNameInput" class="group-modal-name-input" placeholder="e.g. Frontend" />
+        </div>
+        <label class="group-modal-label">Members</label>
+        <div class="search-input-wrapper">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="groupModalMemberSearch" class="search-input-field" placeholder="Search employees..." oninput="handleGroupModalSearch(this.value)" />
+        </div>
+        <div class="group-modal-member-list" id="groupModalMemberList"></div>
+        <button type="button" class="btn-submit-feedback group-modal-submit" id="groupModalSubmitBtn" onclick="submitGroupModal()">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Profile modal: a placeholder until a full profile page exists —
+       just identity + a sign-out button. -->
+  <div class="modal-overlay" id="profileModalOverlay" onclick="handleProfileModalBackdropClick(event)">
+    <div class="modal-content-card profile-modal-card" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div class="modal-target-profile">
+          <div class="modal-target-avatar">
+            <img id="profileModalAvatar" src="" alt="" />
+          </div>
+          <div class="modal-target-info">
+            <h3 id="profileModalName">—</h3>
+            <p id="profileModalRole">—</p>
+          </div>
+        </div>
+        <button class="btn-modal-close" onclick="closeProfileModal()" title="Close dialog">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-scrollable-body profile-modal-body">
+        <p class="profile-modal-note">A full profile page is coming soon.</p>
+        <button type="button" class="btn-logout" onclick="handleLogout()">Sign out</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification Container -->
   <div class="toast-container" id="toastContainer"></div>
 
@@ -2842,6 +3021,7 @@
     let feedbacksSearchQuery = "";
     let myGroups = []; // groups (and sub-groups) the signed-in user belongs to
     let allGroupsDirectory = []; // every group, for resolving a sub-group's parent name
+    let expandedGroupIds = new Set(); // top-level groups whose sub-groups are shown
     let myTopics = []; // every topic the user can see, across all their containers
     let activeContainer = null; // { type: "user"|"group"|"org", id, name } — what's selected in the left list
     let containerTopics = []; // topics fetched for the open container
@@ -3119,14 +3299,18 @@
     async function loadFeedbacksData() {
       if (!CURRENT_USER.id) { myGroups = []; myTopics = []; renderFeedbacksTab(); renderTopicList(); return; }
       try {
-        const [groupsResponse, allGroupsResponse, topicsResponse] = await Promise.all([
+        // The full group directory only exists to resolve a sub-group's
+        // parent name for display and rarely changes — fetch it once, not
+        // on every poll, to cut down round trips against a remote database.
+        const fetches = [
           fetch(`${API_BASE_URL}/groups?mine=1`),
-          fetch(`${API_BASE_URL}/groups`),
           fetch(`${API_BASE_URL}/topics?mine=1`)
-        ]);
+        ];
+        if (!allGroupsDirectory.length) fetches.push(fetch(`${API_BASE_URL}/groups`));
+        const [groupsResponse, topicsResponse, allGroupsResponse] = await Promise.all(fetches);
         myGroups = groupsResponse.ok ? ((await groupsResponse.json()).data || []) : [];
-        allGroupsDirectory = allGroupsResponse.ok ? ((await allGroupsResponse.json()).data || []) : [];
         myTopics = topicsResponse.ok ? ((await topicsResponse.json()).data || []) : [];
+        if (allGroupsResponse) allGroupsDirectory = allGroupsResponse.ok ? ((await allGroupsResponse.json()).data || []) : [];
       } catch (error) {
         console.warn("Feedbacks tab data fetch error:", error);
       }
@@ -3191,6 +3375,27 @@
       `;
     }
 
+    // Sub-groups render as plain clickable text, no icon box — just a row
+    // you can press, nested under their expanded parent.
+    function subgroupTextRowHtml(sub) {
+      const summary = containerSummary(topicsForGroup(sub.id));
+      const active = activeContainer?.type === "group" && activeContainer?.id === sub.id;
+      const safeName = escapeHtml(sub.name || "");
+      return `
+        <button type="button" class="feedbacks-subgroup-textrow${active ? " active" : ""}"
+          onclick="openContainer('group', '${escapeHtml(sub.id)}', '${safeName.replace(/'/g, "&#039;")}')">
+          <span class="feedbacks-subgroup-textrow-name">${safeName}</span>
+          ${summary.unread ? `<span class="feedbacks-unread-dot">${summary.unread}</span>` : ""}
+        </button>
+      `;
+    }
+
+    function toggleGroupExpanded(groupId) {
+      if (expandedGroupIds.has(groupId)) expandedGroupIds.delete(groupId);
+      else expandedGroupIds.add(groupId);
+      renderFeedbacksTab();
+    }
+
     function renderFeedbacksTab() {
       const listEl = document.getElementById("feedbacksListScroll");
       if (!listEl) return;
@@ -3218,31 +3423,24 @@
           preview: summary.preview || `${group.memberCount} member${group.memberCount === 1 ? "" : "s"}`, unread: summary.unread,
           active: activeContainer?.type === "group" && activeContainer?.id === group.id
         });
-        const subgroupsHtml = myGroups.filter(sub => sub.parentGroupId === group.id).map(sub => {
-          const subSummary = containerSummary(topicsForGroup(sub.id));
-          return `<div class="feedbacks-subgroup-row">${feedbacksListItemHtml({
-            type: "group", id: sub.id, name: sub.name, icon: "📁",
-            preview: subSummary.preview || `${sub.memberCount} member${sub.memberCount === 1 ? "" : "s"}`, unread: subSummary.unread,
-            active: activeContainer?.type === "group" && activeContainer?.id === sub.id
-          })}</div>`;
-        }).join("");
-        return `<div class="feedbacks-group-block">${row}${subgroupsHtml}
+        const subgroups = myGroups.filter(sub => sub.parentGroupId === group.id);
+        const expanded = expandedGroupIds.has(group.id);
+        const expandToggle = subgroups.length
+          ? `<button type="button" class="feedbacks-group-expand-btn" onclick="toggleGroupExpanded('${group.id}')" title="${expanded ? "Collapse" : "Expand"} sub-groups">${expanded ? "▾" : "▸"}</button>`
+          : `<span class="feedbacks-group-expand-spacer"></span>`;
+        const subgroupsHtml = expanded ? subgroups.map(subgroupTextRowHtml).join("") : "";
+        return `<div class="feedbacks-group-block">
+          <div class="feedbacks-group-block-row">${expandToggle}${row}</div>
+          ${subgroupsHtml}
           <button type="button" class="feedbacks-subgroup-add-btn" onclick="createSubgroupPrompt('${group.id}')">+ Sub-group</button>
         </div>`;
       }).join("");
 
       // Sub-groups I belong to whose parent I'm not a member of (so it has
-      // no top-level row above to nest under) — shown standalone.
+      // no top-level row above to nest under) — shown standalone as plain
+      // text rows, same as an expanded sub-group.
       const orphanSubgroupsHtml = myGroups.filter(sub => sub.parentGroupId && !topLevelGroups.some(g => g.id === sub.parentGroupId))
-        .map(sub => {
-          const parentName = allGroupsDirectory.find(g => g.id === sub.parentGroupId)?.name || "a group";
-          const summary = containerSummary(topicsForGroup(sub.id));
-          return feedbacksListItemHtml({
-            type: "group", id: sub.id, name: sub.name, icon: "📁",
-            preview: summary.preview || `Sub-group of ${parentName}`, unread: summary.unread,
-            active: activeContainer?.type === "group" && activeContainer?.id === sub.id
-          });
-        }).join("");
+        .map(subgroupTextRowHtml).join("");
 
       const dmsHtml = [...dmMap.entries()].map(([counterpartId, topics]) => {
         const emp = EMPLOYEES.find(e => e.id === counterpartId);
@@ -3269,59 +3467,121 @@
       `;
     }
 
-    async function createNewGroupPrompt() {
-      const name = window.prompt("Name this project group:");
-      if (!name || !name.trim()) return;
-      try {
-        const response = await fetch(`${API_BASE_URL}/groups`, {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim() })
-        });
-        if (!response.ok) throw new Error("Group creation failed");
-        const group = await response.json();
-        await loadFeedbacksData();
-        openContainer("group", group.id, group.name);
-        showToast(`👥 Created "${group.name}"`);
-      } catch (error) {
-        showToast("Could not create the group. Please try again.");
-      }
-    }
-
-    async function createSubgroupPrompt(parentGroupId) {
-      const name = window.prompt("Name this sub-group:");
-      if (!name || !name.trim()) return;
-      try {
-        const response = await fetch(`${API_BASE_URL}/groups`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: name.trim(), parentGroupId })
-        });
-        if (!response.ok) {
-          const err = await response.json().catch(() => null);
-          throw new Error(err?.error?.message || "Sub-group creation failed");
-        }
-        const group = await response.json();
-        await loadFeedbacksData();
-        openContainer("group", group.id, group.name);
-        showToast(`📁 Created "${group.name}"`);
-      } catch (error) {
-        showToast(error.message || "Could not create the sub-group. Please try again.");
-      }
-    }
-
-    async function addMemberToActiveGroup() {
+    function createNewGroupPrompt() { openGroupModal({ mode: "create" }); }
+    function createSubgroupPrompt(parentGroupId) { openGroupModal({ mode: "create", parentGroupId }); }
+    function addMemberToActiveGroup() {
       if (!activeContainer || activeContainer.type !== "group") return;
-      const name = window.prompt("Add by exact employee name:");
-      if (!name || !name.trim()) return;
-      const match = EMPLOYEES.find(e => e.name.toLowerCase() === name.trim().toLowerCase());
-      if (!match) { showToast(`No employee named "${name.trim()}" found.`); return; }
-      try {
-        const response = await fetch(`${API_BASE_URL}/groups/${activeContainer.id}/members`, {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: match.id })
-        });
-        if (!response.ok) throw new Error("Add member failed");
-        showToast(`Added ${match.name} to the group.`);
-        await loadFeedbacksData();
-      } catch (error) {
-        showToast("Could not add that employee. Please try again.");
+      openGroupModal({ mode: "addMember", targetGroupId: activeContainer.id });
+    }
+
+    // ---- Group modal: create a group/sub-group, or add members to one —
+    // a real searchable employee picker instead of window.prompt(). ----
+    let groupModalMode = null; // "create" | "addMember"
+    let groupModalParentId = null;
+    let groupModalTargetGroupId = null;
+    let groupModalSearch = "";
+    let groupModalSelectedIds = new Set();
+
+    function openGroupModal({ mode, parentGroupId = null, targetGroupId = null }) {
+      groupModalMode = mode;
+      groupModalParentId = parentGroupId;
+      groupModalTargetGroupId = targetGroupId;
+      groupModalSearch = "";
+      groupModalSelectedIds = new Set();
+
+      document.getElementById("groupModalTitle").textContent =
+        mode === "addMember" ? "Add members" : parentGroupId ? "Create sub-group" : "Create group";
+      document.getElementById("groupModalNameField").hidden = mode === "addMember";
+      document.getElementById("groupModalNameInput").value = "";
+      document.getElementById("groupModalMemberSearch").value = "";
+      document.getElementById("groupModalSubmitBtn").textContent = mode === "addMember" ? "Add" : "Create";
+      renderGroupModalMemberList();
+      document.getElementById("groupModalOverlay").classList.add("open");
+      document.body.style.overflow = "hidden";
+    }
+
+    function closeGroupModal() {
+      document.getElementById("groupModalOverlay").classList.remove("open");
+      document.body.style.overflow = "";
+    }
+
+    function handleGroupModalBackdropClick(event) {
+      if (event.target.id === "groupModalOverlay") closeGroupModal();
+    }
+
+    function handleGroupModalSearch(value) {
+      groupModalSearch = value;
+      renderGroupModalMemberList();
+    }
+
+    function toggleGroupModalMember(id) {
+      if (groupModalSelectedIds.has(id)) groupModalSelectedIds.delete(id);
+      else groupModalSelectedIds.add(id);
+      renderGroupModalMemberList();
+    }
+
+    function renderGroupModalMemberList() {
+      const listEl = document.getElementById("groupModalMemberList");
+      if (!listEl) return;
+      const query = groupModalSearch.toLowerCase().trim();
+      const candidates = EMPLOYEES.filter(e => e.id !== CURRENT_USER.id && (!query || e.name.toLowerCase().includes(query)));
+      listEl.innerHTML = candidates.length ? candidates.map(e => {
+        const selected = groupModalSelectedIds.has(e.id);
+        const avatarHtml = e.avatar
+          ? `<img src="${escapeHtml(e.avatar)}" alt="${escapeHtml(e.name)}" class="group-modal-member-avatar" />`
+          : `<span class="group-modal-member-avatar-fallback">${escapeHtml((e.name || "?").charAt(0))}</span>`;
+        return `
+          <button type="button" class="group-modal-member-row${selected ? " selected" : ""}" onclick="toggleGroupModalMember('${e.id}')">
+            ${avatarHtml}
+            <span class="group-modal-member-name">${escapeHtml(e.name)}</span>
+            <span class="group-modal-member-check">${selected ? "✓" : ""}</span>
+          </button>
+        `;
+      }).join("") : `<div class="feedbacks-section-empty">No employees match.</div>`;
+    }
+
+    async function submitGroupModal() {
+      if (groupModalMode === "create") {
+        const name = document.getElementById("groupModalNameInput").value.trim();
+        if (!name) { showToast("Please enter a group name."); return; }
+        try {
+          const body = { name };
+          if (groupModalParentId) body.parentGroupId = groupModalParentId;
+          const response = await fetch(`${API_BASE_URL}/groups`, {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+          });
+          if (!response.ok) {
+            const err = await response.json().catch(() => null);
+            throw new Error(err?.error?.message || "Group creation failed");
+          }
+          const group = await response.json();
+          await Promise.all([...groupModalSelectedIds].map(memberId =>
+            fetch(`${API_BASE_URL}/groups/${group.id}/members`, {
+              method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: memberId })
+            })
+          ));
+          closeGroupModal();
+          await loadFeedbacksData();
+          openContainer("group", group.id, group.name);
+          showToast(`👥 Created "${group.name}"`);
+        } catch (error) {
+          showToast(error.message || "Could not create the group. Please try again.");
+        }
+      } else if (groupModalMode === "addMember") {
+        if (!groupModalSelectedIds.size) { showToast("Select at least one employee."); return; }
+        try {
+          await Promise.all([...groupModalSelectedIds].map(memberId =>
+            fetch(`${API_BASE_URL}/groups/${groupModalTargetGroupId}/members`, {
+              method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: memberId })
+            })
+          ));
+          const count = groupModalSelectedIds.size;
+          closeGroupModal();
+          showToast(`Added ${count} member${count === 1 ? "" : "s"}.`);
+          await loadFeedbacksData();
+        } catch (error) {
+          showToast("Could not add members. Please try again.");
+        }
       }
     }
 
@@ -3409,7 +3669,7 @@
     function chatMessageBubbleHtml(message) {
       const mine = message.senderId === CURRENT_USER.id;
       return `
-        <div class="chat-message-bubble${mine ? " mine" : ""}">
+        <div class="chat-message-row${mine ? " mine" : ""}${message.pending ? " pending" : ""}">
           <div class="chat-message-meta">
             <span class="chat-message-sender">${escapeHtml(message.senderName)}</span>
             <span class="chat-message-time">${formatDisplayTime(message.timestamp)}</span>
@@ -3492,27 +3752,73 @@
       }
     }
 
+    // Optimistic send: show the message immediately instead of waiting on a
+    // round trip to a remote database before the sender sees anything —
+    // reconciled with the real row once the server responds, and rolled
+    // back if the send actually failed.
     async function sendFeedbacksMessage() {
       const input = document.getElementById("feedbacksComposeInput");
       if (!input || !activeTopic) return;
       const content = input.value.trim();
       if (!content) return;
+      input.value = "";
+
+      const pendingId = `pending_${Date.now()}`;
+      conversationMessages.push({
+        id: pendingId, senderId: CURRENT_USER.id, senderName: CURRENT_USER.name,
+        senderAvatar: CURRENT_USER.avatar, content, timestamp: new Date().toISOString(), pending: true
+      });
+      renderConversationMessages();
+
       try {
         const response = await fetch(`${API_BASE_URL}/feedback`, {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ visibility: "private", topicId: activeTopic.id, content })
         });
         if (!response.ok) throw new Error("Send failed");
-        input.value = "";
-        await refreshActiveTopicMessages();
-        await loadFeedbacksData();
+        const saved = await response.json();
+        const pendingIndex = conversationMessages.findIndex(m => m.id === pendingId);
+        if (pendingIndex !== -1) {
+          conversationMessages[pendingIndex] = {
+            id: saved.id, senderId: saved.sender_id, senderName: CURRENT_USER.name,
+            senderAvatar: CURRENT_USER.avatar, content: saved.content, timestamp: saved.created_at
+          };
+          renderConversationMessages();
+        }
+        // Background sync for sidebar previews/unread counts — not awaited,
+        // so the compose box doesn't sit there waiting on it.
+        loadFeedbacksData();
       } catch (error) {
+        conversationMessages = conversationMessages.filter(m => m.id !== pendingId);
+        renderConversationMessages();
+        input.value = content;
         showToast("Could not send that message. Please try again.");
       }
     }
 
     function handleLogout() {
       fetch(`${API_BASE_URL}/logout`, { method: "POST" }).finally(() => { window.location.href = "/"; });
+    }
+
+    // Placeholder profile modal — just identity + sign out, until a real
+    // profile page exists to link this to.
+    function openProfileModal() {
+      document.getElementById("profileModalAvatar").src = CURRENT_USER.avatar || "";
+      document.getElementById("profileModalAvatar").alt = CURRENT_USER.name || "User";
+      document.getElementById("profileModalName").textContent = CURRENT_USER.name || "No User Selected";
+      document.getElementById("profileModalRole").textContent = CURRENT_USER.role
+        ? `${CURRENT_USER.role} • ${CURRENT_USER.department}` : "--";
+      document.getElementById("profileModalOverlay").classList.add("open");
+      document.body.style.overflow = "hidden";
+    }
+
+    function closeProfileModal() {
+      document.getElementById("profileModalOverlay").classList.remove("open");
+      document.body.style.overflow = "";
+    }
+
+    function handleProfileModalBackdropClick(event) {
+      if (event.target.id === "profileModalOverlay") closeProfileModal();
     }
 
     /* Permission Check Helpers */

@@ -85,28 +85,35 @@ export async function findAccountIdByEmail(email) {
   return rows[0]?.id || null;
 }
 
+// This runs on every authenticated write (send a message, create a topic,
+// add a group member, ...), so it's a hot path against a remote database —
+// keep it to one read, and at most one write only when something actually
+// changed, instead of two unconditional UPDATEs every single call.
 export async function resolveIdentityAccount({ sub, email, name, role }) {
   if (email) {
     const [rows] = await pool.execute(
-      `SELECT id FROM users WHERE email = ?
+      `SELECT id, name, permission_role AS permissionRole FROM users WHERE email = ?
        ORDER BY (source = 'intern-api') DESC, synced_at DESC, id ASC
        LIMIT 1`,
       [email]
     );
     if (rows[0]) {
-      if (name) {
-        await pool.execute(
-          'UPDATE users SET name = ? WHERE id = ? AND (name IS NULL OR name = ? OR name = ?)',
-          [name, rows[0].id, '', `User ${sub}`]
-        );
+      const sets = [];
+      const params = [];
+      if (name && (rows[0].name === null || rows[0].name === '' || rows[0].name === `User ${sub}`)) {
+        sets.push('name = ?');
+        params.push(name);
       }
-      // Always resync the gateway's permission claim, independent of
-      // role_title (a job title for intern-directory rows). Without this,
-      // reusing an existing directory-matched row (the common case) silently
-      // discarded the gateway's real admin/hr/supervisor/user standing on
-      // every sign-in after the account's first.
-      if (role) {
-        await pool.execute('UPDATE users SET permission_role = ? WHERE id = ?', [role, rows[0].id]);
+      // Resync the gateway's permission claim, independent of role_title (a
+      // job title for intern-directory rows) — but only when it actually
+      // changed, not on every request.
+      if (role && role !== rows[0].permissionRole) {
+        sets.push('permission_role = ?');
+        params.push(role);
+      }
+      if (sets.length) {
+        params.push(rows[0].id);
+        await pool.execute(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`, params);
       }
       return rows[0].id;
     }
