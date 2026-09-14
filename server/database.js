@@ -1,5 +1,17 @@
 import mysql from 'mysql2/promise';
+import crypto from 'node:crypto';
 import { config } from './config.js';
+
+// Deterministic short id for a backfilled "General" topic — hashed rather
+// than a raw concatenation of the real ids, which overflows the 60-char
+// topic id column for long ids (e.g. intern_<uuid> is 43 chars; two of
+// them plus the 'topic_user_..._general' scaffolding is well over 60 and
+// silently truncates mid-id, which is fragile: two different backfilled
+// topics could in principle collide on the same truncated prefix).
+function backfillTopicId(targetType, key) {
+  const hash = crypto.createHash('md5').update(key).digest('hex');
+  return `topic_${targetType}_${hash}_general`;
+}
 
 // No Express imports: workers and command-line tasks may reuse this DAL.
 //
@@ -158,7 +170,7 @@ export async function ensureSchemaCompatibility() {
      WHERE visibility = 'private' AND target_type IN ('group', 'org') AND topic_id IS NULL`
   );
   for (const row of orphanedStable) {
-    const topicId = `topic_${row.target_type}_${row.target_id}_general`.slice(0, 60);
+    const topicId = backfillTopicId(row.target_type, row.target_id);
     await pool.query(
       `INSERT IGNORE INTO topics (id, target_type, target_id, name, created_by) VALUES (?, ?, ?, 'General', ?)`,
       [topicId, row.target_type, row.target_id, row.sender_id]
@@ -179,7 +191,7 @@ export async function ensureSchemaCompatibility() {
      WHERE visibility = 'private' AND target_type = 'user' AND topic_id IS NULL`
   );
   for (const { a, b } of orphanedDms) {
-    const topicId = `topic_user_${a}_${b}_general`.slice(0, 60);
+    const topicId = backfillTopicId('user', `${a}:${b}`);
     await pool.query(
       `INSERT IGNORE INTO topics (id, target_type, target_id, name, created_by) VALUES (?, 'user', ?, 'General', ?)`,
       [topicId, b, a]
