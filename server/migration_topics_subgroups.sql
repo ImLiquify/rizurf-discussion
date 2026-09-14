@@ -94,30 +94,37 @@ CREATE TABLE IF NOT EXISTS `topic_reads` (
 -- ============================================================
 -- check: SELECT COUNT(*) FROM feedback WHERE visibility = 'private' AND topic_id IS NULL;
 
+--    IDs are hashed (MD5, 32 hex chars) rather than built by concatenating
+--    the real ids — some real ids (e.g. "intern_<uuid>", 43 chars) are long
+--    enough that concatenating two of them plus the 'topic_..._general'
+--    scaffolding overflows 60 characters and silently truncates mid-id,
+--    which is fragile (two different backfilled topics could in principle
+--    collide on the same truncated prefix).
+
 -- 5a. group / org
 INSERT IGNORE INTO `topics` (`id`, `target_type`, `target_id`, `name`, `created_by`)
 SELECT
-  LEFT(CONCAT('topic_', target_type, '_', target_id, '_general'), 60),
+  CONCAT('topic_', target_type, '_', MD5(target_id), '_general'),
   target_type, target_id, 'General', MIN(sender_id)
 FROM `feedback`
 WHERE visibility = 'private' AND target_type IN ('group', 'org') AND topic_id IS NULL
 GROUP BY target_type, target_id;
 
 UPDATE `feedback`
-SET topic_id = LEFT(CONCAT('topic_', target_type, '_', target_id, '_general'), 60)
+SET topic_id = CONCAT('topic_', target_type, '_', MD5(target_id), '_general')
 WHERE visibility = 'private' AND target_type IN ('group', 'org') AND topic_id IS NULL;
 
 -- 5b. user (DM) — grouped on the unordered {sender_id, target_id} pair
 INSERT IGNORE INTO `topics` (`id`, `target_type`, `target_id`, `name`, `created_by`)
 SELECT
-  LEFT(CONCAT('topic_user_', LEAST(sender_id, target_id), '_', GREATEST(sender_id, target_id), '_general'), 60),
+  CONCAT('topic_user_', MD5(CONCAT(LEAST(sender_id, target_id), ':', GREATEST(sender_id, target_id))), '_general'),
   'user', GREATEST(sender_id, target_id), 'General', LEAST(sender_id, target_id)
 FROM `feedback`
 WHERE visibility = 'private' AND target_type = 'user' AND topic_id IS NULL
 GROUP BY LEAST(sender_id, target_id), GREATEST(sender_id, target_id);
 
 UPDATE `feedback`
-SET topic_id = LEFT(CONCAT('topic_user_', LEAST(sender_id, target_id), '_', GREATEST(sender_id, target_id), '_general'), 60)
+SET topic_id = CONCAT('topic_user_', MD5(CONCAT(LEAST(sender_id, target_id), ':', GREATEST(sender_id, target_id))), '_general')
 WHERE visibility = 'private' AND target_type = 'user' AND topic_id IS NULL;
 
 -- ============================================================
