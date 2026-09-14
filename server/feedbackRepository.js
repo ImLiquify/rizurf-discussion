@@ -199,7 +199,7 @@ const PRIVATE_ACCESS_SQL = accessSql('f', 'sender_id');
 const privateAccessParams = accessParams;
 const TOPIC_ACCESS_SQL = accessSql('t', 'created_by');
 
-export async function listFeedback({ targetId, senderId, participantId, topicId, limit, offset, visibility = 'public', viewerId, viewerIsPrivileged }) {
+export async function listFeedback({ targetId, senderId, participantId, groupMemberId, topicId, limit, offset, visibility = 'public', viewerId, viewerIsPrivileged }) {
   const conditions = [];
   const parameters = [];
   if (visibility === 'private') {
@@ -208,6 +208,13 @@ export async function listFeedback({ targetId, senderId, participantId, topicId,
     if (participantId) {
       conditions.push('f.target_type = \'user\' AND (f.sender_id = ? OR f.target_id = ?)');
       parameters.push(participantId, participantId);
+    }
+    // Group messages in every group a given employee belongs to — target_id
+    // on a group row is the group's own id, never that employee's id, so
+    // this can't be expressed with the targetId/participantId filters above.
+    if (groupMemberId) {
+      conditions.push('f.target_type = \'group\' AND f.target_id IN (SELECT group_id FROM group_members WHERE user_id = ?)');
+      parameters.push(groupMemberId);
     }
     if (topicId) { conditions.push('f.topic_id = ?'); parameters.push(topicId); }
   } else {
@@ -219,7 +226,7 @@ export async function listFeedback({ targetId, senderId, participantId, topicId,
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const [rows] = await pool.execute(
     `SELECT f.id, f.sender_id AS senderId, u.name AS senderName, u.avatar AS senderAvatar, f.target_id AS targetId,
-       f.target_type AS targetType, f.visibility, f.topic_id AS topicId, tp.name AS topicName,
+       f.target_type AS targetType, f.visibility, f.topic_id AS topicId, tp.name AS topicName, tp.created_by AS topicCreatedBy,
        CASE
          WHEN f.target_id = 'company' THEN f.target_name
          WHEN f.target_type = 'org' THEN 'Organization'

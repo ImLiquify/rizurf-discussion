@@ -291,7 +291,8 @@ app.get('/api/feedback', async (request, response, next) => {
     }
     const data = await feedbacks.listFeedback({
       ...page, targetId: request.query.targetId, senderId: request.query.senderId,
-      participantId: request.query.participantId, topicId: request.query.topicId, visibility, viewerId,
+      participantId: request.query.participantId, groupMemberId: request.query.groupMemberId,
+      topicId: request.query.topicId, visibility, viewerId,
       viewerIsPrivileged: mine ? false : isPrivileged
     });
     const ids = data.map(item => item.id);

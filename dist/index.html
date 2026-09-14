@@ -2134,17 +2134,23 @@
     .btn-logout:hover { opacity: 0.9; }
 
     /* Admin/manager oversight section inside the Wall modal: private
-       conversations grouped by counterpart, then by topic. */
+       conversations split into Given/Received, then grouped by counterpart
+       (or group), then by topic. */
     .oversight-conversations {
-      margin-top: 28px;
+      margin-top: 20px;
       padding-top: 20px;
       border-top: 1px solid var(--border-light);
     }
 
-    .oversight-panel-subtitle {
-      font-size: 0.78rem;
-      color: var(--text-muted);
-      margin: 4px 0 14px;
+    .oversight-bucket { margin-bottom: 22px; }
+    .oversight-bucket:last-child { margin-bottom: 0; }
+
+    .oversight-bucket-title {
+      font-family: var(--font-heading);
+      font-size: 1rem;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-bottom: 10px;
     }
 
     .oversight-counterpart-block {
@@ -2917,11 +2923,12 @@
           <div class="private-remark-display" id="privateRemarkDisplay"></div>
         </div>
 
-        <!-- Praise & Feedback: everything involving this employee in one
-             page — public wall posts, plus (admins/managers only) every
+        <!-- Praise & Feedback: everything involving this employee under one
+             heading — public wall posts, then (admins/managers only) every
              private conversation, grouped by who it's with and then by
              topic, so a back-and-forth reads as its own separate thread
-             instead of one flat interleaved list. -->
+             instead of one flat interleaved list. Deliberately one section,
+             not a second competing heading, so it reads as a single page. -->
         <div>
           <div class="modal-feed-title" id="modalFeedTitle">
             Wall Activity & Feedback
@@ -2942,12 +2949,9 @@
           <div class="feed-cards-list" id="modalTargetFeed" style="margin-top: 14px;">
             <!-- Rendered by JS -->
           </div>
-        </div>
-
-        <div class="oversight-conversations" id="oversightConversations" hidden>
-          <div class="modal-feed-title">Private conversations</div>
-          <div class="oversight-panel-subtitle">Every direct message and Organization thread involving this employee. Visible only to admins and managers.</div>
-          <div id="oversightConversationsBody"></div>
+          <div class="oversight-conversations" id="oversightConversations" hidden>
+            <div id="oversightConversationsBody"></div>
+          </div>
         </div>
 
       </div>
@@ -4599,14 +4603,16 @@
     }
 
     // Admin/manager oversight: "admins and managers can view the feedbacks
-    // from the Employee Wall tab" — every private DM and Organization
-    // message involving this employee, read-only, grouped by who it's with
-    // and then by topic (so "EMP B messaged EMP A" reads as its own
-    // conversation, not interleaved with everything else). Two lookups
-    // because participantId only matches DM (target_type='user') rows by
-    // design, while targetId also catches this employee's own Organization
-    // thread (target_type='org', keyed by their own id); merged and
-    // de-duped here.
+    // from the Employee Wall tab" — every private DM, group, and
+    // Organization message involving this employee, read-only, split into
+    // Given (topics this employee started) and Received (topics someone
+    // else started with them), each grouped by who it's with (or which
+    // group), then by topic — a topic's own back-and-forth always stays
+    // together as one conversation, only the topic itself is bucketed.
+    // Two lookups because participantId only matches DM (target_type='user')
+    // rows by design, while targetId also catches this employee's own
+    // Organization thread (target_type='org', keyed by their own id);
+    // merged and de-duped here.
     async function renderOversightConversations(targetId) {
       const panel = document.getElementById("oversightConversations");
       const body = document.getElementById("oversightConversationsBody");
@@ -4617,14 +4623,16 @@
 
       body.innerHTML = `<div class="feedbacks-empty-state">Loading…</div>`;
       try {
-        const [dmResponse, targetResponse] = await Promise.all([
+        const [dmResponse, targetResponse, groupResponse] = await Promise.all([
           fetch(`${API_BASE_URL}/feedback?visibility=private&participantId=${encodeURIComponent(targetId)}`),
-          fetch(`${API_BASE_URL}/feedback?visibility=private&targetId=${encodeURIComponent(targetId)}`)
+          fetch(`${API_BASE_URL}/feedback?visibility=private&targetId=${encodeURIComponent(targetId)}`),
+          fetch(`${API_BASE_URL}/feedback?visibility=private&groupMemberId=${encodeURIComponent(targetId)}`)
         ]);
         const dmJson = dmResponse.ok ? await dmResponse.json() : { data: [] };
         const targetJson = targetResponse.ok ? await targetResponse.json() : { data: [] };
+        const groupJson = groupResponse.ok ? await groupResponse.json() : { data: [] };
         const byId = new Map();
-        [...(dmJson.data || []), ...(targetJson.data || [])].forEach(row => byId.set(row.id, row));
+        [...(dmJson.data || []), ...(targetJson.data || []), ...(groupJson.data || [])].forEach(row => byId.set(row.id, row));
         const rows = [...byId.values()];
 
         if (!rows.length) {
@@ -4632,20 +4640,23 @@
           return;
         }
 
-        // counterpart label -> Map(topicId -> { topicName, messages[] })
-        const byCounterpart = new Map();
+        const buckets = { given: new Map(), received: new Map() };
         rows.forEach(row => {
-          const counterpartLabel = row.targetType === "org"
+          const bucketKey = row.topicCreatedBy === targetId ? "given" : "received";
+          const label = row.targetType === "org"
             ? "Organization"
-            : (row.senderId === targetId ? row.targetName : row.senderName) || "Unknown";
-          if (!byCounterpart.has(counterpartLabel)) byCounterpart.set(counterpartLabel, new Map());
-          const topicsMap = byCounterpart.get(counterpartLabel);
+            : row.targetType === "group"
+              ? (row.targetName || "Group")
+              : (row.senderId === targetId ? row.targetName : row.senderName) || "Unknown";
+          const byLabel = buckets[bucketKey];
+          if (!byLabel.has(label)) byLabel.set(label, new Map());
+          const topicsMap = byLabel.get(label);
           const topicId = row.topicId || "general";
           if (!topicsMap.has(topicId)) topicsMap.set(topicId, { topicName: row.topicName || "General", messages: [] });
           topicsMap.get(topicId).messages.push(row);
         });
 
-        body.innerHTML = [...byCounterpart.entries()].map(([counterpartLabel, topicsMap]) => {
+        const renderBucketBody = byLabel => [...byLabel.entries()].map(([label, topicsMap]) => {
           const topicsHtml = [...topicsMap.values()].map(({ topicName, messages }) => {
             const sorted = messages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
             return `
@@ -4657,8 +4668,21 @@
           }).join("");
           return `
             <div class="oversight-counterpart-block">
-              <div class="oversight-counterpart-header">${escapeHtml(counterpartLabel)}</div>
+              <div class="oversight-counterpart-header">${escapeHtml(label)}</div>
               ${topicsHtml}
+            </div>
+          `;
+        }).join("");
+
+        body.innerHTML = [["given", "Given"], ["received", "Received"]].map(([bucketKey, bucketLabel]) => {
+          const byLabel = buckets[bucketKey];
+          const content = byLabel.size
+            ? renderBucketBody(byLabel)
+            : `<div class="feedbacks-empty-state">Nothing ${bucketLabel.toLowerCase()} yet.</div>`;
+          return `
+            <div class="oversight-bucket">
+              <div class="oversight-bucket-title">${bucketLabel}</div>
+              ${content}
             </div>
           `;
         }).join("");
