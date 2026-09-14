@@ -154,7 +154,6 @@
       outline: none;
     }
 
-    .btn-give-kudos,
     .btn-submit-feedback,
     .btn-submit-comment,
     .btn-save-inline,
@@ -166,7 +165,6 @@
       border-radius: var(--radius-pill);
     }
 
-    .btn-give-kudos:hover,
     .btn-submit-feedback:hover,
     .btn-submit-comment:hover,
     .btn-save-inline:hover,
@@ -417,242 +415,8 @@
     }
 
     /* ==========================================================================
-       5. TAB 1: "ME" VIEW (WITH SUB-NAVIGATION TOGGLE TABS)
+       5. FEEDBACK CARD FEED (public wall posts, inside the Wall modal)
        ========================================================================== */
-    .me-hero-card {
-      background: var(--bg-surface);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-lg);
-      padding: 28px 32px;
-      box-shadow: var(--shadow-md);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 24px;
-      margin-bottom: 28px;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .me-hero-card::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      right: 0;
-      width: 240px;
-      height: 100%;
-      background: radial-gradient(circle at top right, var(--accent-cyan-light) 0%, transparent 70%);
-      pointer-events: none;
-      opacity: 0.6;
-    }
-
-    .me-profile-left {
-      display: flex;
-      align-items: center;
-      gap: 22px;
-      z-index: 1;
-    }
-
-    .me-avatar-lg {
-      width: 84px;
-      height: 84px;
-      border-radius: var(--radius-xl);
-      background: #E2E8F0;
-      border: 3px solid #FFFFFF;
-      box-shadow: var(--shadow-md);
-      position: relative;
-      overflow: hidden;
-      flex-shrink: 0;
-    }
-
-    .me-avatar-lg img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .me-details h2 {
-      font-family: var(--font-heading);
-      font-size: 1.5rem;
-      font-weight: 800;
-      color: var(--text-main);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .me-details .verified-icon {
-      color: var(--accent-cyan);
-      display: inline-flex;
-    }
-
-    .me-role-title {
-      font-size: 0.92rem;
-      color: var(--text-muted);
-      margin-top: 2px;
-      font-weight: 500;
-    }
-
-    .me-tags {
-      display: flex;
-      gap: 8px;
-      margin-top: 10px;
-    }
-
-    .badge-pill {
-      font-size: 0.72rem;
-      font-weight: 600;
-      padding: 3px 10px;
-      border-radius: var(--radius-full);
-      background: var(--bg-subtle);
-      color: var(--text-muted);
-      border: 1px solid var(--border-color);
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .badge-pill.highlight {
-      background: var(--accent-cyan-light);
-      color: var(--accent-cyan);
-      border-color: rgba(37, 99, 235, 0.2);
-    }
-
-    .me-stats-right {
-      display: flex;
-      align-items: center;
-      gap: 20px;
-      z-index: 1;
-    }
-
-    .stat-card-box {
-      text-align: center;
-      background: var(--bg-subtle);
-      padding: 14px 22px;
-      border-radius: var(--radius-md);
-      border: 1px solid var(--border-light);
-      min-width: 120px;
-      transition: transform var(--transition-fast);
-    }
-
-    .stat-card-box:hover {
-      transform: translateY(-2px);
-    }
-
-    .stat-number {
-      font-family: var(--font-heading);
-      font-size: 1.6rem;
-      font-weight: 800;
-      color: var(--text-main);
-      line-height: 1.1;
-    }
-
-    .stat-label {
-      font-size: 0.72rem;
-      font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      margin-top: 4px;
-    }
-
-    .btn-give-kudos {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      background: var(--accent-cyan);
-      color: #FFFFFF;
-      font-weight: 700;
-      font-size: 0.88rem;
-      padding: 12px 20px;
-      border-radius: var(--radius-md);
-      box-shadow: 0 4px 14px var(--accent-cyan-glow);
-      transition: all var(--transition-fast);
-    }
-
-    .btn-give-kudos:hover {
-      background: var(--accent-cyan-hover);
-      transform: translateY(-1px);
-      box-shadow: 0 6px 18px var(--accent-cyan-glow);
-    }
-
-    /* ME Sub-Navigation Toggle Tabs */
-    .me-subtabs-wrapper {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 24px;
-      background: var(--bg-surface);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-lg);
-      padding: 8px 12px;
-      box-shadow: var(--shadow-sm);
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-
-    .me-subtabs-nav {
-      display: flex;
-      gap: 8px;
-    }
-
-    .me-subtab-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 20px;
-      border-radius: var(--radius-md);
-      font-size: 0.9rem;
-      font-weight: 700;
-      color: var(--text-muted);
-      background: transparent;
-      transition: all var(--transition-fast);
-      border: 1px solid transparent;
-    }
-
-    .me-subtab-btn:hover {
-      color: var(--text-main);
-      background: var(--bg-subtle);
-    }
-
-    .me-subtab-btn.active {
-      background: var(--accent-cyan-light);
-      color: var(--accent-cyan);
-      border-color: rgba(37, 99, 235, 0.25);
-      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.12);
-    }
-
-    .me-subtab-badge {
-      font-size: 0.75rem;
-      font-weight: 800;
-      background: var(--bg-subtle);
-      color: var(--text-muted);
-      padding: 2px 8px;
-      border-radius: var(--radius-full);
-    }
-
-    .me-subtab-btn.active .me-subtab-badge {
-      background: #FFFFFF;
-      color: var(--accent-cyan);
-      border: 1px solid rgba(37, 99, 235, 0.2);
-    }
-
-    .me-subtab-hint {
-      font-size: 0.8rem;
-      color: var(--text-subtle);
-      padding-right: 8px;
-    }
-
-    /* Sub-pane toggle visibility */
-    .me-subpane {
-      display: none;
-      animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-
-    .me-subpane.active {
-      display: block;
-    }
-
     .feed-cards-list {
       display: flex;
       flex-direction: column;
@@ -1958,6 +1722,249 @@
       }
     }
 
+    /* ==========================================================================
+       FEEDBACKS TAB — private chat-style inbox
+       ========================================================================== */
+    .feedbacks-layout {
+      display: flex;
+      height: calc(100vh - 140px);
+      min-height: 480px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+    }
+
+    .feedbacks-sidebar {
+      width: 320px;
+      flex-shrink: 0;
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      gap: 12px;
+      overflow: hidden;
+    }
+
+    /* .search-input-wrapper's flex:1/min-width:280px assume a horizontal flex
+       row (the Wall tab's search bar); reset them in this vertical sidebar so
+       the wrapper doesn't stretch to fill the column and drag its absolutely
+       centered icon down with it. */
+    .feedbacks-sidebar .search-input-wrapper {
+      flex: 0 0 auto;
+      min-width: 0;
+    }
+
+    .feedbacks-list-scroll {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin: 0 -8px;
+      padding: 0 8px;
+    }
+
+    .feedbacks-section-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-subtle);
+      margin: 14px 0 4px;
+    }
+
+    .feedbacks-section-label:first-child { margin-top: 0; }
+
+    .feedbacks-new-group-btn {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      background: var(--accent-cyan-light);
+      border-radius: var(--radius-full);
+      padding: 3px 9px;
+      text-transform: none;
+      letter-spacing: normal;
+    }
+
+    .feedbacks-new-group-btn:hover { background: var(--accent-cyan); color: #FFFFFF; }
+
+    .feedbacks-section-empty {
+      font-size: 0.8rem;
+      color: var(--text-subtle);
+      padding: 6px 4px;
+    }
+
+    .feedbacks-list-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 10px;
+      border-radius: var(--radius-md);
+      text-align: left;
+      transition: background var(--transition-fast);
+    }
+
+    .feedbacks-list-item:hover { background: var(--bg-subtle); }
+    .feedbacks-list-item.active { background: var(--accent-cyan-light); }
+
+    .feedbacks-list-item-icon {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-md);
+      background: var(--bg-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+    }
+
+    .feedbacks-list-item-body { flex: 1; min-width: 0; }
+
+    .feedbacks-list-item-name {
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .feedbacks-list-item-preview {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .feedbacks-detail {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .feedbacks-detail-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .feedbacks-detail-title {
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: var(--text-main);
+    }
+
+    .feedbacks-messages-scroll, .oversight-messages-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .feedbacks-empty-state {
+      margin: auto;
+      text-align: center;
+      color: var(--text-subtle);
+      font-size: 0.9rem;
+      max-width: 320px;
+    }
+
+    .chat-message-bubble {
+      align-self: flex-start;
+      max-width: 70%;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+    }
+
+    .chat-message-bubble.mine {
+      align-self: flex-end;
+      background: var(--accent-cyan-light);
+      border-color: rgba(37, 99, 235, 0.2);
+    }
+
+    .chat-message-meta {
+      display: flex;
+      gap: 8px;
+      align-items: baseline;
+      margin-bottom: 3px;
+    }
+
+    .chat-message-sender { font-size: 0.76rem; font-weight: 700; color: var(--text-main); }
+    .chat-message-time { font-size: 0.7rem; color: var(--text-subtle); }
+    .chat-message-text { font-size: 0.9rem; color: var(--text-main); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+    .feedbacks-compose-bar {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      padding: 14px 20px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .feedbacks-compose-input {
+      flex: 1;
+      resize: none;
+      min-height: 44px;
+      max-height: 140px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      background: var(--bg-canvas);
+      color: var(--text-main);
+    }
+
+    .feedbacks-compose-input:focus { outline: none; border-color: var(--accent-cyan); }
+
+    .feedbacks-detail-header[hidden], .feedbacks-compose-bar[hidden] { display: none; }
+
+    @media (max-width: 900px) {
+      .feedbacks-layout { flex-direction: column; height: auto; }
+      .feedbacks-sidebar { width: auto; border-right: none; border-bottom: 1px solid var(--border-color); }
+    }
+
+    /* Admin/manager oversight panel inside the Wall modal */
+    .oversight-panel {
+      margin: 20px 0;
+      border: 1px solid rgba(180, 35, 24, 0.25);
+      border-radius: var(--radius-md);
+      background: rgba(180, 35, 24, 0.04);
+      padding: 14px 16px;
+    }
+
+    .oversight-panel-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.86rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .oversight-panel-subtitle {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin: 4px 0 10px;
+    }
+
+    .oversight-messages-scroll {
+      max-height: 260px;
+      padding: 4px;
+    }
+
     .private-remark-display:empty {
       display: none;
     }
@@ -2394,14 +2401,8 @@
       flex: none !important;
     }
 
-    /* Hide the old navbar in sidebar mode */
-    .navbar-wrapper {
-      display: none !important;
-    }
-
     /* Rizurf visual system overrides for legacy component selectors. */
     .brand-logo-icon,
-    .btn-give-kudos,
     .btn-submit-feedback,
     .btn-submit-comment,
     .btn-submit-reply,
@@ -2415,7 +2416,6 @@
       background: linear-gradient(135deg, var(--brand-teal) 0%, var(--brand-teal-dark) 100%);
     }
 
-    .btn-give-kudos:hover,
     .btn-submit-feedback:hover,
     .btn-submit-comment:hover,
     .btn-submit-reply:hover,
@@ -2454,19 +2454,18 @@
     <nav class="sidebar-nav">
       <span class="sidebar-nav-label">Main Menu</span>
 
-      <!-- ME -->
-      <a class="sidebar-nav-link active" id="sidebarBtnMe" onclick="switchMainTab('me'); setSidebarActive(this)" href="#">
+      <!-- Feedbacks (chat-style private inbox: DMs, project groups, Organization) -->
+      <a class="sidebar-nav-link active" id="sidebarBtnFeedbacks" onclick="switchMainTab('feedbacks')" href="#">
         <span class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
           </svg>
         </span>
-        ME
-        <span class="nav-badge" id="meTotalBadge">0</span>
+        Feedbacks
       </a>
 
-      <!-- Employee Wall -->
-      <a class="sidebar-nav-link" id="sidebarBtnWall" onclick="switchMainTab('wall'); setSidebarActive(this)" href="#">
+      <!-- Employee Wall: admins/managers only — hidden by default, revealed by JS once the signed-in role is confirmed privileged -->
+      <a class="sidebar-nav-link" id="sidebarBtnWall" style="display:none" onclick="switchMainTab('wall')" href="#">
         <span class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect>
@@ -2501,7 +2500,7 @@
         <nav class="breadcrumb">
           <span>Feedback</span>
           <span class="breadcrumb-sep">/</span>
-          <span class="breadcrumb-active" id="breadcrumbActive">ME</span>
+          <span class="breadcrumb-active" id="breadcrumbActive">Feedbacks</span>
         </nav>
       </div>
       <div class="top-header-right">
@@ -2511,107 +2510,57 @@
     <!-- Content Area -->
     <div class="content-area">
 
-  <!-- Keep legacy navbar hidden (elements like tabBtnMe are still needed for JS) -->
-  <header class="navbar-wrapper" aria-hidden="true" style="display:none!important">
-    <div class="navbar-container">
-      <button class="nav-tab-btn active" id="tabBtnMe" onclick="switchMainTab('me')"></button>
-      <button class="nav-tab-btn" id="tabBtnWall" onclick="switchMainTab('wall')"></button>
-    </div>
-  </header>
-
   <!-- ==========================================================================
        MAIN APP CONTAINER
        ========================================================================== -->
   <main class="app-main-content">
 
     <!-- ========================================================================
-         TAB 1: "ME" VIEW (WITH SUB-NAVIGATION TOGGLE TABS: RECEIVED vs GIVEN)
+         TAB 1: "FEEDBACKS" VIEW — private chat-style inbox: search employees,
+         Organization (a private thread with admins/managers), project groups,
+         and direct messages. Only the participants (plus admins/managers,
+         who see everything via the Employee Wall) can read or reply.
          ======================================================================== -->
-    <section id="meViewPane" class="view-pane active">
+    <section id="feedbacksViewPane" class="view-pane active">
+      <div class="feedbacks-layout">
 
-      <!-- ME Hero Card -->
-      <div class="me-hero-card">
-        <div class="me-profile-left">
-          <div class="me-avatar-lg">
-            <img id="meAvatar" src="" alt="User" />
+        <div class="feedbacks-sidebar">
+          <div class="search-input-wrapper">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="feedbacksSearchInput" class="search-input-field"
+              placeholder="Search employees..." oninput="handleFeedbacksSearch(this.value)" />
           </div>
-          <div class="me-details">
-            <h2>
-              <span id="meUserName">No User Selected</span>
-              <span class="verified-icon" title="Verified Employee">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--primary)" stroke="#FFFFFF" stroke-width="2">
-                </svg>
-              </span>
-            </h2>
-            <p class="me-role-title" id="meUserRole">Database empty • Syncing...</p>
-            <div class="me-tags">
-              <!-- <span class="badge-pill highlight">🌟 Top Contributor</span>
-              <span class="badge-pill">📍 San Francisco Hub</span>
-              <span class="badge-pill">⚡ Core Design System</span> -->
+          <div class="feedbacks-list-scroll" id="feedbacksListScroll">
+            <!-- Rendered by JS: search results, Organization, Groups, Direct Messages -->
+          </div>
+        </div>
+
+        <div class="feedbacks-detail">
+          <div class="feedbacks-detail-header" id="feedbacksDetailHeader" hidden></div>
+          <div class="feedbacks-messages-scroll" id="feedbacksMessagesScroll">
+            <div class="feedbacks-empty-state" id="feedbacksEmptyState">
+              Select Organization, a group, or an employee to start a private conversation.
             </div>
           </div>
-        </div>
-
-        <div class="me-stats-right">
-          <div class="stat-card-box">
-            <div class="stat-number" id="statReceivedCount">3</div>
-            <div class="stat-label">Received</div>
+          <div class="feedbacks-compose-bar" id="feedbacksComposeBar" hidden>
+            <textarea id="feedbacksComposeInput" class="feedbacks-compose-input"
+              placeholder="Write a message..." onkeydown="handleFeedbacksComposeKeydown(event)"></textarea>
+            <button class="btn-submit-feedback" onclick="sendFeedbacksMessage()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+              Send
+            </button>
           </div>
-          <div class="stat-card-box">
-            <div class="stat-number" id="statGivenCount">3</div>
-            <div class="stat-label">Given</div>
-          </div>
-          <!-- <button class="btn-give-kudos" onclick="openGiveFeedbackModal('all')">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="8" x2="12" y2="16"></line>
-              <line x1="8" y1="12" x2="16" y2="12"></line>
-            </svg>
-            Give Feedback
-          </button> -->
         </div>
-      </div>
 
-      <!-- ME Sub-Navigation Toggle Tabs -->
-      <div class="me-subtabs-wrapper">
-        <div class="me-subtabs-nav">
-          <button class="me-subtab-btn active" id="meSubtabReceivedBtn" onclick="switchMeSubTab('received')">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
-            Feedback Received
-            <span class="me-subtab-badge" id="meSubtabReceivedBadge">0</span>
-          </button>
-          <button class="me-subtab-btn" id="meSubtabGivenBtn" onclick="switchMeSubTab('given')">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13"></line>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-            </svg>
-            Feedback Given
-            <span class="me-subtab-badge" id="meSubtabGivenBadge">0</span>
-          </button>
-        </div>
-        <div class="me-subtab-hint" id="meSubtabHintText">
-          Showing feedback left on your wall
-        </div>
       </div>
-
-      <!-- Sub-Pane A: Feedback Received (Default Active) -->
-      <div id="meSubpaneReceived" class="me-subpane active">
-        <div class="feed-cards-list" id="meReceivedFeed">
-          <!-- Rendered by JS -->
-        </div>
-      </div>
-
-      <!-- Sub-Pane B: Feedback Given -->
-      <div id="meSubpaneGiven" class="me-subpane">
-        <div class="feed-cards-list" id="meGivenFeed">
-          <!-- Rendered by JS -->
-        </div>
-      </div>
-
     </section>
 
     <!-- ========================================================================
@@ -2739,6 +2688,18 @@
           <div class="private-remark-display" id="privateRemarkDisplay"></div>
         </div>
 
+        <!-- Oversight panel: admins/managers only. Read-only view of this
+             employee's private feedback (DMs and their Organization thread) —
+             the "admins/managers can view everything" oversight requirement. -->
+        <div class="oversight-panel" id="oversightPanel" hidden>
+          <div class="oversight-panel-title">
+            <span aria-hidden="true">🛡️</span>
+            Private feedback (admin/manager view)
+          </div>
+          <div class="oversight-panel-subtitle">Direct messages and Organization thread involving this employee. Visible only to admins and managers.</div>
+          <div class="feedbacks-messages-scroll oversight-messages-scroll" id="oversightMessages"></div>
+        </div>
+
         <!-- Target Wall Feed -->
         <div>
           <div class="modal-feed-title" id="modalFeedTitle">
@@ -2786,8 +2747,7 @@
     };
 
     let currentRoleView = "employee"; // "employee" | "manager" | "admin"
-    let currentMainTab = "me"; // "me" | "wall"
-    let currentMeSubTab = "received"; // "received" | "given"
+    let currentMainTab = "feedbacks"; // "feedbacks" | "wall"
     let selectedDepartment = "All";
     let searchQuery = "";
     let activeModalTargetId = null; // target employee id or "company"
@@ -2801,25 +2761,31 @@
     let editingPostId = null;
     let editingCommentKey = null; // format: "postId_commentId"
 
+    // Feedbacks tab state (private DMs, project groups, Organization).
+    let feedbacksSearchQuery = "";
+    let myGroups = []; // groups the signed-in user belongs to
+    let myPrivateFeed = []; // every private feedback row the user can see (their own DMs/groups/org)
+    let activeConversation = null; // { type: "user"|"group"|"org", id, name }
+    let conversationMessages = [];
+
+    function isPrivilegedViewer() { return currentRoleView === "admin" || currentRoleView === "manager"; }
+
     function updateCurrentUserProfile() {
-      const avatar = document.getElementById("meAvatar");
-      const name = document.getElementById("meUserName");
-      const role = document.getElementById("meUserRole");
       const sidebarName = document.getElementById("sidebarUserName");
       const sidebarRole = document.getElementById("sidebarUserRole");
       const sidebarAvatar = document.querySelector(".sidebar-user-avatar img");
 
-      if (avatar) {
-        avatar.src = CURRENT_USER.avatar || "";
-        avatar.alt = CURRENT_USER.name || "User";
-      }
-      if (name) name.textContent = CURRENT_USER.name || "No User Selected";
-      if (role) role.textContent = CURRENT_USER.role ? `${CURRENT_USER.role} • ${CURRENT_USER.department}` : "Database Empty";
       if (sidebarName) sidebarName.textContent = CURRENT_USER.name || "No User Selected";
       if (sidebarRole) sidebarRole.textContent = CURRENT_USER.role || "--";
       if (sidebarAvatar) {
         sidebarAvatar.src = CURRENT_USER.avatar || "";
         sidebarAvatar.alt = CURRENT_USER.name || "User";
+      }
+
+      const wallLink = document.getElementById("sidebarBtnWall");
+      if (wallLink) {
+        wallLink.style.display = isPrivilegedViewer() ? "" : "none";
+        if (!isPrivilegedViewer() && currentMainTab === "wall") switchMainTab("feedbacks");
       }
     }
 
@@ -2902,11 +2868,16 @@
             department: me.department || "",
             avatar: me.avatar || ""
           });
-          currentRoleView = mapRoleToView(me.role);
+          // permissionRole is the gateway's reliable admin/hr/supervisor/user
+          // claim; role (role_title) is a job title for intern-directory
+          // rows and must not be used for access control. Fall back to role
+          // only so an old cached response mid-deploy doesn't break sign-in.
+          currentRoleView = mapRoleToView(me.permissionRole || me.role);
         } else {
           Object.assign(CURRENT_USER, {
             id: "", name: "Not signed in", role: "", department: "", avatar: ""
           });
+          currentRoleView = "employee";
         }
 
         updateCurrentUserProfile();
@@ -2914,6 +2885,10 @@
 
         if (CURRENT_USER.id) {
           try { await loadPrivateRemarksFromBackend(); } catch (error) { console.warn("Private remarks fetch error:", error); }
+          try { await loadFeedbacksData(); } catch (error) { console.warn("Feedbacks tab data fetch error:", error); }
+        } else {
+          myGroups = []; myPrivateFeed = []; activeConversation = null; conversationMessages = [];
+          renderFeedbacksTab();
         }
 
         renderAll();
@@ -2963,9 +2938,11 @@
     function isComposingComment() {
       const active = document.activeElement;
       if (active && typeof active.id === "string" &&
-        (active.id.startsWith("comment_input_") || active.id.startsWith("reply_input_"))) {
+        (active.id.startsWith("comment_input_") || active.id.startsWith("reply_input_") || active.id === "feedbacksComposeInput")) {
         return true;
       }
+      const composeInput = document.getElementById("feedbacksComposeInput");
+      if (composeInput && composeInput.value.trim()) return true;
       return [...document.querySelectorAll('[id^="comment_input_"], [id^="reply_input_"]')]
         .some(el => el.value && el.value.trim());
     }
@@ -3019,55 +2996,285 @@
     });
 
     function renderAll() {
-      renderMeView();
+      renderFeedbacksTab();
       renderEmployeeTiles();
-      updateBadgesAndStats();
     }
 
-    /* Tab Switcher */
+    /* Tab Switcher — a proper N-way dispatcher over .view-pane sections and
+       sidebar nav state (folds in what the old setSidebarActive() did, so it
+       works whether called from a click or programmatically, e.g. when a
+       demoted role needs to be bounced off the Wall tab). */
+    const MAIN_TABS = {
+      feedbacks: { pane: "feedbacksViewPane", link: "sidebarBtnFeedbacks", label: "Feedbacks" },
+      wall: { pane: "wallViewPane", link: "sidebarBtnWall", label: "Employee Wall" }
+    };
     function switchMainTab(tab) {
+      if (!MAIN_TABS[tab]) return;
       currentMainTab = tab;
-      const mePane = document.getElementById("meViewPane");
-      const wallPane = document.getElementById("wallViewPane");
-      const tabBtnMe = document.getElementById("tabBtnMe");
-      const tabBtnWall = document.getElementById("tabBtnWall");
+      Object.entries(MAIN_TABS).forEach(([name, info]) => {
+        const pane = document.getElementById(info.pane);
+        if (pane) pane.classList.toggle("active", name === tab);
+      });
+      document.querySelectorAll(".sidebar-nav-link").forEach(link => link.classList.remove("active"));
+      const link = document.getElementById(MAIN_TABS[tab].link);
+      if (link) link.classList.add("active");
+      const breadcrumb = document.getElementById("breadcrumbActive");
+      if (breadcrumb) breadcrumb.textContent = MAIN_TABS[tab].label;
 
-      if (tab === "me") {
-        mePane.classList.add("active");
-        wallPane.classList.remove("active");
-        tabBtnMe.classList.add("active");
-        tabBtnWall.classList.remove("active");
-        renderMeView();
-      } else {
-        wallPane.classList.add("active");
-        mePane.classList.remove("active");
-        tabBtnWall.classList.add("active");
-        tabBtnMe.classList.remove("active");
-        renderEmployeeTiles();
+      if (tab === "feedbacks") renderFeedbacksTab();
+      else renderEmployeeTiles();
+    }
+
+    /* ==========================================================================
+       FEEDBACKS TAB — private chat-style inbox (DMs, project groups, Organization)
+       ========================================================================== */
+
+    // Every private feedback row the signed-in user can see (their own DMs,
+    // their own Organization thread, and messages in groups they belong to —
+    // never privilege-bypassed, so this looks the same for an admin as for
+    // anyone else; oversight of OTHER people's threads is a separate,
+    // deliberate lookup from the Employee Wall modal, not blended in here).
+    async function loadFeedbacksData() {
+      if (!CURRENT_USER.id) { myGroups = []; myPrivateFeed = []; renderFeedbacksTab(); return; }
+      try {
+        const [groupsResponse, feedResponse] = await Promise.all([
+          fetch(`${API_BASE_URL}/groups?mine=1`),
+          fetch(`${API_BASE_URL}/feedback?visibility=private&mine=1`)
+        ]);
+        myGroups = groupsResponse.ok ? ((await groupsResponse.json()).data || []) : [];
+        const feedJson = feedResponse.ok ? await feedResponse.json() : { data: [] };
+        myPrivateFeed = (feedJson.data || []).map(f => ({ ...f, comments: buildCommentTree(f.comments || []) }));
+      } catch (error) {
+        console.warn("Feedbacks tab data fetch error:", error);
+      }
+      renderFeedbacksTab();
+      if (activeConversation) refreshActiveConversationFromCache();
+    }
+
+    function getMyOrgThreadRows() {
+      return myPrivateFeed.filter(f => f.targetType === "org" && f.targetId === CURRENT_USER.id);
+    }
+
+    // Direct-message conversations, one row per counterpart, newest first.
+    function buildDmConversations() {
+      const byCounterpart = new Map();
+      myPrivateFeed.filter(f => f.targetType === "user").forEach(f => {
+        const iAmSender = f.senderId === CURRENT_USER.id;
+        const counterpartId = iAmSender ? f.targetId : f.senderId;
+        const counterpartName = iAmSender ? f.targetName : f.senderName;
+        const existing = byCounterpart.get(counterpartId);
+        if (!existing || new Date(f.timestamp) > new Date(existing.lastTimestamp)) {
+          byCounterpart.set(counterpartId, { id: counterpartId, name: counterpartName, lastMessage: f.content, lastTimestamp: f.timestamp });
+        }
+      });
+      return [...byCounterpart.values()].sort((a, b) => new Date(b.lastTimestamp) - new Date(a.lastTimestamp));
+    }
+
+    function handleFeedbacksSearch(value) {
+      feedbacksSearchQuery = value;
+      renderFeedbacksTab();
+    }
+
+    function feedbacksListItemHtml({ type, id, name, icon, preview, active }) {
+      const safeName = escapeHtml(name || "");
+      return `
+        <button type="button" class="feedbacks-list-item${active ? " active" : ""}"
+          onclick="openConversation('${type}', '${escapeHtml(id)}', '${safeName.replace(/'/g, "&#039;")}')">
+          <div class="feedbacks-list-item-icon">${icon}</div>
+          <div class="feedbacks-list-item-body">
+            <div class="feedbacks-list-item-name">${safeName}</div>
+            <div class="feedbacks-list-item-preview">${escapeHtml(preview || "")}</div>
+          </div>
+        </button>
+      `;
+    }
+
+    function renderFeedbacksTab() {
+      const listEl = document.getElementById("feedbacksListScroll");
+      if (!listEl) return;
+
+      const query = feedbacksSearchQuery.toLowerCase().trim();
+      const existingDmIds = new Set(buildDmConversations().map(c => c.id));
+      const searchResultsHtml = query
+        ? EMPLOYEES.filter(e => e.id !== CURRENT_USER.id && !existingDmIds.has(e.id) && e.name.toLowerCase().includes(query))
+            .map(e => feedbacksListItemHtml({ type: "user", id: e.id, name: e.name, icon: "🔍", preview: "Start a private conversation" }))
+            .join("")
+        : "";
+
+      const orgRows = getMyOrgThreadRows();
+      const orgLast = orgRows.length ? orgRows.reduce((a, b) => new Date(a.timestamp) > new Date(b.timestamp) ? a : b) : null;
+      const orgHtml = feedbacksListItemHtml({
+        type: "org", id: CURRENT_USER.id, name: "Organization", icon: "🏢",
+        preview: orgLast ? orgLast.content : "Message admins & managers privately",
+        active: activeConversation?.type === "org"
+      });
+
+      const groupsHtml = myGroups.map(g => feedbacksListItemHtml({
+        type: "group", id: g.id, name: g.name, icon: "👥",
+        preview: `${g.memberCount} member${g.memberCount === 1 ? "" : "s"}`,
+        active: activeConversation?.type === "group" && activeConversation?.id === g.id
+      })).join("");
+
+      const dmsHtml = buildDmConversations().map(c => feedbacksListItemHtml({
+        type: "user", id: c.id, name: c.name, icon: "💬", preview: c.lastMessage,
+        active: activeConversation?.type === "user" && activeConversation?.id === c.id
+      })).join("");
+
+      listEl.innerHTML = `
+        ${query ? `<div class="feedbacks-section-label">Search results</div>${searchResultsHtml || '<div class="feedbacks-section-empty">No employees match.</div>'}` : ""}
+        <div class="feedbacks-section-label">Organization</div>
+        ${orgHtml}
+        <div class="feedbacks-section-label">
+          Groups
+          <button type="button" class="feedbacks-new-group-btn" onclick="createNewGroupPrompt()" title="Create a project group">+ New</button>
+        </div>
+        ${groupsHtml || '<div class="feedbacks-section-empty">No groups yet.</div>'}
+        <div class="feedbacks-section-label">Direct messages</div>
+        ${dmsHtml || '<div class="feedbacks-section-empty">Search an employee above to start one.</div>'}
+      `;
+    }
+
+    async function createNewGroupPrompt() {
+      const name = window.prompt("Name this project group:");
+      if (!name || !name.trim()) return;
+      try {
+        const response = await fetch(`${API_BASE_URL}/groups`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim() })
+        });
+        if (!response.ok) throw new Error("Group creation failed");
+        const group = await response.json();
+        await loadFeedbacksData();
+        openConversation("group", group.id, group.name);
+        showToast(`👥 Created "${group.name}"`);
+      } catch (error) {
+        showToast("Could not create the group. Please try again.");
       }
     }
 
-    /* ME Tab Sub-Navigation Switcher */
-    function switchMeSubTab(subTab) {
-      currentMeSubTab = subTab;
-      const btnReceived = document.getElementById("meSubtabReceivedBtn");
-      const btnGiven = document.getElementById("meSubtabGivenBtn");
-      const paneReceived = document.getElementById("meSubpaneReceived");
-      const paneGiven = document.getElementById("meSubpaneGiven");
-      const hintText = document.getElementById("meSubtabHintText");
+    async function addMemberToActiveGroup() {
+      if (!activeConversation || activeConversation.type !== "group") return;
+      const name = window.prompt("Add by exact employee name:");
+      if (!name || !name.trim()) return;
+      const match = EMPLOYEES.find(e => e.name.toLowerCase() === name.trim().toLowerCase());
+      if (!match) { showToast(`No employee named "${name.trim()}" found.`); return; }
+      try {
+        const response = await fetch(`${API_BASE_URL}/groups/${activeConversation.id}/members`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: match.id })
+        });
+        if (!response.ok) throw new Error("Add member failed");
+        showToast(`Added ${match.name} to the group.`);
+        await loadFeedbacksData();
+      } catch (error) {
+        showToast("Could not add that employee. Please try again.");
+      }
+    }
 
-      if (subTab === "received") {
-        btnReceived.classList.add("active");
-        btnGiven.classList.remove("active");
-        paneReceived.classList.add("active");
-        paneGiven.classList.remove("active");
-        hintText.textContent = "Showing feedback left on your wall";
-      } else {
-        btnGiven.classList.add("active");
-        btnReceived.classList.remove("active");
-        paneGiven.classList.add("active");
-        paneReceived.classList.remove("active");
-        hintText.textContent = "Showing feedback and workplace ideas you posted";
+    async function openConversation(type, id, name) {
+      activeConversation = { type, id, name };
+      renderFeedbacksTab();
+      await refreshActiveConversationFromServer();
+    }
+
+    function conversationQueryParams() {
+      if (!activeConversation) return null;
+      if (activeConversation.type === "user") return `participantId=${encodeURIComponent(activeConversation.id)}`;
+      if (activeConversation.type === "group") return `targetId=${encodeURIComponent(activeConversation.id)}`;
+      if (activeConversation.type === "org") return `targetId=${encodeURIComponent(CURRENT_USER.id)}`;
+      return null;
+    }
+
+    async function refreshActiveConversationFromServer() {
+      const params = conversationQueryParams();
+      if (!params) return;
+      try {
+        const response = await fetch(`${API_BASE_URL}/feedback?visibility=private&${params}`);
+        const json = response.ok ? await response.json() : { data: [] };
+        conversationMessages = (json.data || []).map(f => ({ ...f, comments: buildCommentTree(f.comments || []) }));
+      } catch (error) {
+        conversationMessages = [];
+      }
+      renderConversationMessages();
+    }
+
+    // Between server polls, re-derive the open conversation's messages from
+    // the inbox cache already fetched by loadFeedbacksData, so a background
+    // refresh doesn't need a second round trip per open thread.
+    function refreshActiveConversationFromCache() {
+      if (!activeConversation) return;
+      if (activeConversation.type === "user") {
+        conversationMessages = myPrivateFeed.filter(f => f.targetType === "user" &&
+          (f.senderId === activeConversation.id || f.targetId === activeConversation.id));
+      } else if (activeConversation.type === "group") {
+        conversationMessages = myPrivateFeed.filter(f => f.targetType === "group" && f.targetId === activeConversation.id);
+      } else if (activeConversation.type === "org") {
+        conversationMessages = getMyOrgThreadRows();
+      }
+      renderConversationMessages();
+    }
+
+    function chatMessageBubbleHtml(message) {
+      const mine = message.senderId === CURRENT_USER.id;
+      return `
+        <div class="chat-message-bubble${mine ? " mine" : ""}">
+          <div class="chat-message-meta">
+            <span class="chat-message-sender">${escapeHtml(message.senderName)}</span>
+            <span class="chat-message-time">${formatDisplayTime(message.timestamp)}</span>
+          </div>
+          <div class="chat-message-text">${escapeHtml(message.content)}</div>
+        </div>
+      `;
+    }
+
+    function renderConversationMessages() {
+      const header = document.getElementById("feedbacksDetailHeader");
+      const scroll = document.getElementById("feedbacksMessagesScroll");
+      const composeBar = document.getElementById("feedbacksComposeBar");
+      if (!header || !scroll || !composeBar) return;
+
+      if (!activeConversation) {
+        header.hidden = true;
+        composeBar.hidden = true;
+        scroll.innerHTML = `<div class="feedbacks-empty-state" id="feedbacksEmptyState">Select Organization, a group, or an employee to start a private conversation.</div>`;
+        return;
+      }
+
+      header.hidden = false;
+      const addMemberBtn = activeConversation.type === "group"
+        ? `<button type="button" class="feedbacks-new-group-btn" onclick="addMemberToActiveGroup()">+ Add member</button>` : "";
+      header.innerHTML = `<div class="feedbacks-detail-title">${escapeHtml(activeConversation.name)}</div>${addMemberBtn}`;
+
+      composeBar.hidden = false;
+      const sorted = [...conversationMessages].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      scroll.innerHTML = sorted.length
+        ? sorted.map(chatMessageBubbleHtml).join("")
+        : `<div class="feedbacks-empty-state">No messages yet — say hello.</div>`;
+      scroll.scrollTop = scroll.scrollHeight;
+    }
+
+    function handleFeedbacksComposeKeydown(event) {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendFeedbacksMessage();
+      }
+    }
+
+    async function sendFeedbacksMessage() {
+      const input = document.getElementById("feedbacksComposeInput");
+      if (!input || !activeConversation) return;
+      const content = input.value.trim();
+      if (!content) return;
+      const body = { visibility: "private", targetType: activeConversation.type, content };
+      if (activeConversation.type !== "org") body.targetId = activeConversation.id;
+      try {
+        const response = await fetch(`${API_BASE_URL}/feedback`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+        });
+        if (!response.ok) throw new Error("Send failed");
+        input.value = "";
+        await loadFeedbacksData();
+        await refreshActiveConversationFromServer();
+      } catch (error) {
+        showToast("Could not send that message. Please try again.");
       }
     }
 
@@ -3491,40 +3698,6 @@
       `;
     }
 
-    /* ==========================================================================
-       TAB 1: ME VIEW LOGIC (ACCURATE DYNAMIC COUNTERS)
-       ========================================================================== */
-    function renderMeView() {
-      // Received feedbacks for Alex
-      const received = FEEDBACKS.filter(f => f.targetId === CURRENT_USER.id);
-      const receivedContainer = document.getElementById("meReceivedFeed");
-      if (received.length === 0) {
-        receivedContainer.innerHTML = `
-          <div class="empty-feed-card">
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>
-            <p>No feedback received yet on your wall.</p>
-          </div>
-        `;
-      } else {
-        receivedContainer.innerHTML = received.map(f => createFeedbackCardHTML(f, "received")).join("");
-      }
-
-      // Given feedbacks by Alex
-      const given = FEEDBACKS.filter(f => f.senderId === CURRENT_USER.id);
-      const givenContainer = document.getElementById("meGivenFeed");
-      if (given.length === 0) {
-        givenContainer.innerHTML = `
-          <div class="empty-feed-card">
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>
-            <p>You haven't posted any feedback or workplace suggestions yet.</p>
-          </div>
-        `;
-      } else {
-        givenContainer.innerHTML = given.map(f => createFeedbackCardHTML(f, "given")).join("");
-      }
-
-      updateBadgesAndStats();
-    }
 
     /* ==========================================================================
        TAB 2: EMPLOYEE WALL LOGIC (CLEAN TILES, ACCURATE DYNAMIC COUNTERS)
@@ -3612,8 +3785,6 @@
       } else {
         grid.innerHTML = companyCardHtml + employeeCardsHtml;
       }
-
-      updateBadgesAndStats();
     }
 
     function handleSearch(query) {
@@ -3702,6 +3873,7 @@
       document.getElementById("feedbackFeedSearch").value = "";
       document.getElementById("feedbackFeedSort").value = feedbackSortOrder;
       renderPrivateRemarkPanel(targetId);
+      renderOversightPanel(targetId);
 
       renderModalWallFeed(targetId);
       overlay.classList.add("open");
@@ -3736,6 +3908,39 @@
           <button type="button" class="private-remark-delete" onclick="deletePrivateRemark('${remark.id}')" title="Delete this remark">Delete</button>
         </div>
       `).join("");
+    }
+
+    // Admin/manager oversight: "admins and managers can view the feedbacks
+    // from the Employee Wall tab" — every private DM and Organization
+    // message involving this employee, read-only. Two lookups because
+    // participantId only matches DM (target_type='user') rows by design,
+    // while targetId also catches this employee's own Organization thread
+    // (target_type='org', keyed by their own id); merged and de-duped here.
+    async function renderOversightPanel(targetId) {
+      const panel = document.getElementById("oversightPanel");
+      const messagesEl = document.getElementById("oversightMessages");
+      if (!panel || !messagesEl) return;
+      const canOversee = isPrivilegedViewer() && targetId && targetId !== "company";
+      panel.hidden = !canOversee;
+      if (!canOversee) return;
+
+      messagesEl.innerHTML = `<div class="feedbacks-empty-state">Loading…</div>`;
+      try {
+        const [dmResponse, targetResponse] = await Promise.all([
+          fetch(`${API_BASE_URL}/feedback?visibility=private&participantId=${encodeURIComponent(targetId)}`),
+          fetch(`${API_BASE_URL}/feedback?visibility=private&targetId=${encodeURIComponent(targetId)}`)
+        ]);
+        const dmJson = dmResponse.ok ? await dmResponse.json() : { data: [] };
+        const targetJson = targetResponse.ok ? await targetResponse.json() : { data: [] };
+        const byId = new Map();
+        [...(dmJson.data || []), ...(targetJson.data || [])].forEach(row => byId.set(row.id, row));
+        const rows = [...byId.values()].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        messagesEl.innerHTML = rows.length
+          ? rows.map(chatMessageBubbleHtml).join("")
+          : `<div class="feedbacks-empty-state">No private feedback involving this employee.</div>`;
+      } catch (error) {
+        messagesEl.innerHTML = `<div class="feedbacks-empty-state">Could not load private feedback.</div>`;
+      }
     }
 
     function togglePersonalRemark() {
@@ -3945,7 +4150,6 @@
        ========================================================================== */
     function startPostEdit(postId) {
       editingPostId = postId;
-      renderMeView();
       if (activeModalTargetId) renderModalWallFeed(activeModalTargetId);
 
       setTimeout(() => {
@@ -3959,7 +4163,6 @@
 
     function cancelPostEdit() {
       editingPostId = null;
-      renderMeView();
       if (activeModalTargetId) renderModalWallFeed(activeModalTargetId);
     }
 
@@ -3981,7 +4184,6 @@
         }
         editingPostId = null;
 
-        renderMeView();
         if (activeModalTargetId) renderModalWallFeed(activeModalTargetId);
         showToast("✏️ Post updated successfully!");
       }
@@ -3989,7 +4191,6 @@
 
     function startCommentEdit(postId, commentId) {
       editingCommentKey = `${postId}_${commentId}`;
-      renderMeView();
       if (activeModalTargetId) renderModalWallFeed(activeModalTargetId);
 
       setTimeout(() => {
@@ -4005,7 +4206,6 @@
 
     function cancelCommentEdit(postId) {
       editingCommentKey = null;
-      renderMeView();
       if (activeModalTargetId) renderModalWallFeed(activeModalTargetId);
 
       setTimeout(() => {
@@ -4035,7 +4235,6 @@
           }
           editingCommentKey = null;
 
-          renderMeView();
           if (activeModalTargetId) renderModalWallFeed(activeModalTargetId);
 
           setTimeout(() => {
@@ -4063,7 +4262,6 @@
 
       FEEDBACKS.splice(index, 1);
 
-      renderMeView();
       renderEmployeeTiles();
       if (activeModalTargetId) {
         renderModalWallFeed(activeModalTargetId);
@@ -4085,7 +4283,6 @@
 
       removeComment(post.comments, commentId);
 
-      renderMeView();
       if (activeModalTargetId) {
         renderModalWallFeed(activeModalTargetId);
       }
@@ -4128,7 +4325,6 @@
       } catch (error) {
         showToast("Could not save your reaction.");
         await loadBackendData();
-        renderMeView();
         if (activeModalTargetId) renderModalWallFeed(activeModalTargetId);
       }
     }
@@ -4137,7 +4333,6 @@
       const post = FEEDBACKS.find(f => f.id === postId);
       if (!post) return;
       applyReactionToggle(post, emoji);
-      renderMeView();
       if (activeModalTargetId) renderModalWallFeed(activeModalTargetId);
       persistReaction(postId, emoji, null);
     }
@@ -4150,7 +4345,6 @@
       applyReactionToggle(comment, emoji);
       persistReaction(postId, emoji, commentId);
 
-      renderMeView();
       if (activeModalTargetId) {
         renderModalWallFeed(activeModalTargetId);
       }
@@ -4232,16 +4426,11 @@
     }
 
     function refreshAfterCommentChange(postId, itemId) {
-      // Re-render only the view the user is currently looking at, keeping any
-      // open wall modal in place instead of returning the user to another page.
-      if (activeModalTargetId) {
-        renderModalWallFeed(activeModalTargetId);
-      } else if (currentMainTab === "me") {
-        renderMeView();
-      } else if (currentMainTab === "wall") {
-        renderEmployeeTiles();
-      }
-      updateBadgesAndStats();
+      // Comments on a public wall post are only ever visible inside the open
+      // wall modal (the Wall tab's own tile grid shows summary counts, not
+      // individual posts) — keep it in place instead of returning the user
+      // to another page.
+      if (activeModalTargetId) renderModalWallFeed(activeModalTargetId);
 
       const overlay = document.getElementById("wallModalOverlay");
       if (activeModalTargetId && overlay) {
@@ -4330,23 +4519,6 @@
     }
 
     /* Accurate Dynamic Badges & Stats */
-    function updateBadgesAndStats() {
-      const receivedCount = FEEDBACKS.filter(f => f.targetId === CURRENT_USER.id).length;
-      const givenCount = FEEDBACKS.filter(f => f.senderId === CURRENT_USER.id).length;
-
-      const meTotal = document.getElementById("meTotalBadge");
-      const meReceivedBadge = document.getElementById("meSubtabReceivedBadge");
-      const meGivenBadge = document.getElementById("meSubtabGivenBadge");
-      const statReceived = document.getElementById("statReceivedCount");
-      const statGiven = document.getElementById("statGivenCount");
-
-      if (meTotal) meTotal.textContent = receivedCount;
-      if (meReceivedBadge) meReceivedBadge.textContent = receivedCount;
-      if (meGivenBadge) meGivenBadge.textContent = givenCount;
-      if (statReceived) statReceived.textContent = receivedCount;
-      if (statGiven) statGiven.textContent = givenCount;
-    }
-
     /* ==========================================================================
        UTILITIES & TOASTS
        ========================================================================== */
@@ -4376,17 +4548,6 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
-    }
-    /* Sidebar navigation active state helper */
-    function setSidebarActive(el) {
-      document.querySelectorAll('.sidebar-nav-link').forEach(function(link) {
-        link.classList.remove('active');
-      });
-      el.classList.add('active');
-      // Update breadcrumb
-      var labels = { 'sidebarBtnMe': 'ME', 'sidebarBtnWall': 'Employee Wall', 'sidebarBtnOrg': 'Organization Wall' };
-      var bc = document.getElementById('breadcrumbActive');
-      if (bc) bc.textContent = labels[el.id] || '';
     }
   </script>
 
