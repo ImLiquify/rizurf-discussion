@@ -84,6 +84,13 @@ const openapi = {
     '/api/groups/{groupId}/members': {
       get: operation('List a group\'s members.', 'feedback:read', discovery('List Group Members', 'Read who belongs to a project group.', ['groupId'], ['data'])),
       post: operation('Add a member to a group.', 'feedback:write', discovery('Add Group Member', 'Add any employee to a project group; open to any signed-in caller.', ['groupId', 'userId'], [], ['GET /api/groups/{groupId}/members']))
+    },
+    '/api/topics': {
+      get: operation('List topics.', 'feedback:read', discovery('List Topics', 'Read topics in one conversation, or every topic the caller participates in.', ['mine', 'targetType', 'targetId', 'search'], ['data'])),
+      post: operation('Create a topic.', 'feedback:write', discovery('Create Topic', 'Start a new topic inside a DM, group, or the Organization thread.', ['targetType', 'targetId', 'name'], ['id'], ['GET /api/topics']))
+    },
+    '/api/topics/{topicId}/read': {
+      post: operation('Mark a topic read.', 'feedback:write', discovery('Mark Topic Read', 'Record that the caller has read a topic up to now.', ['topicId'], []))
     }
   }
 };
@@ -94,6 +101,7 @@ function routeKey(pathname) {
   if (/^\/api\/feedback\/[^/]+\/reactions$/.test(pathname)) return '/api/feedback/{feedbackId}/reactions';
   if (/^\/api\/private-remarks\/[^/]+$/.test(pathname)) return '/api/private-remarks/{remarkId}';
   if (/^\/api\/groups\/[^/]+\/members$/.test(pathname)) return '/api/groups/{groupId}/members';
+  if (/^\/api\/topics\/[^/]+\/read$/.test(pathname)) return '/api/topics/{topicId}/read';
   return null;
 }
 function sendJson(response, status, body) { response.status(status).type('application/json').json(body); }
@@ -275,7 +283,7 @@ app.get('/api/feedback', async (request, response, next) => {
     }
     const data = await feedbacks.listFeedback({
       ...page, targetId: request.query.targetId, senderId: request.query.senderId,
-      participantId: request.query.participantId, visibility, viewerId,
+      participantId: request.query.participantId, topicId: request.query.topicId, visibility, viewerId,
       viewerIsPrivileged: mine ? false : isPrivileged
     });
     const ids = data.map(item => item.id);
@@ -320,49 +328,48 @@ app.post('/api/feedback', async (request, response, next) => {
   try { return sendJson(response, 201, await feedbacks.createFeedback({ id: `fb_${crypto.randomUUID()}`, senderId, targetId, targetName, content: content.trim(), isAnonymous: Boolean(isAnonymous) })); } catch (error) { return next(error); }
 });
 
-// Private feedback (DM / group / Organization). Unlike the public path
-// above, the sender identity and anonymity are never taken from the client —
-// a spoofed senderId here would be an actual privacy breach, not just
-// misattributed authorship. 'org' addresses the sender's own per-employee
-// thread with admins/managers (see feedback_groups schema comment for why
-// target_id is the employee's own id rather than a shared sentinel).
+// Private feedback (DM / group / Organization) — always sent into a topic.
+// Unlike the public path above, the sender identity and anonymity are never
+// taken from the client — a spoofed senderId here would be an actual
+// privacy breach, not just misattributed authorship. targetType/targetId
+// are derived entirely from the topic being posted into, never from the
+// client: for a 'user' topic the direction flips per sender (so each
+// message keeps the original per-row sender/target shape the access
+// predicate expects); for 'group'/'org' it's always the topic's own
+// target_id (a group id, or — for org — the employee whose thread this is,
+// fixed regardless of whether an admin or the employee themself is posting).
 async function createPrivateFeedback(request, response, next) {
   const auth = request.auth || {};
   if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
-  const { targetId, content, targetType } = request.body || {};
-  if (!['user', 'group', 'org'].includes(targetType)) {
-    return sendError(response, request, 422, 'VALIDATION_ERROR', 'targetType must be user, group, or org.', { fields: ['targetType'] });
-  }
+  const { topicId, content } = request.body || {};
+  if (!validText(topicId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'topicId is required.', { fields: ['topicId'] });
   if (!validText(content)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'content is required.', { fields: ['content'] });
   try {
     const senderId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
-    let resolvedTargetId; let resolvedTargetName;
-    if (targetType === 'org') {
-      resolvedTargetId = senderId;
-      resolvedTargetName = 'Organization';
-    } else if (targetType === 'group') {
-      if (!validText(targetId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'targetId is required.', { fields: ['targetId'] });
-      const group = await feedbacks.getGroupById(targetId);
-      if (!group) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
-      const senderUser = await feedbacks.getUserById(senderId);
-      const senderIsPrivileged = isPrivilegedRole(senderUser?.permissionRole);
-      if (!senderIsPrivileged && !await feedbacks.isGroupMember(targetId, senderId)) {
-        return sendError(response, request, 403, 'FORBIDDEN', 'You must be a member of this group to post in it.');
-      }
-      resolvedTargetId = targetId;
-      resolvedTargetName = group.name;
-    } else {
-      if (!validText(targetId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'targetId is required.', { fields: ['targetId'] });
-      if (targetId === senderId) return sendError(response, request, 422, 'VALIDATION_ERROR', 'You cannot send private feedback to yourself.');
-      const targetUser = await feedbacks.getUserById(targetId);
-      if (!targetUser) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No user with that id.');
-      resolvedTargetId = targetId;
-      resolvedTargetName = targetUser.name;
+    const topic = await feedbacks.getTopicById(topicId);
+    if (!topic) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No topic with that id.');
+    const senderUser = await feedbacks.getUserById(senderId);
+    const senderIsPrivileged = isPrivilegedRole(senderUser?.permissionRole);
+    if (!await feedbacks.canViewTopic({ topicId, viewerId: senderId, viewerIsPrivileged: senderIsPrivileged })) {
+      return sendError(response, request, 403, 'FORBIDDEN', 'You do not have access to this topic.');
     }
+    if (topic.targetType === 'group' && !senderIsPrivileged && !await feedbacks.isGroupMember(topic.targetId, senderId)) {
+      return sendError(response, request, 403, 'FORBIDDEN', 'You must be a member of this group to post in it.');
+    }
+    const targetType = topic.targetType;
+    const targetId = targetType === 'user'
+      ? (senderId === topic.createdBy ? topic.targetId : topic.createdBy)
+      : topic.targetId;
+    let targetName;
+    if (targetType === 'org') targetName = 'Organization';
+    else if (targetType === 'group') targetName = (await feedbacks.getGroupById(topic.targetId))?.name || 'Group';
+    else targetName = (await feedbacks.getUserById(targetId))?.name || 'Unknown';
+
     const created = await feedbacks.createFeedback({
-      id: `fb_${crypto.randomUUID()}`, senderId, targetId: resolvedTargetId, targetName: resolvedTargetName,
-      content: content.trim(), isAnonymous: false, visibility: 'private', targetType
+      id: `fb_${crypto.randomUUID()}`, senderId, targetId, targetName,
+      content: content.trim(), isAnonymous: false, visibility: 'private', targetType, topicId
     });
+    await feedbacks.markTopicRead({ topicId, userId: senderId });
     return sendJson(response, 201, created);
   } catch (error) { return next(error); }
 }
@@ -449,17 +456,32 @@ app.get('/api/groups', async (request, response, next) => {
       if (!viewerId) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
       mine = viewerId;
     }
-    return sendJson(response, 200, { data: await feedbacks.listGroups({ mine, ...page }), ...page });
+    // parentId: omitted lists every group; 'root' lists only top-level
+    // groups; a specific group id lists that group's sub-groups.
+    return sendJson(response, 200, { data: await feedbacks.listGroups({ mine, parentId: request.query.parentId, ...page }), ...page });
   } catch (error) { return next(error); }
 });
 app.post('/api/groups', async (request, response, next) => {
   const auth = request.auth || {};
   if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
-  const { name } = request.body || {};
+  const { name, parentGroupId } = request.body || {};
   if (!validText(name)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'name is required.', { fields: ['name'] });
   try {
     const createdBy = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
-    return sendJson(response, 201, await feedbacks.createGroup({ id: `grp_${crypto.randomUUID()}`, name: name.trim(), createdBy }));
+    let resolvedParentId = null;
+    if (validText(parentGroupId)) {
+      const parent = await feedbacks.getGroupById(parentGroupId);
+      if (!parent) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No parent group with that id.');
+      // One level of nesting only — a sub-group can't itself have sub-groups.
+      if (parent.parentGroupId) return sendError(response, request, 422, 'VALIDATION_ERROR', 'A sub-group cannot itself have sub-groups.', { fields: ['parentGroupId'] });
+      const creatorUser = await feedbacks.getUserById(createdBy);
+      const creatorIsPrivileged = isPrivilegedRole(creatorUser?.permissionRole);
+      if (!creatorIsPrivileged && !await feedbacks.isGroupMember(parentGroupId, createdBy)) {
+        return sendError(response, request, 403, 'FORBIDDEN', 'You must be a member of the parent group to create a sub-group.');
+      }
+      resolvedParentId = parentGroupId;
+    }
+    return sendJson(response, 201, await feedbacks.createGroup({ id: `grp_${crypto.randomUUID()}`, name: name.trim(), createdBy, parentGroupId: resolvedParentId }));
   } catch (error) { return next(error); }
 });
 app.get('/api/groups/:groupId/members', async (request, response, next) => {
@@ -484,6 +506,82 @@ app.post('/api/groups/:groupId/members', async (request, response, next) => {
     await feedbacks.addGroupMember({ groupId: request.params.groupId, userId, addedBy });
     return response.status(204).end();
   } catch (error) { return next(error); }
+});
+
+app.get('/api/topics', async (request, response, next) => {
+  try {
+    const { viewerId, isPrivileged } = await resolveViewerForRead(request.auth);
+    if (!viewerId) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+    if (request.query.mine === '1' || request.query.mine === 'true') {
+      // Deliberately not privilege-bypassed — see listMyTopics's own comment.
+      return sendJson(response, 200, { data: await feedbacks.listMyTopics({ viewerId, viewerIsPrivileged: false }) });
+    }
+    const { targetType, targetId } = request.query;
+    if (!['user', 'group', 'org'].includes(targetType) || !validText(targetId)) {
+      return sendError(response, request, 422, 'VALIDATION_ERROR', 'targetType and targetId are required (or pass mine=1).', { fields: ['targetType', 'targetId'] });
+    }
+    if (targetType === 'group' && !isPrivileged && !await feedbacks.isGroupMember(targetId, viewerId)) {
+      return sendError(response, request, 403, 'FORBIDDEN', 'You are not a member of this group.');
+    }
+    if (targetType === 'org' && !isPrivileged && targetId !== viewerId) {
+      return sendError(response, request, 403, 'FORBIDDEN', 'You can only browse your own Organization thread.');
+    }
+    const page = pagination(request, response); if (!page) return;
+    const data = await feedbacks.listTopicsInContainer({ targetType, targetId, viewerId, search: request.query.search, ...page });
+    return sendJson(response, 200, { data, ...page });
+  } catch (error) { return next(error); }
+});
+app.post('/api/topics', async (request, response, next) => {
+  const auth = request.auth || {};
+  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+  const { targetType, targetId, name } = request.body || {};
+  if (!['user', 'group', 'org'].includes(targetType)) {
+    return sendError(response, request, 422, 'VALIDATION_ERROR', 'targetType must be user, group, or org.', { fields: ['targetType'] });
+  }
+  if (!validText(name)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'name is required.', { fields: ['name'] });
+  try {
+    const createdBy = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+    let resolvedTargetId;
+    if (targetType === 'org') {
+      resolvedTargetId = createdBy;
+    } else if (targetType === 'group') {
+      if (!validText(targetId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'targetId is required.', { fields: ['targetId'] });
+      if (!await feedbacks.getGroupById(targetId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
+      const creatorUser = await feedbacks.getUserById(createdBy);
+      const creatorIsPrivileged = isPrivilegedRole(creatorUser?.permissionRole);
+      if (!creatorIsPrivileged && !await feedbacks.isGroupMember(targetId, createdBy)) {
+        return sendError(response, request, 403, 'FORBIDDEN', 'You must be a member of this group to create a topic in it.');
+      }
+      resolvedTargetId = targetId;
+    } else {
+      if (!validText(targetId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'targetId is required.', { fields: ['targetId'] });
+      if (targetId === createdBy) return sendError(response, request, 422, 'VALIDATION_ERROR', 'You cannot start a topic with yourself.');
+      if (!await feedbacks.getUserById(targetId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No user with that id.');
+      resolvedTargetId = targetId;
+    }
+    const topic = await feedbacks.createTopic({ id: `topic_${crypto.randomUUID()}`, targetType, targetId: resolvedTargetId, name: name.trim(), createdBy });
+    return sendJson(response, 201, topic);
+  } catch (error) { return next(error); }
+});
+app.post('/api/topics/:topicId/read', async (request, response, next) => {
+  const auth = request.auth || {};
+  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+  try {
+    const { viewerId } = await resolveViewerForRead(request.auth);
+    if (!viewerId) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+    // Not privilege-bypassed: an admin browsing a topic via Employee Wall
+    // oversight must not silently mark it read for themselves.
+    if (!await feedbacks.canViewTopic({ topicId: request.params.topicId, viewerId, viewerIsPrivileged: false })) {
+      return sendError(response, request, 403, 'FORBIDDEN', 'You do not have access to this topic.');
+    }
+    await feedbacks.markTopicRead({ topicId: request.params.topicId, userId: viewerId });
+    return response.status(204).end();
+  } catch (error) { return next(error); }
+});
+
+app.post('/api/logout', (_request, response) => {
+  clearSession(response);
+  return response.status(204).end();
 });
 
 app.use('/assets', express.static(path.join(publicDist, 'assets'), { index: false }));

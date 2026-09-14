@@ -99,4 +99,95 @@ export async function ensureSchemaCompatibility() {
     CONSTRAINT fk_group_members_group FOREIGN KEY (group_id) REFERENCES feedback_groups (id) ON DELETE CASCADE,
     CONSTRAINT fk_group_members_user FOREIGN KEY (user_id) REFERENCES users (id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
+
+  // One level of sub-groups (e.g. "ERP System" -> "Frontend"/"Backend").
+  // NULL means a top-level group. A sub-group is a fully independent,
+  // postable group (its own row, own membership) — parent_group_id is only
+  // for grouping them in the UI, not an access-control relationship.
+  await addMissingColumns('feedback_groups', [
+    ['parent_group_id', 'VARCHAR(50) NULL']
+  ], await columnsOf('feedback_groups'));
+
+  // Topics: every private conversation (a DM, a group, or an employee's
+  // Organization thread) is topic-based — multiple named topics can run
+  // side by side within the same container, each with its own message
+  // thread. `target_type`/`target_id` name the container the exact same way
+  // `feedback.target_type`/`target_id` already do, so a topic's visibility
+  // is governed by the identical access predicate as its container.
+  await pool.query(`CREATE TABLE IF NOT EXISTS topics (
+    id varchar(60) NOT NULL,
+    target_type varchar(10) NOT NULL,
+    target_id varchar(50) NOT NULL,
+    name varchar(160) NOT NULL,
+    created_by varchar(50) NOT NULL,
+    created_at timestamp NOT NULL DEFAULT current_timestamp(),
+    PRIMARY KEY (id),
+    KEY idx_topics_target (target_type, target_id),
+    CONSTRAINT fk_topics_created_by FOREIGN KEY (created_by) REFERENCES users (id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
+
+  // Every private message now belongs to a topic. NULL only for rows
+  // written before topics existed — backfilled into a "General" topic per
+  // container just below, so nothing already sent becomes unreachable.
+  await addMissingColumns('feedback', [
+    ['topic_id', 'VARCHAR(60) NULL']
+  ], await columnsOf('feedback'));
+
+  // Read markers, per topic per user — the basis for unread counts (the
+  // Feedbacks nav badge and the per-conversation indicators). Absence of a
+  // row means "never opened", i.e. everything in the topic is unread.
+  await pool.query(`CREATE TABLE IF NOT EXISTS topic_reads (
+    topic_id varchar(60) NOT NULL,
+    user_id varchar(50) NOT NULL,
+    last_read_at timestamp NOT NULL DEFAULT current_timestamp(),
+    PRIMARY KEY (topic_id, user_id),
+    CONSTRAINT fk_topic_reads_topic FOREIGN KEY (topic_id) REFERENCES topics (id) ON DELETE CASCADE,
+    CONSTRAINT fk_topic_reads_user FOREIGN KEY (user_id) REFERENCES users (id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
+
+  // Backfill: any private message sent before topics existed (topic_id
+  // still NULL) gets folded into one "General" topic per container, so it
+  // stays reachable instead of silently disappearing from the new
+  // topic-scoped UI. A no-op on every boot after the first.
+  //
+  // 'group'/'org' rows: target_id is already a stable per-container key
+  // (a group's own id, or — for org — the employee whose thread this is,
+  // fixed regardless of sender), so grouping directly on it is correct.
+  const [orphanedStable] = await pool.query(
+    `SELECT DISTINCT target_type, target_id, sender_id FROM feedback
+     WHERE visibility = 'private' AND target_type IN ('group', 'org') AND topic_id IS NULL`
+  );
+  for (const row of orphanedStable) {
+    const topicId = `topic_${row.target_type}_${row.target_id}_general`.slice(0, 60);
+    await pool.query(
+      `INSERT IGNORE INTO topics (id, target_type, target_id, name, created_by) VALUES (?, ?, ?, 'General', ?)`,
+      [topicId, row.target_type, row.target_id, row.sender_id]
+    );
+    await pool.query(
+      `UPDATE feedback SET topic_id = ? WHERE target_type = ? AND target_id = ? AND visibility = 'private' AND topic_id IS NULL`,
+      [topicId, row.target_type, row.target_id]
+    );
+  }
+
+  // 'user' (DM) rows: target_id is directional per row — "who THIS message
+  // was sent to" — so a back-and-forth DM has messages with target_id
+  // pointing both ways. Grouping on target_id directly would split one
+  // conversation into two "General" topics; group on the unordered
+  // {sender_id, target_id} pair instead.
+  const [orphanedDms] = await pool.query(
+    `SELECT DISTINCT LEAST(sender_id, target_id) AS a, GREATEST(sender_id, target_id) AS b FROM feedback
+     WHERE visibility = 'private' AND target_type = 'user' AND topic_id IS NULL`
+  );
+  for (const { a, b } of orphanedDms) {
+    const topicId = `topic_user_${a}_${b}_general`.slice(0, 60);
+    await pool.query(
+      `INSERT IGNORE INTO topics (id, target_type, target_id, name, created_by) VALUES (?, 'user', ?, 'General', ?)`,
+      [topicId, b, a]
+    );
+    await pool.query(
+      `UPDATE feedback SET topic_id = ? WHERE visibility = 'private' AND target_type = 'user' AND topic_id IS NULL
+         AND ((sender_id = ? AND target_id = ?) OR (sender_id = ? AND target_id = ?))`,
+      [topicId, a, b, b, a]
+    );
+  }
 }
