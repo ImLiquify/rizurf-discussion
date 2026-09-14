@@ -31,12 +31,14 @@ CREATE TABLE IF NOT EXISTS `feedback` (
   `is_edited`    tinyint(1)   NOT NULL DEFAULT 0,
   `visibility`   varchar(10)  NOT NULL DEFAULT 'public',
   `target_type`  varchar(10)  NOT NULL DEFAULT 'user',
+  `topic_id`     varchar(60)  DEFAULT NULL,
   `created_at`   timestamp    NOT NULL DEFAULT current_timestamp(),
   `updated_at`   timestamp    NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_feedback_target`  (`target_id`),
   KEY `idx_feedback_sender`  (`sender_id`),
   KEY `idx_feedback_created` (`created_at`),
+  KEY `idx_feedback_topic`   (`topic_id`),
   CONSTRAINT `fk_feedback_sender` FOREIGN KEY (`sender_id`) REFERENCES `users` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -85,14 +87,21 @@ CREATE TABLE IF NOT EXISTS `private_remarks` (
 
 -- Project groups for the Feedbacks tab. Named `feedback_groups`, not
 -- `groups` — GROUPS is a reserved word in current MySQL/MariaDB.
+-- `parent_group_id` supports one level of sub-groups (e.g. "ERP System" ->
+-- "Frontend"/"Backend") — NULL means top-level. A sub-group is a fully
+-- independent, postable group with its own membership; the parent link is
+-- only for grouping them in the UI, not an access-control relationship.
 CREATE TABLE IF NOT EXISTS `feedback_groups` (
-  `id`         varchar(50)  NOT NULL,
-  `name`       varchar(160) NOT NULL,
-  `created_by` varchar(50)  NOT NULL,
-  `created_at` timestamp    NOT NULL DEFAULT current_timestamp(),
+  `id`               varchar(50)  NOT NULL,
+  `name`             varchar(160) NOT NULL,
+  `created_by`       varchar(50)  NOT NULL,
+  `parent_group_id`  varchar(50)  DEFAULT NULL,
+  `created_at`       timestamp    NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_feedback_groups_created_by` (`created_by`),
-  CONSTRAINT `fk_feedback_groups_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`)
+  KEY `idx_feedback_groups_parent`     (`parent_group_id`),
+  CONSTRAINT `fk_feedback_groups_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`),
+  CONSTRAINT `fk_feedback_groups_parent` FOREIGN KEY (`parent_group_id`) REFERENCES `feedback_groups` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE IF NOT EXISTS `group_members` (
@@ -104,4 +113,33 @@ CREATE TABLE IF NOT EXISTS `group_members` (
   KEY `idx_group_members_user` (`user_id`),
   CONSTRAINT `fk_group_members_group` FOREIGN KEY (`group_id`) REFERENCES `feedback_groups` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_group_members_user`  FOREIGN KEY (`user_id`)  REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Topics: every private conversation (a DM, a group, or an employee's
+-- Organization thread) is topic-based — multiple named topics can run side
+-- by side within the same container, each with its own message thread.
+-- `target_type`/`target_id` name the container exactly like
+-- `feedback.target_type`/`target_id` do, so a topic's visibility is governed
+-- by the identical access rule as its container.
+CREATE TABLE IF NOT EXISTS `topics` (
+  `id`          varchar(60)  NOT NULL,
+  `target_type` varchar(10)  NOT NULL,
+  `target_id`   varchar(50)  NOT NULL,
+  `name`        varchar(160) NOT NULL,
+  `created_by`  varchar(50)  NOT NULL,
+  `created_at`  timestamp    NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_topics_target` (`target_type`, `target_id`),
+  CONSTRAINT `fk_topics_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Read markers, per topic per user — basis for unread counts. Absence of a
+-- row means "never opened", i.e. everything in the topic is unread.
+CREATE TABLE IF NOT EXISTS `topic_reads` (
+  `topic_id`      varchar(60) NOT NULL,
+  `user_id`       varchar(50) NOT NULL,
+  `last_read_at`  timestamp   NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`topic_id`, `user_id`),
+  CONSTRAINT `fk_topic_reads_topic` FOREIGN KEY (`topic_id`) REFERENCES `topics` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_topic_reads_user`  FOREIGN KEY (`user_id`)  REFERENCES `users` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

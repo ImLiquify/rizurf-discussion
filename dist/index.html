@@ -1841,6 +1841,71 @@
       text-overflow: ellipsis;
     }
 
+    .feedbacks-list-item-avatar {
+      width: 100%;
+      height: 100%;
+      border-radius: var(--radius-md);
+      object-fit: cover;
+    }
+
+    .feedbacks-unread-dot {
+      flex-shrink: 0;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: var(--radius-full);
+      background: var(--status-danger, #E11D48);
+      color: #FFFFFF;
+      font-size: 0.68rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .feedbacks-group-block { display: flex; flex-direction: column; }
+
+    .feedbacks-subgroup-row { padding-left: 22px; }
+
+    .feedbacks-subgroup-add-btn {
+      align-self: flex-start;
+      margin: 2px 0 6px 46px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-subtle);
+    }
+
+    .feedbacks-subgroup-add-btn:hover { color: var(--accent-cyan); }
+
+    .topic-list-toolbar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .topic-search-input {
+      flex: 1;
+      padding: 8px 12px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+      background: var(--bg-canvas);
+      color: var(--text-main);
+      font-size: 0.85rem;
+    }
+
+    .topic-search-input:focus { outline: none; border-color: var(--accent-cyan); }
+
+    .topic-back-btn {
+      font-size: 1.1rem;
+      line-height: 1;
+      color: var(--text-muted);
+      padding: 4px 8px;
+      border-radius: var(--radius-md);
+    }
+
+    .topic-back-btn:hover { background: var(--bg-subtle); color: var(--text-main); }
+
     .feedbacks-detail {
       flex: 1;
       display: flex;
@@ -2231,10 +2296,20 @@
       display: flex;
       align-items: center;
       gap: 11px;
+      width: 100%;
       padding: 14px 16px;
       border-top: 1px solid rgba(255,255,255,0.07);
       margin: 0;
       background: rgba(0,0,0,0.12);
+      font: inherit;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+      transition: background var(--transition-fast);
+    }
+
+    .sidebar-user-badge:hover {
+      background: rgba(0,0,0,0.22);
     }
 
     .sidebar-user-avatar {
@@ -2462,6 +2537,7 @@
           </svg>
         </span>
         Feedbacks
+        <span class="nav-badge" id="feedbacksUnreadBadge" hidden>0</span>
       </a>
 
       <!-- Employee Wall: admins/managers only — hidden by default, revealed by JS once the signed-in role is confirmed privileged -->
@@ -2477,8 +2553,8 @@
 
     </nav>
 
-    <!-- Bottom User Badge -->
-    <div class="sidebar-user-badge">
+    <!-- Bottom User Badge — click to sign out -->
+    <button type="button" class="sidebar-user-badge" onclick="handleLogout()" title="Sign out">
       <div class="sidebar-user-avatar">
         <img src="" alt="User" />
         <div class="status-dot"></div>
@@ -2487,7 +2563,7 @@
         <div class="sidebar-user-name" id="sidebarUserName">No User Selected</div>
         <div class="sidebar-user-role" id="sidebarUserRole">--</div>
       </div>
-    </div>
+    </button>
 
   </aside>
 
@@ -2761,11 +2837,16 @@
     let editingPostId = null;
     let editingCommentKey = null; // format: "postId_commentId"
 
-    // Feedbacks tab state (private DMs, project groups, Organization).
+    // Feedbacks tab state (private DMs, project groups, Organization — all
+    // topic-based: a container holds many named topics, each its own thread).
     let feedbacksSearchQuery = "";
-    let myGroups = []; // groups the signed-in user belongs to
-    let myPrivateFeed = []; // every private feedback row the user can see (their own DMs/groups/org)
-    let activeConversation = null; // { type: "user"|"group"|"org", id, name }
+    let myGroups = []; // groups (and sub-groups) the signed-in user belongs to
+    let allGroupsDirectory = []; // every group, for resolving a sub-group's parent name
+    let myTopics = []; // every topic the user can see, across all their containers
+    let activeContainer = null; // { type: "user"|"group"|"org", id, name } — what's selected in the left list
+    let containerTopics = []; // topics fetched for the open container
+    let topicSearchQuery = "";
+    let activeTopic = null; // { id, name, targetType, targetId, createdBy } — the open thread, or null while browsing topics
     let conversationMessages = [];
 
     function isPrivilegedViewer() { return currentRoleView === "admin" || currentRoleView === "manager"; }
@@ -2887,8 +2968,9 @@
           try { await loadPrivateRemarksFromBackend(); } catch (error) { console.warn("Private remarks fetch error:", error); }
           try { await loadFeedbacksData(); } catch (error) { console.warn("Feedbacks tab data fetch error:", error); }
         } else {
-          myGroups = []; myPrivateFeed = []; activeConversation = null; conversationMessages = [];
+          myGroups = []; myTopics = []; activeContainer = null; activeTopic = null; conversationMessages = [];
           renderFeedbacksTab();
+          renderTopicList();
         }
 
         renderAll();
@@ -3029,45 +3111,61 @@
        FEEDBACKS TAB — private chat-style inbox (DMs, project groups, Organization)
        ========================================================================== */
 
-    // Every private feedback row the signed-in user can see (their own DMs,
-    // their own Organization thread, and messages in groups they belong to —
+    // Every topic the signed-in user can see (their own DMs, their own
+    // Organization thread, and topics in groups/sub-groups they belong to —
     // never privilege-bypassed, so this looks the same for an admin as for
     // anyone else; oversight of OTHER people's threads is a separate,
     // deliberate lookup from the Employee Wall modal, not blended in here).
     async function loadFeedbacksData() {
-      if (!CURRENT_USER.id) { myGroups = []; myPrivateFeed = []; renderFeedbacksTab(); return; }
+      if (!CURRENT_USER.id) { myGroups = []; myTopics = []; renderFeedbacksTab(); renderTopicList(); return; }
       try {
-        const [groupsResponse, feedResponse] = await Promise.all([
+        const [groupsResponse, allGroupsResponse, topicsResponse] = await Promise.all([
           fetch(`${API_BASE_URL}/groups?mine=1`),
-          fetch(`${API_BASE_URL}/feedback?visibility=private&mine=1`)
+          fetch(`${API_BASE_URL}/groups`),
+          fetch(`${API_BASE_URL}/topics?mine=1`)
         ]);
         myGroups = groupsResponse.ok ? ((await groupsResponse.json()).data || []) : [];
-        const feedJson = feedResponse.ok ? await feedResponse.json() : { data: [] };
-        myPrivateFeed = (feedJson.data || []).map(f => ({ ...f, comments: buildCommentTree(f.comments || []) }));
+        allGroupsDirectory = allGroupsResponse.ok ? ((await allGroupsResponse.json()).data || []) : [];
+        myTopics = topicsResponse.ok ? ((await topicsResponse.json()).data || []) : [];
       } catch (error) {
         console.warn("Feedbacks tab data fetch error:", error);
       }
       renderFeedbacksTab();
-      if (activeConversation) refreshActiveConversationFromCache();
+      updateFeedbacksUnreadBadge();
+      if (activeTopic) await refreshActiveTopicMessages();
+      else if (activeContainer) await refreshContainerTopics();
     }
 
-    function getMyOrgThreadRows() {
-      return myPrivateFeed.filter(f => f.targetType === "org" && f.targetId === CURRENT_USER.id);
+    function updateFeedbacksUnreadBadge() {
+      const badge = document.getElementById("feedbacksUnreadBadge");
+      if (!badge) return;
+      const total = myTopics.reduce((sum, t) => sum + (t.unreadCount || 0), 0);
+      badge.textContent = total;
+      badge.hidden = total === 0;
     }
 
-    // Direct-message conversations, one row per counterpart, newest first.
-    function buildDmConversations() {
+    function myOrgTopics() { return myTopics.filter(t => t.targetType === "org" && t.targetId === CURRENT_USER.id); }
+    function topicsForGroup(groupId) { return myTopics.filter(t => t.targetType === "group" && t.targetId === groupId); }
+    // DM topics grouped by counterpart — a 'user' topic's target_id is "the
+    // other person" from ITS OWN creator's perspective, so the counterpart
+    // from MY perspective is whichever of {createdBy, targetId} isn't me.
+    function dmTopicsByCounterpart() {
       const byCounterpart = new Map();
-      myPrivateFeed.filter(f => f.targetType === "user").forEach(f => {
-        const iAmSender = f.senderId === CURRENT_USER.id;
-        const counterpartId = iAmSender ? f.targetId : f.senderId;
-        const counterpartName = iAmSender ? f.targetName : f.senderName;
-        const existing = byCounterpart.get(counterpartId);
-        if (!existing || new Date(f.timestamp) > new Date(existing.lastTimestamp)) {
-          byCounterpart.set(counterpartId, { id: counterpartId, name: counterpartName, lastMessage: f.content, lastTimestamp: f.timestamp });
-        }
+      myTopics.filter(t => t.targetType === "user").forEach(t => {
+        const counterpartId = t.createdBy === CURRENT_USER.id ? t.targetId : t.createdBy;
+        if (!byCounterpart.has(counterpartId)) byCounterpart.set(counterpartId, []);
+        byCounterpart.get(counterpartId).push(t);
       });
-      return [...byCounterpart.values()].sort((a, b) => new Date(b.lastTimestamp) - new Date(a.lastTimestamp));
+      return byCounterpart;
+    }
+    function containerSummary(topicsInContainer) {
+      const unread = topicsInContainer.reduce((sum, t) => sum + (t.unreadCount || 0), 0);
+      const last = topicsInContainer.reduce((a, b) => {
+        if (!b.lastMessageAt) return a;
+        if (!a || !a.lastMessageAt) return b;
+        return new Date(a.lastMessageAt) > new Date(b.lastMessageAt) ? a : b;
+      }, null);
+      return { unread, preview: last?.lastMessagePreview || "" };
     }
 
     function handleFeedbacksSearch(value) {
@@ -3075,16 +3173,20 @@
       renderFeedbacksTab();
     }
 
-    function feedbacksListItemHtml({ type, id, name, icon, preview, active }) {
+    function feedbacksListItemHtml({ type, id, name, icon, avatarUrl, preview, unread, active }) {
       const safeName = escapeHtml(name || "");
+      const iconHtml = avatarUrl
+        ? `<img src="${escapeHtml(avatarUrl)}" alt="${safeName}" class="feedbacks-list-item-avatar" />`
+        : `<span>${icon}</span>`;
       return `
         <button type="button" class="feedbacks-list-item${active ? " active" : ""}"
-          onclick="openConversation('${type}', '${escapeHtml(id)}', '${safeName.replace(/'/g, "&#039;")}')">
-          <div class="feedbacks-list-item-icon">${icon}</div>
+          onclick="openContainer('${type}', '${escapeHtml(id)}', '${safeName.replace(/'/g, "&#039;")}')">
+          <div class="feedbacks-list-item-icon">${iconHtml}</div>
           <div class="feedbacks-list-item-body">
             <div class="feedbacks-list-item-name">${safeName}</div>
             <div class="feedbacks-list-item-preview">${escapeHtml(preview || "")}</div>
           </div>
+          ${unread ? `<span class="feedbacks-unread-dot">${unread}</span>` : ""}
         </button>
       `;
     }
@@ -3094,31 +3196,63 @@
       if (!listEl) return;
 
       const query = feedbacksSearchQuery.toLowerCase().trim();
-      const existingDmIds = new Set(buildDmConversations().map(c => c.id));
+      const dmMap = dmTopicsByCounterpart();
       const searchResultsHtml = query
-        ? EMPLOYEES.filter(e => e.id !== CURRENT_USER.id && !existingDmIds.has(e.id) && e.name.toLowerCase().includes(query))
-            .map(e => feedbacksListItemHtml({ type: "user", id: e.id, name: e.name, icon: "🔍", preview: "Start a private conversation" }))
+        ? EMPLOYEES.filter(e => e.id !== CURRENT_USER.id && !dmMap.has(e.id) && e.name.toLowerCase().includes(query))
+            .map(e => feedbacksListItemHtml({ type: "user", id: e.id, name: e.name, avatarUrl: e.avatar, icon: "🔍", preview: "Start a private conversation" }))
             .join("")
         : "";
 
-      const orgRows = getMyOrgThreadRows();
-      const orgLast = orgRows.length ? orgRows.reduce((a, b) => new Date(a.timestamp) > new Date(b.timestamp) ? a : b) : null;
+      const orgSummary = containerSummary(myOrgTopics());
       const orgHtml = feedbacksListItemHtml({
         type: "org", id: CURRENT_USER.id, name: "Organization", icon: "🏢",
-        preview: orgLast ? orgLast.content : "Message admins & managers privately",
-        active: activeConversation?.type === "org"
+        preview: orgSummary.preview || "Message admins & managers privately", unread: orgSummary.unread,
+        active: activeContainer?.type === "org"
       });
 
-      const groupsHtml = myGroups.map(g => feedbacksListItemHtml({
-        type: "group", id: g.id, name: g.name, icon: "👥",
-        preview: `${g.memberCount} member${g.memberCount === 1 ? "" : "s"}`,
-        active: activeConversation?.type === "group" && activeConversation?.id === g.id
-      })).join("");
+      const topLevelGroups = myGroups.filter(g => !g.parentGroupId);
+      const groupBlocksHtml = topLevelGroups.map(group => {
+        const summary = containerSummary(topicsForGroup(group.id));
+        const row = feedbacksListItemHtml({
+          type: "group", id: group.id, name: group.name, icon: "👥",
+          preview: summary.preview || `${group.memberCount} member${group.memberCount === 1 ? "" : "s"}`, unread: summary.unread,
+          active: activeContainer?.type === "group" && activeContainer?.id === group.id
+        });
+        const subgroupsHtml = myGroups.filter(sub => sub.parentGroupId === group.id).map(sub => {
+          const subSummary = containerSummary(topicsForGroup(sub.id));
+          return `<div class="feedbacks-subgroup-row">${feedbacksListItemHtml({
+            type: "group", id: sub.id, name: sub.name, icon: "📁",
+            preview: subSummary.preview || `${sub.memberCount} member${sub.memberCount === 1 ? "" : "s"}`, unread: subSummary.unread,
+            active: activeContainer?.type === "group" && activeContainer?.id === sub.id
+          })}</div>`;
+        }).join("");
+        return `<div class="feedbacks-group-block">${row}${subgroupsHtml}
+          <button type="button" class="feedbacks-subgroup-add-btn" onclick="createSubgroupPrompt('${group.id}')">+ Sub-group</button>
+        </div>`;
+      }).join("");
 
-      const dmsHtml = buildDmConversations().map(c => feedbacksListItemHtml({
-        type: "user", id: c.id, name: c.name, icon: "💬", preview: c.lastMessage,
-        active: activeConversation?.type === "user" && activeConversation?.id === c.id
-      })).join("");
+      // Sub-groups I belong to whose parent I'm not a member of (so it has
+      // no top-level row above to nest under) — shown standalone.
+      const orphanSubgroupsHtml = myGroups.filter(sub => sub.parentGroupId && !topLevelGroups.some(g => g.id === sub.parentGroupId))
+        .map(sub => {
+          const parentName = allGroupsDirectory.find(g => g.id === sub.parentGroupId)?.name || "a group";
+          const summary = containerSummary(topicsForGroup(sub.id));
+          return feedbacksListItemHtml({
+            type: "group", id: sub.id, name: sub.name, icon: "📁",
+            preview: summary.preview || `Sub-group of ${parentName}`, unread: summary.unread,
+            active: activeContainer?.type === "group" && activeContainer?.id === sub.id
+          });
+        }).join("");
+
+      const dmsHtml = [...dmMap.entries()].map(([counterpartId, topics]) => {
+        const emp = EMPLOYEES.find(e => e.id === counterpartId);
+        const summary = containerSummary(topics);
+        return feedbacksListItemHtml({
+          type: "user", id: counterpartId, name: emp?.name || "Unknown", avatarUrl: emp?.avatar, icon: "💬",
+          preview: summary.preview, unread: summary.unread,
+          active: activeContainer?.type === "user" && activeContainer?.id === counterpartId
+        });
+      }).join("");
 
       listEl.innerHTML = `
         ${query ? `<div class="feedbacks-section-label">Search results</div>${searchResultsHtml || '<div class="feedbacks-section-empty">No employees match.</div>'}` : ""}
@@ -3128,7 +3262,8 @@
           Groups
           <button type="button" class="feedbacks-new-group-btn" onclick="createNewGroupPrompt()" title="Create a project group">+ New</button>
         </div>
-        ${groupsHtml || '<div class="feedbacks-section-empty">No groups yet.</div>'}
+        ${groupBlocksHtml}${orphanSubgroupsHtml}
+        ${!topLevelGroups.length && !orphanSubgroupsHtml ? '<div class="feedbacks-section-empty">No groups yet.</div>' : ""}
         <div class="feedbacks-section-label">Direct messages</div>
         ${dmsHtml || '<div class="feedbacks-section-empty">Search an employee above to start one.</div>'}
       `;
@@ -3144,21 +3279,42 @@
         if (!response.ok) throw new Error("Group creation failed");
         const group = await response.json();
         await loadFeedbacksData();
-        openConversation("group", group.id, group.name);
+        openContainer("group", group.id, group.name);
         showToast(`👥 Created "${group.name}"`);
       } catch (error) {
         showToast("Could not create the group. Please try again.");
       }
     }
 
+    async function createSubgroupPrompt(parentGroupId) {
+      const name = window.prompt("Name this sub-group:");
+      if (!name || !name.trim()) return;
+      try {
+        const response = await fetch(`${API_BASE_URL}/groups`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: name.trim(), parentGroupId })
+        });
+        if (!response.ok) {
+          const err = await response.json().catch(() => null);
+          throw new Error(err?.error?.message || "Sub-group creation failed");
+        }
+        const group = await response.json();
+        await loadFeedbacksData();
+        openContainer("group", group.id, group.name);
+        showToast(`📁 Created "${group.name}"`);
+      } catch (error) {
+        showToast(error.message || "Could not create the sub-group. Please try again.");
+      }
+    }
+
     async function addMemberToActiveGroup() {
-      if (!activeConversation || activeConversation.type !== "group") return;
+      if (!activeContainer || activeContainer.type !== "group") return;
       const name = window.prompt("Add by exact employee name:");
       if (!name || !name.trim()) return;
       const match = EMPLOYEES.find(e => e.name.toLowerCase() === name.trim().toLowerCase());
       if (!match) { showToast(`No employee named "${name.trim()}" found.`); return; }
       try {
-        const response = await fetch(`${API_BASE_URL}/groups/${activeConversation.id}/members`, {
+        const response = await fetch(`${API_BASE_URL}/groups/${activeContainer.id}/members`, {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: match.id })
         });
         if (!response.ok) throw new Error("Add member failed");
@@ -3169,45 +3325,83 @@
       }
     }
 
-    async function openConversation(type, id, name) {
-      activeConversation = { type, id, name };
+    // Selecting a container (Organization / a group / an employee) shows its
+    // topic list first — the convo doesn't happen until a topic is opened.
+    async function openContainer(type, id, name) {
+      activeContainer = { type, id, name };
+      activeTopic = null;
+      containerTopics = [];
+      topicSearchQuery = "";
       renderFeedbacksTab();
-      await refreshActiveConversationFromServer();
+      renderTopicList();
+      await refreshContainerTopics();
     }
 
-    function conversationQueryParams() {
-      if (!activeConversation) return null;
-      if (activeConversation.type === "user") return `participantId=${encodeURIComponent(activeConversation.id)}`;
-      if (activeConversation.type === "group") return `targetId=${encodeURIComponent(activeConversation.id)}`;
-      if (activeConversation.type === "org") return `targetId=${encodeURIComponent(CURRENT_USER.id)}`;
-      return null;
-    }
-
-    async function refreshActiveConversationFromServer() {
-      const params = conversationQueryParams();
-      if (!params) return;
+    async function refreshContainerTopics() {
+      if (!activeContainer) return;
       try {
-        const response = await fetch(`${API_BASE_URL}/feedback?visibility=private&${params}`);
+        const params = new URLSearchParams({ targetType: activeContainer.type, targetId: activeContainer.id });
+        const response = await fetch(`${API_BASE_URL}/topics?${params}`);
         const json = response.ok ? await response.json() : { data: [] };
-        conversationMessages = (json.data || []).map(f => ({ ...f, comments: buildCommentTree(f.comments || []) }));
+        containerTopics = json.data || [];
+      } catch (error) {
+        containerTopics = [];
+      }
+      if (!activeTopic) renderTopicList();
+    }
+
+    function handleTopicSearch(value) {
+      topicSearchQuery = value;
+      renderTopicList();
+    }
+
+    async function createTopicPrompt() {
+      if (!activeContainer) return;
+      const name = window.prompt("Name this topic:");
+      if (!name || !name.trim()) return;
+      try {
+        const response = await fetch(`${API_BASE_URL}/topics`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ targetType: activeContainer.type, targetId: activeContainer.id, name: name.trim() })
+        });
+        if (!response.ok) throw new Error("Topic creation failed");
+        const topic = await response.json();
+        await refreshContainerTopics();
+        openTopicById(topic.id);
+      } catch (error) {
+        showToast("Could not create that topic. Please try again.");
+      }
+    }
+
+    function openTopicById(topicId) {
+      const topic = containerTopics.find(t => t.id === topicId) || myTopics.find(t => t.id === topicId);
+      if (topic) openTopic(topic);
+    }
+
+    async function openTopic(topic) {
+      activeTopic = topic;
+      renderTopicList();
+      await refreshActiveTopicMessages();
+      try {
+        await fetch(`${API_BASE_URL}/topics/${topic.id}/read`, { method: "POST" });
+        await loadFeedbacksData();
+      } catch (error) { /* best-effort — the badge just stays stale until the next poll */ }
+    }
+
+    function backToTopicList() {
+      activeTopic = null;
+      conversationMessages = [];
+      renderTopicList();
+    }
+
+    async function refreshActiveTopicMessages() {
+      if (!activeTopic) return;
+      try {
+        const response = await fetch(`${API_BASE_URL}/feedback?visibility=private&topicId=${encodeURIComponent(activeTopic.id)}`);
+        const json = response.ok ? await response.json() : { data: [] };
+        conversationMessages = json.data || [];
       } catch (error) {
         conversationMessages = [];
-      }
-      renderConversationMessages();
-    }
-
-    // Between server polls, re-derive the open conversation's messages from
-    // the inbox cache already fetched by loadFeedbacksData, so a background
-    // refresh doesn't need a second round trip per open thread.
-    function refreshActiveConversationFromCache() {
-      if (!activeConversation) return;
-      if (activeConversation.type === "user") {
-        conversationMessages = myPrivateFeed.filter(f => f.targetType === "user" &&
-          (f.senderId === activeConversation.id || f.targetId === activeConversation.id));
-      } else if (activeConversation.type === "group") {
-        conversationMessages = myPrivateFeed.filter(f => f.targetType === "group" && f.targetId === activeConversation.id);
-      } else if (activeConversation.type === "org") {
-        conversationMessages = getMyOrgThreadRows();
       }
       renderConversationMessages();
     }
@@ -3225,23 +3419,63 @@
       `;
     }
 
-    function renderConversationMessages() {
+    function topicListItemHtml(topic) {
+      return `
+        <button type="button" class="feedbacks-list-item${activeTopic?.id === topic.id ? " active" : ""}" onclick="openTopicById('${topic.id}')">
+          <div class="feedbacks-list-item-icon"><span>💬</span></div>
+          <div class="feedbacks-list-item-body">
+            <div class="feedbacks-list-item-name">${escapeHtml(topic.name)}</div>
+            <div class="feedbacks-list-item-preview">${escapeHtml(topic.lastMessagePreview || "No messages yet")}</div>
+          </div>
+          ${topic.unreadCount ? `<span class="feedbacks-unread-dot">${topic.unreadCount}</span>` : ""}
+        </button>
+      `;
+    }
+
+    // Shows the topic list for the open container — the middle step between
+    // picking who/what (left sidebar) and an actual message thread.
+    function renderTopicList() {
       const header = document.getElementById("feedbacksDetailHeader");
       const scroll = document.getElementById("feedbacksMessagesScroll");
       const composeBar = document.getElementById("feedbacksComposeBar");
       if (!header || !scroll || !composeBar) return;
 
-      if (!activeConversation) {
+      if (!activeContainer) {
         header.hidden = true;
         composeBar.hidden = true;
-        scroll.innerHTML = `<div class="feedbacks-empty-state" id="feedbacksEmptyState">Select Organization, a group, or an employee to start a private conversation.</div>`;
+        scroll.innerHTML = `<div class="feedbacks-empty-state">Select Organization, a group, or an employee to see its topics.</div>`;
         return;
       }
+      if (activeTopic) { renderConversationMessages(); return; }
 
       header.hidden = false;
-      const addMemberBtn = activeConversation.type === "group"
+      const addMemberBtn = activeContainer.type === "group"
         ? `<button type="button" class="feedbacks-new-group-btn" onclick="addMemberToActiveGroup()">+ Add member</button>` : "";
-      header.innerHTML = `<div class="feedbacks-detail-title">${escapeHtml(activeConversation.name)}</div>${addMemberBtn}`;
+      header.innerHTML = `<div class="feedbacks-detail-title">${escapeHtml(activeContainer.name)}</div>${addMemberBtn}`;
+
+      composeBar.hidden = true;
+      const query = topicSearchQuery.toLowerCase().trim();
+      const filtered = query ? containerTopics.filter(t => t.name.toLowerCase().includes(query)) : containerTopics;
+      scroll.innerHTML = `
+        <div class="topic-list-toolbar">
+          <input type="text" class="topic-search-input" placeholder="Search topics..." value="${escapeHtml(topicSearchQuery)}" oninput="handleTopicSearch(this.value)" />
+          <button type="button" class="feedbacks-new-group-btn" onclick="createTopicPrompt()">+ New topic</button>
+        </div>
+        ${filtered.length ? filtered.map(topicListItemHtml).join("") : '<div class="feedbacks-empty-state">No topics yet — start one.</div>'}
+      `;
+    }
+
+    function renderConversationMessages() {
+      const header = document.getElementById("feedbacksDetailHeader");
+      const scroll = document.getElementById("feedbacksMessagesScroll");
+      const composeBar = document.getElementById("feedbacksComposeBar");
+      if (!header || !scroll || !composeBar || !activeTopic) return;
+
+      header.hidden = false;
+      header.innerHTML = `
+        <button type="button" class="topic-back-btn" onclick="backToTopicList()" title="Back to topics">&larr;</button>
+        <div class="feedbacks-detail-title">${escapeHtml(activeTopic.name)}</div>
+      `;
 
       composeBar.hidden = false;
       const sorted = [...conversationMessages].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
@@ -3260,22 +3494,25 @@
 
     async function sendFeedbacksMessage() {
       const input = document.getElementById("feedbacksComposeInput");
-      if (!input || !activeConversation) return;
+      if (!input || !activeTopic) return;
       const content = input.value.trim();
       if (!content) return;
-      const body = { visibility: "private", targetType: activeConversation.type, content };
-      if (activeConversation.type !== "org") body.targetId = activeConversation.id;
       try {
         const response = await fetch(`${API_BASE_URL}/feedback`, {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ visibility: "private", topicId: activeTopic.id, content })
         });
         if (!response.ok) throw new Error("Send failed");
         input.value = "";
+        await refreshActiveTopicMessages();
         await loadFeedbacksData();
-        await refreshActiveConversationFromServer();
       } catch (error) {
         showToast("Could not send that message. Please try again.");
       }
+    }
+
+    function handleLogout() {
+      fetch(`${API_BASE_URL}/logout`, { method: "POST" }).finally(() => { window.location.href = "/"; });
     }
 
     /* Permission Check Helpers */
