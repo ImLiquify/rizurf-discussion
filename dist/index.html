@@ -1922,6 +1922,46 @@
       align-items: flex-end;
       padding: 14px 20px;
       border-top: 1px solid var(--border-color);
+      position: relative;
+    }
+
+    /* @mention autocomplete — pops up above the compose box while typing
+       "@" followed by the start of someone's name. */
+    .mention-dropdown {
+      position: absolute;
+      bottom: 100%;
+      left: 20px;
+      right: 20px;
+      margin-bottom: 6px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-lg);
+      max-height: 220px;
+      overflow-y: auto;
+      z-index: 20;
+    }
+    .mention-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 8px 12px;
+      text-align: left;
+      font-size: 0.86rem;
+      color: var(--text-main);
+    }
+    .mention-dropdown-item img {
+      width: 22px; height: 22px; border-radius: 50%; object-fit: cover; flex-shrink: 0;
+    }
+    .mention-dropdown-item:hover, .mention-dropdown-item.highlighted { background: var(--bg-subtle); }
+
+    .chat-mention {
+      color: var(--accent-cyan-hover);
+      font-weight: 700;
+      background: var(--accent-cyan-light);
+      padding: 0 3px;
+      border-radius: 4px;
     }
 
     .feedbacks-compose-input {
@@ -2801,8 +2841,9 @@
             </div>
           </div>
           <div class="feedbacks-compose-bar" id="feedbacksComposeBar" hidden>
+            <div class="mention-dropdown" id="mentionDropdown" hidden></div>
             <textarea id="feedbacksComposeInput" class="feedbacks-compose-input"
-              placeholder="Write a message..." onkeydown="handleFeedbacksComposeKeydown(event)"></textarea>
+              placeholder="Write a message... (@ to mention someone)" onkeydown="handleFeedbacksComposeKeydown(event)" oninput="handleComposeInput(this)"></textarea>
             <button class="btn-submit-feedback" onclick="sendFeedbacksMessage()">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                 stroke-linecap="round" stroke-linejoin="round">
@@ -3154,6 +3195,12 @@
     let employeeTilesLoading = true; // Employee Wall grid
     let containerTopicsLoading = false; // topics-in-this-container middle panel
     let conversationLoading = false; // messages in the open topic
+
+    // @mention autocomplete in the message compose box.
+    let mentionActive = false;
+    let mentionMatches = []; // employees currently matching the "@query" being typed
+    let mentionHighlightIndex = 0;
+    let mentionTriggerStart = -1; // index of the "@" in the textarea value
 
     function isPrivilegedViewer() { return currentRoleView === "admin" || currentRoleView === "manager"; }
 
@@ -4154,6 +4201,30 @@
       } catch (error) { /* silent — next tick tries again */ }
     }
 
+    // Highlights "@Full Name" for any real employee (or the current user)
+    // found in the text — matched against live names, not stored as an id,
+    // so no schema change was needed to support it. Everything outside a
+    // recognized mention still goes through escapeHtml, so this can't be
+    // used to smuggle in unescaped HTML via a name that happens to contain
+    // markup-looking characters.
+    function highlightMentionsHtml(content) {
+      const names = [...new Set([...EMPLOYEES, CURRENT_USER].map(e => e.name).filter(Boolean))]
+        .sort((a, b) => b.length - a.length); // longest first, so "Bob Test" wins over a shorter "Bob"
+      if (!names.length) return escapeHtml(content);
+      const pattern = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+      const mentionRe = new RegExp(`@(${pattern})\\b`, "g");
+      let out = "";
+      let lastIndex = 0;
+      let match;
+      while ((match = mentionRe.exec(content))) {
+        out += escapeHtml(content.slice(lastIndex, match.index));
+        out += `<span class="chat-mention">@${escapeHtml(match[1])}</span>`;
+        lastIndex = match.index + match[0].length;
+      }
+      out += escapeHtml(content.slice(lastIndex));
+      return out;
+    }
+
     function chatMessageBubbleHtml(message) {
       const mine = message.senderId === CURRENT_USER.id;
       const statusHtml = message.pending
@@ -4165,7 +4236,7 @@
             <span class="chat-message-sender" style="color:${senderColorFor(message.senderId)}">${escapeHtml(message.senderName)}</span>
             ${statusHtml}
           </div>
-          <div class="chat-message-text">${escapeHtml(message.content)}</div>
+          <div class="chat-message-text">${highlightMentionsHtml(message.content)}</div>
         </div>
       `;
     }
@@ -4290,7 +4361,90 @@
       if (shouldStickToBottom) scroll.scrollTop = scroll.scrollHeight;
     }
 
+    // Looks backward from the cursor for an "@" that starts the current word
+    // (start of the text, or right after whitespace) with no space typed
+    // since — that's an in-progress mention. Anything else (an email-looking
+    // "name@domain", a stray "@" with a space after it) is left alone.
+    function handleComposeInput(textarea) {
+      const cursor = textarea.selectionStart;
+      const beforeCursor = textarea.value.slice(0, cursor);
+      const match = /(?:^|\s)@([A-Za-z0-9._-]*)$/.exec(beforeCursor);
+      if (!match) { closeMentionDropdown(); return; }
+      const query = match[1].toLowerCase();
+      mentionTriggerStart = cursor - match[1].length - 1;
+      mentionMatches = EMPLOYEES
+        .filter(e => e.id !== CURRENT_USER.id && e.name.toLowerCase().includes(query))
+        .slice(0, 6);
+      mentionHighlightIndex = 0;
+      mentionActive = mentionMatches.length > 0;
+      renderMentionDropdown();
+    }
+
+    function renderMentionDropdown() {
+      const dropdown = document.getElementById("mentionDropdown");
+      if (!dropdown) return;
+      if (!mentionActive) { dropdown.hidden = true; dropdown.innerHTML = ""; return; }
+      dropdown.hidden = false;
+      dropdown.innerHTML = mentionMatches.map((e, index) => `
+        <button type="button" class="mention-dropdown-item${index === mentionHighlightIndex ? " highlighted" : ""}"
+          onmousedown="event.preventDefault(); insertMention(${index})">
+          <img src="${escapeHtml(avatarSrc(e.avatar))}" alt="" />
+          <span>${escapeHtml(e.name)}</span>
+        </button>
+      `).join("");
+    }
+
+    function closeMentionDropdown() {
+      mentionActive = false;
+      mentionMatches = [];
+      mentionTriggerStart = -1;
+      renderMentionDropdown();
+    }
+
+    // Replaces the in-progress "@query" with the picked person's full name
+    // (plain text — no id is stored, so rendering re-matches it against the
+    // live employee list; see chatMessageBubbleHtml) and puts the cursor
+    // right after the inserted mention.
+    function insertMention(index) {
+      const employee = mentionMatches[index];
+      const input = document.getElementById("feedbacksComposeInput");
+      if (!employee || !input || mentionTriggerStart < 0) return;
+      const cursor = input.selectionStart;
+      const before = input.value.slice(0, mentionTriggerStart);
+      const after = input.value.slice(cursor);
+      const mentionText = `@${employee.name} `;
+      input.value = before + mentionText + after;
+      const newCursor = before.length + mentionText.length;
+      input.focus();
+      input.setSelectionRange(newCursor, newCursor);
+      closeMentionDropdown();
+    }
+
     function handleFeedbacksComposeKeydown(event) {
+      if (mentionActive) {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          mentionHighlightIndex = (mentionHighlightIndex + 1) % mentionMatches.length;
+          renderMentionDropdown();
+          return;
+        }
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          mentionHighlightIndex = (mentionHighlightIndex - 1 + mentionMatches.length) % mentionMatches.length;
+          renderMentionDropdown();
+          return;
+        }
+        if (event.key === "Enter" || event.key === "Tab") {
+          event.preventDefault();
+          insertMention(mentionHighlightIndex);
+          return;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeMentionDropdown();
+          return;
+        }
+      }
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
         sendFeedbacksMessage();
@@ -4307,6 +4461,7 @@
       const content = input.value.trim();
       if (!content) return;
       input.value = "";
+      closeMentionDropdown();
 
       // Capture which topic this send belongs to — activeTopic/conversationMessages/
       // the compose box are all single shared globals that can point at a
@@ -5037,15 +5192,15 @@
       const targetId = activeModalTargetId;
       const buckets = { given: new Map(), received: new Map() };
       oversightRows.forEach(row => {
-        // "Given" = a message this employee actually sent; "Received" = one
-        // sent to them by someone else. Matches the simple sender/target
-        // definition the Employee Wall tile itself uses (GET
-        // /api/feedback/counts) — this used to bucket by who created the
-        // TOPIC instead, which disagreed with the tile for anyone who
-        // mostly replies inside a conversation someone else started (every
-        // reply they posted there landed in "received" even though they
-        // sent it), and looked like the tile count was simply wrong.
-        const bucketKey = row.senderId === targetId ? "given" : "received";
+        // The topic is the feedback; every message inside it is that one
+        // piece of feedback's detail/comments, not a separate feedback of
+        // its own. So the bucket is decided once, by who created the
+        // topic — not per message — matching the Employee Wall tile's own
+        // topic-based count (GET /api/feedback/counts): whoever opened a
+        // topic "gave" it, the other side (for a DM) "received" it, and
+        // every message in it — from either side — stays grouped under
+        // that same topic underneath.
+        const bucketKey = row.topicCreatedBy === targetId ? "given" : "received";
         let label, counterpartId, iconType;
         if (row.targetType === "org") {
           label = "Organization"; counterpartId = null; iconType = "org";

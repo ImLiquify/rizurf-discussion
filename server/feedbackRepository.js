@@ -282,12 +282,31 @@ export async function listFeedback({ targetId, senderId, participantId, groupMem
 // the group/sentinel, not a person, so a broadcast message doesn't count as
 // "received by" any one individual, same as a public 'company' post
 // already didn't. One aggregate query, not one per employee.
+// A private conversation is counted per TOPIC, not per message — the topic
+// is the feedback; the messages inside it are its comments/details. Whoever
+// created a DM/group/org topic "gave" that one piece of feedback, no matter
+// how many messages follow (a 40-message back-and-forth still counts once),
+// and the other side of a DM "received" it. This used to count every
+// individual message row instead: someone who mostly replies inside
+// conversations other people started could rack up a large "given" number
+// from replies alone, while a topic's own creator got no extra credit for
+// starting it — the opposite of what "given/received" is supposed to mean.
+// Group/org topics have no single recipient (many members, or the whole
+// company), so they only ever count toward the creator's "given" — crediting
+// them to some individual's "received" was the specific bug behind an org
+// message showing up as something a person had "received". The public wall
+// has no topic concept (every post already stands on its own), so it stays
+// message-based, unchanged.
 export async function getFeedbackCounts() {
   const [rows] = await pool.query(`
-    SELECT id, kind, COUNT(*) AS count FROM (
-      SELECT sender_id AS id, 'given' AS kind FROM feedback
+    SELECT id, kind, SUM(count) AS count FROM (
+      SELECT sender_id AS id, 'given' AS kind, COUNT(*) AS count FROM feedback WHERE visibility = 'public' GROUP BY sender_id
       UNION ALL
-      SELECT target_id AS id, 'received' AS kind FROM feedback
+      SELECT target_id AS id, 'received' AS kind, COUNT(*) AS count FROM feedback WHERE visibility = 'public' GROUP BY target_id
+      UNION ALL
+      SELECT created_by AS id, 'given' AS kind, COUNT(*) AS count FROM topics GROUP BY created_by
+      UNION ALL
+      SELECT target_id AS id, 'received' AS kind, COUNT(*) AS count FROM topics WHERE target_type = 'user' GROUP BY target_id
     ) counted
     GROUP BY id, kind
   `);
