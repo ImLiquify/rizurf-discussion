@@ -40,10 +40,32 @@ async function columnsOf(table) {
   return new Set(rows.map(row => row.COLUMN_NAME));
 }
 
-async function addMissingColumns(table, wanted, existing) {
-  for (const [column, definition] of wanted) {
-    if (!existing.has(column)) await pool.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-  }
+// One round trip for every table's columns instead of one query per table.
+// Safe to include a table that doesn't exist yet (e.g. feedback_groups on a
+// fresh install) — information_schema just returns no rows for it, so the
+// caller's Set comes back empty and addMissingColumns below still adds
+// every wanted column once CREATE TABLE IF NOT EXISTS has run.
+//
+// This matters more than it looks: on Vercel the pool is capped at a single
+// connection (see below), so Promise.all across these queries would NOT run
+// them concurrently in production — they'd still queue one at a time on
+// that one connection. The only real way to cut cold-start latency here is
+// fewer round trips outright, not parallelizing them.
+async function columnsOfTables(tables) {
+  const [rows] = await pool.query(
+    'SELECT TABLE_NAME, COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (?)',
+    [tables]
+  );
+  const byTable = new Map(tables.map(table => [table, new Set()]));
+  for (const row of rows) byTable.get(row.TABLE_NAME)?.add(row.COLUMN_NAME);
+  return byTable;
+}
+
+function addMissingColumns(table, wanted, existing) {
+  const clauses = wanted.filter(([column]) => !existing.has(column)).map(([column, definition]) => `ADD COLUMN ${column} ${definition}`);
+  // One ALTER TABLE with every needed column, not one ALTER per column —
+  // matters on a fresh install or after skipping several versions at once.
+  return clauses.length ? pool.query(`ALTER TABLE ${table} ${clauses.join(', ')}`) : Promise.resolve();
 }
 
 export async function ensureSchemaCompatibility() {
@@ -51,6 +73,8 @@ export async function ensureSchemaCompatibility() {
   // schema.sql. `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` is MariaDB / MySQL
   // 8.0.29+ only — the VPS runs MySQL 5.7 — so check information_schema and
   // add just the missing columns.
+  const columns = await columnsOfTables(['users', 'reactions', 'feedback', 'feedback_groups']);
+
   await addMissingColumns('users', [
     ['external_id', 'VARCHAR(120) NULL UNIQUE'],
     ['email', 'VARCHAR(255) NULL'],
@@ -63,13 +87,13 @@ export async function ensureSchemaCompatibility() {
     // from `role_title`, which holds a job title (e.g. "Intern") for
     // intern-directory-sourced rows and must not be used for access control.
     ['permission_role', "VARCHAR(20) NOT NULL DEFAULT 'user'"]
-  ], await columnsOf('users'));
+  ], columns.get('users'));
 
   // `reactions` originally keyed on (user_id, feedback_id, reaction) — feedback
   // only. Add `comment_id` ('' = a reaction on the feedback itself, otherwise
   // the comment id) and widen the primary key so a comment can carry its own
   // reactions. NOT NULL DEFAULT '' because a primary-key column cannot be NULL.
-  const reactionColumns = await columnsOf('reactions');
+  const reactionColumns = columns.get('reactions');
   if (reactionColumns.size && !reactionColumns.has('comment_id')) {
     await pool.query("ALTER TABLE reactions ADD COLUMN comment_id VARCHAR(60) NOT NULL DEFAULT ''");
     await pool.query('ALTER TABLE reactions DROP PRIMARY KEY, ADD PRIMARY KEY (user_id, feedback_id, comment_id, reaction)');
@@ -82,11 +106,16 @@ export async function ensureSchemaCompatibility() {
   // path for free via its default; `target_type` says how to interpret
   // `target_id` ('user' id, the existing 'company' sentinel, a
   // `feedback_groups` id, or 'org' for a private per-employee thread with
-  // admins/managers, keyed by that employee's own user id).
+  // admins/managers, keyed by that employee's own user id). `topic_id` has
+  // no FK to `topics` (added further below) — it's never enforced, so there
+  // is no ordering requirement forcing it to wait until after that table
+  // exists, and checking it here saves a second round trip back to
+  // information_schema for the same `feedback` table.
   await addMissingColumns('feedback', [
     ['visibility', "VARCHAR(10) NOT NULL DEFAULT 'public'"],
-    ['target_type', "VARCHAR(10) NOT NULL DEFAULT 'user'"]
-  ], await columnsOf('feedback'));
+    ['target_type', "VARCHAR(10) NOT NULL DEFAULT 'user'"],
+    ['topic_id', 'VARCHAR(60) NULL']
+  ], columns.get('feedback'));
 
   // Project groups. Named `feedback_groups`, not `groups` — GROUPS is a
   // reserved word in current MySQL/MariaDB (window-frame syntax) and an
@@ -122,7 +151,7 @@ export async function ensureSchemaCompatibility() {
   await addMissingColumns('feedback_groups', [
     ['parent_group_id', 'VARCHAR(50) NULL'],
     ['avatar', 'VARCHAR(500) NULL']
-  ], await columnsOf('feedback_groups'));
+  ], columns.get('feedback_groups'));
 
   // Topics: every private conversation (a DM, a group, or an employee's
   // Organization thread) is topic-based — multiple named topics can run
@@ -141,13 +170,6 @@ export async function ensureSchemaCompatibility() {
     KEY idx_topics_target (target_type, target_id),
     CONSTRAINT fk_topics_created_by FOREIGN KEY (created_by) REFERENCES users (id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
-
-  // Every private message now belongs to a topic. NULL only for rows
-  // written before topics existed — backfilled into a "General" topic per
-  // container just below, so nothing already sent becomes unreachable.
-  await addMissingColumns('feedback', [
-    ['topic_id', 'VARCHAR(60) NULL']
-  ], await columnsOf('feedback'));
 
   // Read markers, per topic per user — the basis for unread counts (the
   // Feedbacks nav badge and the per-conversation indicators). Absence of a

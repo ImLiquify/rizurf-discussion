@@ -60,7 +60,7 @@ const openapi = {
     '/api/interns': { get: operation('Synchronize and list intern profiles.', 'intern:read', discovery('List Interns', 'Refresh and read profiles from the intern service.', ['limit', 'offset'], ['data', 'synced'], ['GET /api/employees'])) },
     '/api/me': { get: operation('Read the signed-in caller profile.', 'feedback:read', discovery('Read My Profile', 'Read the local account of the person signed in to this microapp.', [], ['data'], ['GET /api/employees'])) },
     '/api/feedback': {
-      get: operation('List workplace feedback.', 'feedback:read', discovery('List Feedback', 'Read feedback filtered by sender or target.', ['targetId', 'senderId', 'limit', 'offset'], ['data'])),
+      get: operation('List workplace feedback.', 'feedback:read', discovery('List Feedback', 'Read feedback filtered by sender or target.', ['targetId', 'senderId', 'visibility', 'participantId', 'groupMemberId', 'oversightFor', 'topicId', 'mine', 'limit', 'offset'], ['data'])),
       post: operation('Create workplace feedback.', 'feedback:write', discovery('Create Feedback', 'Submit feedback for a participant or the company.', ['senderId', 'targetId', 'targetName', 'content', 'isAnonymous'], ['id'], ['GET /api/feedback']))
     },
     '/api/feedback/{feedbackId}/comments': {
@@ -297,7 +297,7 @@ app.get('/api/feedback', async (request, response, next) => {
     const data = await feedbacks.listFeedback({
       ...page, targetId: request.query.targetId, senderId: request.query.senderId,
       participantId: request.query.participantId, groupMemberId: request.query.groupMemberId,
-      topicId: request.query.topicId, visibility, viewerId,
+      oversightFor: request.query.oversightFor, topicId: request.query.topicId, visibility, viewerId,
       viewerIsPrivileged: mine ? false : isPrivileged
     });
     const ids = data.map(item => item.id);

@@ -3366,12 +3366,32 @@
         .some(el => el.value && el.value.trim());
     }
 
-    async function refreshBackendData() {
+    // Background poll: only re-fetches the public feed (the one thing other
+    // signed-in users can change without this tab knowing). Deliberately
+    // NOT the full loadBackendData() — the gateway's own auth contract
+    // forbids caching the per-request session-liveness check (every fetch
+    // pays a live round trip to it), so each extra endpoint polled here is
+    // a permanent tax on every open tab, every interval, forever. Employees,
+    // private remarks, and the Feedbacks tab's groups/topics change rarely
+    // and are already refreshed on-demand (tab switch, after a mutation) —
+    // they don't need a timer.
+    async function refreshPublicFeed() {
       if (document.visibilityState !== "visible" || editingPostId || editingCommentKey
         || activeModalTargetId || isComposingComment()) return;
 
-      await loadBackendData();
-      renderAll();
+      try {
+        const response = await fetch(`${API_BASE_URL}/feedback`);
+        if (!response.ok) return;
+        const fbJson = await response.json();
+        const list = Array.isArray(fbJson) ? fbJson : (fbJson.data || []);
+        FEEDBACKS.splice(0, FEEDBACKS.length, ...list.map(f => ({
+          ...f,
+          comments: buildCommentTree(f.comments || [])
+        })));
+        renderAll();
+      } catch (error) {
+        console.warn("Public feed refresh error:", error);
+      }
     }
 
     // The backend sends timestamps as UTC ISO strings (e.g. from a MySQL
@@ -3409,7 +3429,7 @@
     window.addEventListener("DOMContentLoaded", async () => {
       await loadBackendData();
       renderAll();
-      window.setInterval(refreshBackendData, 10000);
+      window.setInterval(refreshPublicFeed, 45000);
     });
 
     function renderAll() {
@@ -4786,17 +4806,12 @@
 
       body.innerHTML = `<div class="feedbacks-empty-state">Loading…</div>`;
       try {
-        const [dmResponse, targetResponse, groupResponse] = await Promise.all([
-          fetch(`${API_BASE_URL}/feedback?visibility=private&participantId=${encodeURIComponent(targetId)}`),
-          fetch(`${API_BASE_URL}/feedback?visibility=private&targetId=${encodeURIComponent(targetId)}`),
-          fetch(`${API_BASE_URL}/feedback?visibility=private&groupMemberId=${encodeURIComponent(targetId)}`)
-        ]);
-        const dmJson = dmResponse.ok ? await dmResponse.json() : { data: [] };
-        const targetJson = targetResponse.ok ? await targetResponse.json() : { data: [] };
-        const groupJson = groupResponse.ok ? await groupResponse.json() : { data: [] };
-        const byId = new Map();
-        [...(dmJson.data || []), ...(targetJson.data || []), ...(groupJson.data || [])].forEach(row => byId.set(row.id, row));
-        oversightRows = [...byId.values()];
+        // One request instead of three (DM/org/group used to be fetched
+        // separately) — every request already pays a live, uncachable
+        // gateway session check, so fewer requests is the only lever here.
+        const response = await fetch(`${API_BASE_URL}/feedback?visibility=private&oversightFor=${encodeURIComponent(targetId)}`);
+        const json = response.ok ? await response.json() : { data: [] };
+        oversightRows = json.data || [];
       } catch (error) {
         oversightRows = [];
         body.innerHTML = `<div class="feedbacks-empty-state">Could not load private feedback.</div>`;

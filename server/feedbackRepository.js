@@ -199,7 +199,7 @@ const PRIVATE_ACCESS_SQL = accessSql('f', 'sender_id');
 const privateAccessParams = accessParams;
 const TOPIC_ACCESS_SQL = accessSql('t', 'created_by');
 
-export async function listFeedback({ targetId, senderId, participantId, groupMemberId, topicId, limit, offset, visibility = 'public', viewerId, viewerIsPrivileged }) {
+export async function listFeedback({ targetId, senderId, participantId, groupMemberId, oversightFor, topicId, limit, offset, visibility = 'public', viewerId, viewerIsPrivileged }) {
   const conditions = [];
   const parameters = [];
   if (visibility === 'private') {
@@ -215,6 +215,20 @@ export async function listFeedback({ targetId, senderId, participantId, groupMem
     if (groupMemberId) {
       conditions.push('f.target_type = \'group\' AND f.target_id IN (SELECT group_id FROM group_members WHERE user_id = ?)');
       parameters.push(groupMemberId);
+    }
+    // Employee Wall oversight: every DM, Organization thread, and group
+    // message involving one employee, in a single round trip — the OR of
+    // what participantId + targetId + groupMemberId would each match
+    // separately. Every request already pays a live, uncachable gateway
+    // introspection check (see MICROAPP_AUTH.md §5), so collapsing what used
+    // to be three separate GETs into one cuts that fixed cost by two thirds.
+    if (oversightFor) {
+      conditions.push(`(
+        (f.target_type = 'user' AND (f.sender_id = ? OR f.target_id = ?))
+        OR f.target_id = ?
+        OR (f.target_type = 'group' AND f.target_id IN (SELECT group_id FROM group_members WHERE user_id = ?))
+      )`);
+      parameters.push(oversightFor, oversightFor, oversightFor, oversightFor);
     }
     if (topicId) { conditions.push('f.topic_id = ?'); parameters.push(topicId); }
   } else {
