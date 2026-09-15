@@ -63,19 +63,27 @@ const openapi = {
       get: operation('List workplace feedback.', 'feedback:read', discovery('List Feedback', 'Read feedback filtered by sender or target.', ['targetId', 'senderId', 'visibility', 'participantId', 'groupMemberId', 'oversightFor', 'topicId', 'mine', 'limit', 'offset'], ['data'])),
       post: operation('Create workplace feedback.', 'feedback:write', discovery('Create Feedback', 'Submit feedback for a participant or the company.', ['senderId', 'targetId', 'targetName', 'content', 'isAnonymous'], ['id'], ['GET /api/feedback']))
     },
+    '/api/feedback/{feedbackId}': {
+      patch: operation('Edit a feedback item.', 'feedback:write', discovery('Edit Feedback', 'Update the text of a feedback item; the author, an admin, or a manager only.', ['feedbackId', 'content'], ['id'], ['GET /api/feedback'])),
+      delete: operation('Delete a feedback item.', 'feedback:write', discovery('Delete Feedback', 'Remove a feedback item; the author, an admin, or a manager only.', ['feedbackId'], []))
+    },
     '/api/feedback/{feedbackId}/comments': {
       get: operation('List comments on feedback.', 'feedback:read', discovery('List Comments', 'Read a feedback item discussion thread.', ['feedbackId', 'limit', 'offset'], ['data'], ['GET /api/feedback'])),
       post: operation('Create a feedback comment.', 'feedback:write', discovery('Create Comment', 'Add a comment or reply to feedback.', ['feedbackId', 'senderId', 'parentId', 'text', 'isAnonymous'], ['id'], ['GET /api/feedback/{feedbackId}/comments']))
+    },
+    '/api/feedback/{feedbackId}/comments/{commentId}': {
+      patch: operation('Edit a comment.', 'feedback:write', discovery('Edit Comment', 'Update the text of a comment or reply; the author, an admin, or a manager only.', ['feedbackId', 'commentId', 'text'], ['id'], ['GET /api/feedback/{feedbackId}/comments'])),
+      delete: operation('Delete a comment.', 'feedback:write', discovery('Delete Comment', 'Remove a comment or reply, and any replies nested under it; the author, an admin, or a manager only.', ['feedbackId', 'commentId'], []))
     },
     '/api/feedback/{feedbackId}/reactions': {
       post: operation('Toggle an emoji reaction.', 'feedback:write', discovery('Toggle Reaction', 'Add or remove one emoji reaction on a feedback item or a comment.', ['feedbackId', 'reaction', 'commentId'], ['reacted'], ['GET /api/feedback']))
     },
     '/api/private-remarks': {
-      get: operation('List a caller-owned private remarks.', 'remark:read', discovery('List Private Remarks', 'Read private follow-up notes by author.', ['authorId', 'limit', 'offset'], ['data'])),
-      post: operation('Create a private remark.', 'remark:write', discovery('Create Private Remark', 'Save a private follow-up note.', ['authorId', 'targetId', 'content'], ['id'], ['GET /api/private-remarks']))
+      get: operation('List the caller\'s own private remarks.', 'remark:read', discovery('List Private Remarks', 'Read the signed-in caller\'s own private follow-up notes.', ['limit', 'offset'], ['data'])),
+      post: operation('Create a private remark.', 'remark:write', discovery('Create Private Remark', 'Save a private follow-up note as the signed-in caller.', ['targetId', 'content'], ['id'], ['GET /api/private-remarks']))
     },
     '/api/private-remarks/{remarkId}': {
-      delete: operation('Delete a private remark.', 'remark:write', discovery('Delete Private Remark', 'Remove one caller-owned private note.', ['remarkId', 'authorId'], [], ['GET /api/private-remarks']))
+      delete: operation('Delete a private remark.', 'remark:write', discovery('Delete Private Remark', 'Remove one of the signed-in caller\'s own private notes.', ['remarkId'], [], ['GET /api/private-remarks']))
     },
     '/api/groups': {
       get: operation('List project groups.', 'feedback:read', discovery('List Groups', 'Read project groups, optionally restricted to the caller\'s own.', ['mine', 'limit', 'offset'], ['data'])),
@@ -107,8 +115,10 @@ const openapi = {
 
 function routeKey(pathname) {
   if (openapi.paths[pathname]) return pathname;
+  if (/^\/api\/feedback\/[^/]+\/comments\/[^/]+$/.test(pathname)) return '/api/feedback/{feedbackId}/comments/{commentId}';
   if (/^\/api\/feedback\/[^/]+\/comments$/.test(pathname)) return '/api/feedback/{feedbackId}/comments';
   if (/^\/api\/feedback\/[^/]+\/reactions$/.test(pathname)) return '/api/feedback/{feedbackId}/reactions';
+  if (/^\/api\/feedback\/[^/]+$/.test(pathname)) return '/api/feedback/{feedbackId}';
   if (/^\/api\/private-remarks\/[^/]+$/.test(pathname)) return '/api/private-remarks/{remarkId}';
   if (/^\/api\/groups\/[^/]+\/members\/[^/]+$/.test(pathname)) return '/api/groups/{groupId}/members/{userId}';
   if (/^\/api\/groups\/[^/]+\/members$/.test(pathname)) return '/api/groups/{groupId}/members';
@@ -208,7 +218,13 @@ app.use((request, response, next) => {
   response.setHeader('x-correlation-id', request.correlationId);
   next();
 });
-app.use(cors({ origin: process.env.CLIENT_ORIGIN || false, credentials: true, preflightContinue: true }));
+// preflightContinue must stay unset (false): with it true, the cors
+// middleware only sets headers on an OPTIONS preflight and calls next()
+// instead of answering it — nothing downstream ever handles OPTIONS (the
+// scope-check middleware below returns 405 for a route it recognizes, or
+// falls through to the 404 handler for one it doesn't), so a real
+// cross-origin caller's preflight always failed once CLIENT_ORIGIN was set.
+app.use(cors({ origin: process.env.CLIENT_ORIGIN || false, credentials: true }));
 app.use(express.json({ limit: '100kb' }));
 
 // The OpenAPI document is the single source of truth for both declared and enforced scopes.
@@ -345,9 +361,53 @@ app.get('/api/feedback', async (request, response, next) => {
 app.post('/api/feedback', async (request, response, next) => {
   const body = request.body || {};
   if (body.visibility === 'private') return createPrivateFeedback(request, response, next);
-  const { senderId, targetId, targetName, content, isAnonymous = false } = body;
+  const auth = request.auth || {};
+  let senderId = body.senderId;
+  // A first-party session is a browser signed in as one specific person —
+  // never trust a body-supplied senderId there, or any signed-in employee
+  // could post public feedback under a coworker's (or an admin's) name. A
+  // bearer access token (a genuine service-to-service caller, e.g. another
+  // Rizurf service posting feedback on behalf of a local user id it already
+  // knows) keeps the documented senderId input, since it has no session
+  // identity of its own to derive one from.
+  if (auth.token_use === 'session') {
+    if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+    senderId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+  }
+  const { targetId, targetName, content, isAnonymous = false } = body;
   if (![senderId, targetId, targetName, content].every(validText)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'senderId, targetId, targetName, and content are required.', { fields: ['senderId', 'targetId', 'targetName', 'content'] });
   try { return sendJson(response, 201, await feedbacks.createFeedback({ id: `fb_${crypto.randomUUID()}`, senderId, targetId, targetName, content: content.trim(), isAnonymous: Boolean(isAnonymous) })); } catch (error) { return next(error); }
+});
+app.patch('/api/feedback/:feedbackId', async (request, response, next) => {
+  const auth = request.auth || {};
+  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+  const { content } = request.body || {};
+  if (!validText(content)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'content is required.', { fields: ['content'] });
+  try {
+    const meta = await loadAccessibleFeedback(request, response, request.params.feedbackId);
+    if (!meta) return;
+    const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+    const callerUser = await feedbacks.getUserById(callerId);
+    if (meta.senderId !== callerId && !isPrivilegedRole(callerUser?.permissionRole)) {
+      return sendError(response, request, 403, 'FORBIDDEN', 'Only the author, an admin, or a manager can edit this.');
+    }
+    return sendJson(response, 200, await feedbacks.updateFeedbackContent({ id: request.params.feedbackId, content: content.trim() }));
+  } catch (error) { return next(error); }
+});
+app.delete('/api/feedback/:feedbackId', async (request, response, next) => {
+  const auth = request.auth || {};
+  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+  try {
+    const meta = await loadAccessibleFeedback(request, response, request.params.feedbackId);
+    if (!meta) return;
+    const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+    const callerUser = await feedbacks.getUserById(callerId);
+    if (meta.senderId !== callerId && !isPrivilegedRole(callerUser?.permissionRole)) {
+      return sendError(response, request, 403, 'FORBIDDEN', 'Only the author, an admin, or a manager can delete this.');
+    }
+    await feedbacks.deleteFeedback(request.params.feedbackId);
+    return response.status(204).end();
+  } catch (error) { return next(error); }
 });
 
 // Private feedback (DM / group / Organization) — always sent into a topic.
@@ -424,19 +484,64 @@ app.post('/api/feedback/:feedbackId/comments', async (request, response, next) =
   try {
     const meta = await loadAccessibleFeedback(request, response, request.params.feedbackId);
     if (!meta) return;
+    // A parentId must actually be a comment on THIS feedback item, or a
+    // reply could be planted onto an unrelated (and possibly private)
+    // thread the poster otherwise has no relationship to.
+    if (parentId && !await feedbacks.commentExists(parentId, request.params.feedbackId)) {
+      return sendError(response, request, 422, 'VALIDATION_ERROR', 'parentId must be an existing comment on this feedback item.', { fields: ['parentId'] });
+    }
     let senderId; let isAnonymous;
+    const auth = request.auth || {};
     if (meta.visibility === 'private') {
       // A reply in a private thread: sender and anonymity are never taken
       // from the client, same reasoning as createPrivateFeedback above.
-      const auth = request.auth || {};
       senderId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
       isAnonymous = false;
+    } else if (auth.token_use === 'session') {
+      // Same reasoning as POST /api/feedback: a browser session's own
+      // identity is never optional, even on the public wall.
+      if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+      senderId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+      isAnonymous = Boolean(request.body?.isAnonymous);
     } else {
       senderId = request.body?.senderId;
       if (!validText(senderId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'senderId is required.', { fields: ['senderId'] });
       isAnonymous = Boolean(request.body?.isAnonymous);
     }
     return sendJson(response, 201, await feedbacks.createComment({ id: `cm_${crypto.randomUUID()}`, feedbackId: request.params.feedbackId, parentId, senderId, text: text.trim(), isAnonymous }));
+  } catch (error) { return next(error); }
+});
+app.patch('/api/feedback/:feedbackId/comments/:commentId', async (request, response, next) => {
+  const auth = request.auth || {};
+  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+  const { text } = request.body || {};
+  if (!validText(text)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'text is required.', { fields: ['text'] });
+  try {
+    if (!await loadAccessibleFeedback(request, response, request.params.feedbackId)) return;
+    const comment = await feedbacks.getCommentMeta(request.params.commentId, request.params.feedbackId);
+    if (!comment) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No comment with that id on this feedback.');
+    const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+    const callerUser = await feedbacks.getUserById(callerId);
+    if (comment.senderId !== callerId && !isPrivilegedRole(callerUser?.permissionRole)) {
+      return sendError(response, request, 403, 'FORBIDDEN', 'Only the author, an admin, or a manager can edit this.');
+    }
+    return sendJson(response, 200, await feedbacks.updateCommentContent({ id: request.params.commentId, content: text.trim() }));
+  } catch (error) { return next(error); }
+});
+app.delete('/api/feedback/:feedbackId/comments/:commentId', async (request, response, next) => {
+  const auth = request.auth || {};
+  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+  try {
+    if (!await loadAccessibleFeedback(request, response, request.params.feedbackId)) return;
+    const comment = await feedbacks.getCommentMeta(request.params.commentId, request.params.feedbackId);
+    if (!comment) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No comment with that id on this feedback.');
+    const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+    const callerUser = await feedbacks.getUserById(callerId);
+    if (comment.senderId !== callerId && !isPrivilegedRole(callerUser?.permissionRole)) {
+      return sendError(response, request, 403, 'FORBIDDEN', 'Only the author, an admin, or a manager can delete this.');
+    }
+    await feedbacks.deleteCommentById(request.params.commentId);
+    return response.status(204).end();
   } catch (error) { return next(error); }
 });
 const ALLOWED_REACTIONS = new Set(['❤️', '👏', '💡', '🙌']);
@@ -453,20 +558,39 @@ app.post('/api/feedback/:feedbackId/reactions', async (request, response, next) 
     return sendJson(response, 200, await feedbacks.toggleReaction({ userId, feedbackId, commentId: commentId || '', reaction }));
   } catch (error) { return next(error); }
 });
+// A private remark is a caller-owned note — authorId must always be the
+// caller's own resolved identity, never a client-supplied filter/target. It
+// used to be trusted straight from the query string/body, which let any
+// signed-in employee read, plant, or delete anyone else's private remarks
+// just by passing a different id (the same identity-spoofing risk
+// createPrivateFeedback already guards against for private messages).
 app.get('/api/private-remarks', async (request, response, next) => {
   const page = pagination(request, response); if (!page) return;
-  if (!validText(request.query.authorId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'authorId is required.', { fields: ['authorId'] });
-  try { return sendJson(response, 200, { data: await feedbacks.listPrivateRemarks({ authorId: request.query.authorId, ...page }), ...page }); } catch (error) { return next(error); }
+  const auth = request.auth || {};
+  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+  try {
+    const authorId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+    return sendJson(response, 200, { data: await feedbacks.listPrivateRemarks({ authorId, ...page }), ...page });
+  } catch (error) { return next(error); }
 });
 app.post('/api/private-remarks', async (request, response, next) => {
-  const { authorId, targetId, content } = request.body || {};
-  if (![authorId, targetId, content].every(validText)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'authorId, targetId, and content are required.', { fields: ['authorId', 'targetId', 'content'] });
-  try { return sendJson(response, 201, await feedbacks.createPrivateRemark({ id: `remark_${crypto.randomUUID()}`, authorId, targetId, content: content.trim() })); } catch (error) { return next(error); }
+  const auth = request.auth || {};
+  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+  const { targetId, content } = request.body || {};
+  if (![targetId, content].every(validText)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'targetId and content are required.', { fields: ['targetId', 'content'] });
+  try {
+    const authorId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+    return sendJson(response, 201, await feedbacks.createPrivateRemark({ id: `remark_${crypto.randomUUID()}`, authorId, targetId, content: content.trim() }));
+  } catch (error) { return next(error); }
 });
 app.delete('/api/private-remarks/:remarkId', async (request, response, next) => {
-  if (!validText(request.query.authorId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'authorId is required.', { fields: ['authorId'] });
-  try { if (!await feedbacks.deletePrivateRemark({ id: request.params.remarkId, authorId: request.query.authorId })) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No private remark with that id.');
-    return response.status(204).end(); } catch (error) { return next(error); }
+  const auth = request.auth || {};
+  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+  try {
+    const authorId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+    if (!await feedbacks.deletePrivateRemark({ id: request.params.remarkId, authorId })) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No private remark with that id.');
+    return response.status(204).end();
+  } catch (error) { return next(error); }
 });
 
 app.get('/api/groups', async (request, response, next) => {

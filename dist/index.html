@@ -3372,13 +3372,16 @@
     // comment thread and discards whatever is half-typed in it. Hold the
     // refresh while the user is composing a comment or reply.
     function isComposingComment() {
+      // Only the public Wall's own comment/reply inputs belong here —
+      // "feedbacksComposeInput" is the unrelated Feedbacks-tab private
+      // chat box, on a completely different tab. Including it used to hold
+      // the Wall's public-feed poll (refreshPublicFeed) hostage to whatever
+      // was sitting, untouched, in a private-message draft.
       const active = document.activeElement;
       if (active && typeof active.id === "string" &&
-        (active.id.startsWith("comment_input_") || active.id.startsWith("reply_input_") || active.id === "feedbacksComposeInput")) {
+        (active.id.startsWith("comment_input_") || active.id.startsWith("reply_input_"))) {
         return true;
       }
-      const composeInput = document.getElementById("feedbacksComposeInput");
-      if (composeInput && composeInput.value.trim()) return true;
       return [...document.querySelectorAll('[id^="comment_input_"], [id^="reply_input_"]')]
         .some(el => el.value && el.value.trim());
     }
@@ -4002,6 +4005,12 @@
         await fetch(`${API_BASE_URL}/topics/${topic.id}/read`, { method: "POST" });
         const topicInList = myTopics.find(t => t.id === topic.id);
         if (topicInList) topicInList.unreadCount = 0;
+        // Also clear it in the container's own topic list (a separate array
+        // fetched from a different endpoint) — otherwise its unread dot
+        // stays stale until refreshContainerTopics() runs again, even
+        // though the top-level nav badge above already updated.
+        const containerEntry = containerTopics.find(t => t.id === topic.id);
+        if (containerEntry) containerEntry.unreadCount = 0;
         updateFeedbacksUnreadBadge();
       } catch (error) { /* best-effort — the badge just stays stale until the next poll */ }
     }
@@ -4022,7 +4031,7 @@
       } catch (error) {
         conversationMessages = [];
       }
-      renderConversationMessages();
+      renderConversationMessages(true);
     }
 
     // Near-real-time delivery for an open conversation: while it's actually
@@ -4075,6 +4084,8 @@
           fetch(`${API_BASE_URL}/topics/${topicId}/read`, { method: "POST" }).catch(() => {});
           const topicInList = myTopics.find(t => t.id === topicId);
           if (topicInList) topicInList.unreadCount = 0;
+          const containerEntry = containerTopics.find(t => t.id === topicId);
+          if (containerEntry) containerEntry.unreadCount = 0;
           updateFeedbacksUnreadBadge();
         }
       } catch (error) { /* silent — next tick tries again */ }
@@ -4172,11 +4183,21 @@
       `;
     }
 
-    function renderConversationMessages() {
+    // forceScrollBottom: true for a fresh topic open or the user's own
+    // outgoing message — always jump to the latest. Left false (the
+    // default) for a background poll tick picking up someone else's
+    // message, where we only jump to the bottom if the reader was already
+    // there — otherwise every 3s poll yanked anyone scrolled up into
+    // history straight back down, making it impossible to read past
+    // messages in an active conversation.
+    function renderConversationMessages(forceScrollBottom = false) {
       const header = document.getElementById("feedbacksDetailHeader");
       const scroll = document.getElementById("feedbacksMessagesScroll");
       const composeBar = document.getElementById("feedbacksComposeBar");
       if (!header || !scroll || !composeBar || !activeTopic) return;
+
+      const shouldStickToBottom = forceScrollBottom
+        || (scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 80);
 
       header.hidden = false;
       header.innerHTML = `
@@ -4191,7 +4212,7 @@
       scroll.innerHTML = sorted.length
         ? sorted.map(chatMessageBubbleHtml).join("")
         : `<div class="feedbacks-empty-state">No messages yet — say hello.</div>`;
-      scroll.scrollTop = scroll.scrollHeight;
+      if (shouldStickToBottom) scroll.scrollTop = scroll.scrollHeight;
     }
 
     function handleFeedbacksComposeKeydown(event) {
@@ -4212,49 +4233,64 @@
       if (!content) return;
       input.value = "";
 
+      // Capture which topic this send belongs to — activeTopic/conversationMessages/
+      // the compose box are all single shared globals that can point at a
+      // different topic by the time the request resolves, if the user
+      // navigates away before it does. Without this, a slow send could
+      // reconcile into the wrong topic's message list, overwrite the wrong
+      // topic's sidebar preview, or paste a failed send's text into whatever
+      // topic happens to be open when the error comes back.
+      const sentTopicId = activeTopic.id;
       const pendingId = `pending_${Date.now()}`;
       conversationMessages.push({
         id: pendingId, senderId: CURRENT_USER.id, senderName: CURRENT_USER.name,
         senderAvatar: CURRENT_USER.avatar, content, timestamp: new Date().toISOString(), pending: true
       });
-      renderConversationMessages();
+      renderConversationMessages(true);
 
       try {
         const response = await fetch(`${API_BASE_URL}/feedback`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ visibility: "private", topicId: activeTopic.id, content })
+          body: JSON.stringify({ visibility: "private", topicId: sentTopicId, content })
         });
         if (!response.ok) throw new Error("Send failed");
         const saved = await response.json();
-        // A poll tick may have already picked up this same message (by id)
-        // while the send was in flight — drop the optimistic placeholder
-        // instead of also keeping it, so the message doesn't show twice.
-        if (conversationMessages.some(m => m.id === saved.id)) {
-          conversationMessages = conversationMessages.filter(m => m.id !== pendingId);
-        } else {
-          const pendingIndex = conversationMessages.findIndex(m => m.id === pendingId);
-          if (pendingIndex !== -1) {
-            conversationMessages[pendingIndex] = {
-              id: saved.id, senderId: saved.sender_id, senderName: CURRENT_USER.name,
-              senderAvatar: CURRENT_USER.avatar, content: saved.content, timestamp: saved.created_at
-            };
+        const stillOnSameTopic = activeTopic?.id === sentTopicId;
+        if (stillOnSameTopic) {
+          // A poll tick may have already picked up this same message (by id)
+          // while the send was in flight — drop the optimistic placeholder
+          // instead of also keeping it, so the message doesn't show twice.
+          if (conversationMessages.some(m => m.id === saved.id)) {
+            conversationMessages = conversationMessages.filter(m => m.id !== pendingId);
+          } else {
+            const pendingIndex = conversationMessages.findIndex(m => m.id === pendingId);
+            if (pendingIndex !== -1) {
+              conversationMessages[pendingIndex] = {
+                id: saved.id, senderId: saved.sender_id, senderName: CURRENT_USER.name,
+                senderAvatar: CURRENT_USER.avatar, content: saved.content, timestamp: saved.created_at
+              };
+            }
           }
+          renderConversationMessages(true);
         }
-        renderConversationMessages();
         // Update this topic's sidebar preview locally instead of a full
         // loadFeedbacksData() reload (groups + every topic + directory) on
         // every single message sent — that was a real, avoidable chunk of
-        // the "everything feels slow" background load.
-        const topicInList = myTopics.find(t => t.id === activeTopic.id);
+        // the "everything feels slow" background load. Keyed off the
+        // captured topic id, not activeTopic, so this stays correct even if
+        // the user has since moved on to a different topic.
+        const topicInList = myTopics.find(t => t.id === sentTopicId);
         if (topicInList) {
           topicInList.lastMessagePreview = saved.content;
           topicInList.lastMessageAt = saved.created_at;
         }
         renderFeedbacksTab();
       } catch (error) {
-        conversationMessages = conversationMessages.filter(m => m.id !== pendingId);
-        renderConversationMessages();
-        input.value = content;
+        if (activeTopic?.id === sentTopicId) {
+          conversationMessages = conversationMessages.filter(m => m.id !== pendingId);
+          renderConversationMessages();
+          input.value = content;
+        }
         showToast("Could not send that message. Please try again.");
       }
     }
@@ -4350,8 +4386,8 @@
         const replyKey = `${post.id}_${reply.id}`;
         const isEditingThisReply = editingCommentKey === replyKey;
         const auditIdentityHtml = isPrivileged && reply.isAnonymous
-          ? `<span class="comment-author">${replyAuthor.name}</span><span class="reply-destination">to ${destination}</span><span class="anon-manager-tag" title="Reply posted anonymously • Visible only in Manager/Admin audit">[Anon]</span>`
-          : `<span class="comment-author">${replyAuthor.name}</span>${replyAuthor.showAnonTag ? '<span class="anon-manager-tag" title="Reply posted anonymously • Visible only in Manager/Admin audit">[Anon]</span>' : ''}`;
+          ? `<span class="comment-author">${escapeHtml(replyAuthor.name)}</span><span class="reply-destination">to ${escapeHtml(destination)}</span><span class="anon-manager-tag" title="Reply posted anonymously • Visible only in Manager/Admin audit">[Anon]</span>`
+          : `<span class="comment-author">${escapeHtml(replyAuthor.name)}</span>${replyAuthor.showAnonTag ? '<span class="anon-manager-tag" title="Reply posted anonymously • Visible only in Manager/Admin audit">[Anon]</span>' : ''}`;
         let replyActionsHtml = "";
         if (allowReplyEdit || allowReplyDelete) {
           replyActionsHtml = `<div class="comment-action-icons">`;
@@ -4369,7 +4405,7 @@
         return `
           <div class="single-comment nested-comment" id="comment_${reply.id}">
             <div class="comment-avatar ${replyAuthor.isMasked ? 'anon-avatar' : ''}">
-              ${replyAuthor.isMasked ? '👤' : `<img src="${avatarSrc(replyAuthor.avatar)}" alt="${replyAuthor.name}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`}
+              ${replyAuthor.isMasked ? '👤' : `<img src="${escapeHtml(avatarSrc(replyAuthor.avatar))}" alt="${escapeHtml(replyAuthor.name)}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`}
             </div>
             <div class="comment-content">
               <div class="comment-header">
@@ -4411,7 +4447,7 @@
       if (post.targetId === "company") {
         targetHtml = `<span class="target-direction">to <span class="target-name-link">🏢 Workplace Suggestions</span></span>`;
       } else if (post.targetId !== CURRENT_USER.id && context !== "targetModal") {
-        targetHtml = `<span class="target-direction">to <span class="target-name-link">${post.targetName}</span></span>`;
+        targetHtml = `<span class="target-direction">to <span class="target-name-link">${escapeHtml(post.targetName)}</span></span>`;
       }
 
       // Anonymous Badge Tag for Manager/Admin View
@@ -4558,13 +4594,13 @@
                     <line x1="1" y1="1" x2="23" y2="23"></line>
                   </svg>
                 ` : `
-                  <img src="${avatarSrc(cAuthor.avatar)}" alt="${cAuthor.name}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">
+                  <img src="${escapeHtml(avatarSrc(cAuthor.avatar))}" alt="${escapeHtml(cAuthor.name)}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">
                 `}
               </div>
               <div class="comment-content">
                 <div class="comment-header">
                   <div class="comment-author-group">
-                    <span class="comment-author">${cAuthor.name}</span>
+                    <span class="comment-author">${escapeHtml(cAuthor.name)}</span>
                     ${cAnonTag}
                   </div>
                   <div style="display:flex; align-items:center; gap:6px;">
@@ -4602,12 +4638,12 @@
                     <line x1="1" y1="1" x2="23" y2="23"></line>
                   </svg>
                 ` : `
-                  <img src="${avatarSrc(authorInfo.avatar)}" alt="${authorInfo.name}">
+                  <img src="${escapeHtml(avatarSrc(authorInfo.avatar))}" alt="${escapeHtml(authorInfo.name)}">
                 `}
               </div>
               <div class="author-meta">
                 <div class="author-name-row">
-                  <span class="author-name">${authorInfo.name}</span>
+                  <span class="author-name">${escapeHtml(authorInfo.name)}</span>
                   ${targetHtml}
                   ${anonTagHtml}
                 </div>
@@ -4782,19 +4818,20 @@
       } else {
         const emp = EMPLOYEES.find(e => e.id === targetId);
         if (emp) {
+          const safeName = escapeHtml(emp.name);
           headerContainer.innerHTML = `
             <div class="modal-target-avatar">
-              <img src="${avatarSrc(emp.avatar)}" alt="${emp.name}" />
+              <img src="${escapeHtml(avatarSrc(emp.avatar))}" alt="${safeName}" />
             </div>
             <div class="modal-target-info">
-              <h3>${emp.name}<button type="button" class="personal-remark-link" id="personalRemarkToggle" onclick="togglePersonalRemark()" aria-expanded="false">Personal remark</button></h3>
-              <p>${emp.role} • ${emp.department}</p>
+              <h3>${safeName}<button type="button" class="personal-remark-link" id="personalRemarkToggle" onclick="togglePersonalRemark()" aria-expanded="false">Personal remark</button></h3>
+              <p>${escapeHtml(emp.role)} • ${escapeHtml(emp.department)}</p>
             </div>
           `;
-          feedTitle.innerHTML = `Praise & Feedback for ${emp.name}`;
+          feedTitle.innerHTML = `Praise & Feedback for ${safeName}`;
           writeTitle.innerHTML = `
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-            Write Feedback for ${emp.name}
+            Write Feedback for ${safeName}
           `;
           textInput.placeholder = `Share specific praise, feedback, or collaborative recognition for ${emp.name}...`;
         }
@@ -4882,13 +4919,21 @@
         // separately) — every request already pays a live, uncachable
         // gateway session check, so fewer requests is the only lever here.
         const response = await fetch(`${API_BASE_URL}/feedback?visibility=private&oversightFor=${encodeURIComponent(targetId)}`);
+        // The admin may have already clicked a different employee's tile
+        // before this resolves — applying a stale response here would
+        // attribute targetId's private conversations to whoever the modal
+        // now shows instead, since bucketOversightRows() reads
+        // activeModalTargetId at render time.
+        if (activeModalTargetId !== targetId) return;
         const json = response.ok ? await response.json() : { data: [] };
         oversightRows = json.data || [];
       } catch (error) {
+        if (activeModalTargetId !== targetId) return;
         oversightRows = [];
         body.innerHTML = `<div class="feedbacks-empty-state">Could not load private feedback.</div>`;
         return;
       }
+      if (activeModalTargetId !== targetId) return;
       renderOversightBody();
     }
 
@@ -5240,7 +5285,7 @@
       if (activeModalTargetId) renderModalWallFeed(activeModalTargetId);
     }
 
-    function savePostEdit(postId) {
+    async function savePostEdit(postId) {
       const textarea = document.getElementById(`edit_textarea_post_${postId}`);
       if (!textarea) return;
 
@@ -5251,15 +5296,28 @@
       }
 
       const post = FEEDBACKS.find(f => f.id === postId);
-      if (post && canEditItem(post)) {
-        if (post.content !== newText) {
-          post.content = newText;
-          post.isEdited = true;
-        }
+      if (!post || !canEditItem(post)) return;
+      if (post.content === newText) {
+        editingPostId = null;
+        if (activeModalTargetId) renderModalWallFeed(activeModalTargetId);
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/feedback/${postId}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: newText })
+        });
+        if (!response.ok) throw new Error("Edit could not be saved");
+
+        post.content = newText;
+        post.isEdited = true;
         editingPostId = null;
 
         if (activeModalTargetId) renderModalWallFeed(activeModalTargetId);
         showToast("✏️ Post updated successfully!");
+      } catch (error) {
+        showToast("❌ Could not save the edit. Please try again.");
       }
     }
 
@@ -5288,7 +5346,7 @@
       }, 40);
     }
 
-    function saveCommentEdit(postId, commentId) {
+    async function saveCommentEdit(postId, commentId) {
       const cKey = `${postId}_${commentId}`;
       const textarea = document.getElementById(`edit_textarea_cm_${cKey}`);
       if (!textarea) return;
@@ -5300,31 +5358,43 @@
       }
 
       const post = FEEDBACKS.find(f => f.id === postId);
-      if (post && post.comments) {
-        const comment = findComment(post.comments, commentId);
-        if (comment && canEditItem(comment)) {
-          if (comment.text !== newText) {
-            comment.text = newText;
-            comment.isEdited = true;
-          }
-          editingCommentKey = null;
+      if (!post || !post.comments) return;
+      const comment = findComment(post.comments, commentId);
+      if (!comment || !canEditItem(comment)) return;
+      if (comment.text === newText) {
+        editingCommentKey = null;
+        if (activeModalTargetId) renderModalWallFeed(activeModalTargetId);
+        return;
+      }
 
-          if (activeModalTargetId) renderModalWallFeed(activeModalTargetId);
+      try {
+        const response = await fetch(`${API_BASE_URL}/feedback/${postId}/comments/${commentId}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: newText })
+        });
+        if (!response.ok) throw new Error("Edit could not be saved");
 
-          setTimeout(() => {
-            const thread = document.getElementById(`comments_${postId}`);
-            if (thread) thread.classList.add("open");
-          }, 40);
+        comment.text = newText;
+        comment.isEdited = true;
+        editingCommentKey = null;
 
-          showToast("✏️ Comment updated!");
-        }
+        if (activeModalTargetId) renderModalWallFeed(activeModalTargetId);
+
+        setTimeout(() => {
+          const thread = document.getElementById(`comments_${postId}`);
+          if (thread) thread.classList.add("open");
+        }, 40);
+
+        showToast("✏️ Comment updated!");
+      } catch (error) {
+        showToast("❌ Could not save the edit. Please try again.");
       }
     }
 
     /* ==========================================================================
        POST & COMMENT DELETION HANDLERS
        ========================================================================== */
-    function deletePost(postId) {
+    async function deletePost(postId) {
       const index = FEEDBACKS.findIndex(f => f.id === postId);
       if (index === -1) return;
 
@@ -5334,17 +5404,24 @@
         return;
       }
 
-      FEEDBACKS.splice(index, 1);
+      try {
+        const response = await fetch(`${API_BASE_URL}/feedback/${postId}`, { method: "DELETE" });
+        if (!response.ok) throw new Error("Delete failed");
 
-      renderEmployeeTiles();
-      if (activeModalTargetId) {
-        renderModalWallFeed(activeModalTargetId);
+        FEEDBACKS.splice(index, 1);
+
+        renderEmployeeTiles();
+        if (activeModalTargetId) {
+          renderModalWallFeed(activeModalTargetId);
+        }
+
+        showToast("🗑️ Feedback post deleted successfully.");
+      } catch (error) {
+        showToast("❌ Could not delete the post. Please try again.");
       }
-
-      showToast("🗑️ Feedback post deleted successfully.");
     }
 
-    function deleteComment(postId, commentId) {
+    async function deleteComment(postId, commentId) {
       const post = FEEDBACKS.find(f => f.id === postId);
       if (!post || !post.comments) return;
 
@@ -5355,20 +5432,27 @@
         return;
       }
 
-      removeComment(post.comments, commentId);
+      try {
+        const response = await fetch(`${API_BASE_URL}/feedback/${postId}/comments/${commentId}`, { method: "DELETE" });
+        if (!response.ok) throw new Error("Delete failed");
 
-      if (activeModalTargetId) {
-        renderModalWallFeed(activeModalTargetId);
+        removeComment(post.comments, commentId);
+
+        if (activeModalTargetId) {
+          renderModalWallFeed(activeModalTargetId);
+        }
+
+        setTimeout(() => {
+          const thread = document.getElementById(`comments_${postId}`);
+          if (thread) thread.classList.add("open");
+          const btn = document.getElementById(`comment_btn_${postId}`);
+          if (btn) btn.classList.add("active");
+        }, 40);
+
+        showToast("🗑️ Comment or reply deleted.");
+      } catch (error) {
+        showToast("❌ Could not delete the comment. Please try again.");
       }
-
-      setTimeout(() => {
-        const thread = document.getElementById(`comments_${postId}`);
-        if (thread) thread.classList.add("open");
-        const btn = document.getElementById(`comment_btn_${postId}`);
-        if (btn) btn.classList.add("active");
-      }, 40);
-
-      showToast("🗑️ Comment or reply deleted.");
     }
 
     /* ==========================================================================

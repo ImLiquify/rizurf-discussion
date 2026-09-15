@@ -161,7 +161,11 @@ export async function listEmployees({ limit, offset }) {
     'SELECT id, name, role_title AS role, department, avatar, skills FROM users ORDER BY name LIMIT ? OFFSET ?',
     [limit, offset]
   );
-  return rows;
+  // `skills` is stored as a JSON-encoded string (see upsertInternUsers) —
+  // decode it the same way getUserById does, or the frontend's
+  // Array.isArray(e.skills) check always sees a string and silently treats
+  // every employee as having no skills.
+  return rows.map(row => ({ ...row, skills: row.skills ? JSON.parse(row.skills) : [] }));
 }
 
 export async function listSyncedInterns({ limit, offset }) {
@@ -284,6 +288,18 @@ export async function feedbackExists(id) {
   return rows.length > 0;
 }
 
+export async function updateFeedbackContent({ id, content }) {
+  await pool.execute('UPDATE feedback SET content = ?, is_edited = 1 WHERE id = ?', [content, id]);
+  const [rows] = await pool.execute('SELECT * FROM feedback WHERE id = ?', [id]);
+  return rows[0] || null;
+}
+
+// Comments/reactions on this feedback cascade via their own foreign keys.
+export async function deleteFeedback(id) {
+  const [result] = await pool.execute('DELETE FROM feedback WHERE id = ?', [id]);
+  return result.affectedRows > 0;
+}
+
 // Existence + the fields needed to decide access/trust for the per-id
 // comment and reaction routes, in one query.
 export async function getFeedbackMeta(id) {
@@ -392,6 +408,47 @@ export async function createComment({ id, feedbackId, parentId, senderId, text, 
   return { id, feedbackId, parentId, senderId, text };
 }
 
+// Existence + owner, for the edit/delete comment routes' permission check.
+export async function getCommentMeta(id, feedbackId) {
+  const [rows] = await pool.execute(
+    'SELECT id, feedback_id AS feedbackId, sender_id AS senderId FROM comments WHERE id = ? AND feedback_id = ? LIMIT 1',
+    [id, feedbackId]
+  );
+  return rows[0] || null;
+}
+
+export async function updateCommentContent({ id, content }) {
+  await pool.execute('UPDATE comments SET content = ?, is_edited = 1 WHERE id = ?', [content, id]);
+  const [rows] = await pool.execute(
+    `SELECT c.id, c.parent_id AS parentId, c.sender_id AS senderId, u.name AS senderName, u.avatar AS senderAvatar,
+       c.content AS text, c.is_anonymous AS isAnonymous, c.is_edited AS isEdited, c.created_at AS timestamp
+     FROM comments c JOIN users u ON u.id = c.sender_id WHERE c.id = ?`,
+    [id]
+  );
+  return rows[0] || null;
+}
+
+// Reply comments cascade via comments.fk_comments_parent, however deep the
+// thread goes. reactions.comment_id has no foreign key at all (it was added
+// later via a plain ALTER TABLE — see ensureSchemaCompatibility in
+// database.js), so it does not cascade — walk the same reply tree here and
+// clean those up explicitly, or a deleted reply's reactions would linger as
+// unreachable dead rows forever.
+export async function deleteCommentById(id) {
+  let level = [id];
+  const allIds = [id];
+  while (level.length) {
+    const placeholders = level.map(() => '?').join(',');
+    const [rows] = await pool.execute(`SELECT id FROM comments WHERE parent_id IN (${placeholders})`, level);
+    level = rows.map(row => row.id);
+    allIds.push(...level);
+  }
+  const idPlaceholders = allIds.map(() => '?').join(',');
+  await pool.execute(`DELETE FROM reactions WHERE comment_id IN (${idPlaceholders})`, allIds);
+  const [result] = await pool.execute('DELETE FROM comments WHERE id = ?', [id]);
+  return result.affectedRows > 0;
+}
+
 export async function listPrivateRemarks({ authorId, limit, offset }) {
   const [rows] = await pool.execute(
     `SELECT id, author_id AS authorId, target_id AS targetId, content, created_at AS createdAt
@@ -477,12 +534,21 @@ export async function updateGroup({ groupId, name, avatar }) {
   return getGroupById(groupId);
 }
 
-// Deletes the group row itself; group_members and any sub-groups cascade
-// via their own foreign keys. Historical feedback/topics that referenced
-// this group aren't cleaned up (target_id there is never FK-constrained,
-// by design — see createFeedback) — they keep showing the group's name as
-// it was stored at post time instead of pointing at a live group.
+// Deletes the group row itself; group_members cascades via its own foreign
+// key. Sub-groups do NOT — `parent_group_id` is a plain column added via
+// addMissingColumns in database.js, with no foreign key (unlike the
+// standalone schema.sql/migration file, which isn't what actually runs
+// against the app's own database), so a parent's sub-groups would otherwise
+// be silently orphaned (their own row survives with a parent_group_id that
+// no longer resolves) — delete them explicitly first. One level is enough:
+// creation already forbids a sub-group from having its own sub-groups (see
+// the parentGroupId check in POST /api/groups). Historical feedback/topics
+// that referenced any of these groups aren't cleaned up (target_id there is
+// never FK-constrained, by design — see createFeedback) — they keep showing
+// the group's name as it was stored at post time instead of pointing at a
+// live group.
 export async function deleteGroup(groupId) {
+  await pool.execute('DELETE FROM feedback_groups WHERE parent_group_id = ?', [groupId]);
   const [result] = await pool.execute('DELETE FROM feedback_groups WHERE id = ?', [groupId]);
   return result.affectedRows > 0;
 }
@@ -590,16 +656,24 @@ export async function listTopicsInContainer({ targetType, targetId, viewerId, se
     parameters.push(targetId);
   }
   if (search) { conditions.push('t.name LIKE ?'); parameters.push(`%${search}%`); }
-  parameters.push(limit, offset);
+  // unreadCount for viewerId, same definition listMyTopics uses — the topic
+  // list rendered inside an open container reads this field too
+  // (topicListItemHtml), so leaving it out here (as this query used to)
+  // meant every per-topic unread dot inside a container silently never showed.
+  const queryParams = [viewerId || '', viewerId || '', ...parameters, limit, offset];
   const [rows] = await pool.execute(
     `SELECT t.id, t.target_type AS targetType, t.target_id AS targetId, t.name, t.created_by AS createdBy, t.created_at AS createdAt,
        (SELECT MAX(created_at) FROM feedback WHERE topic_id = t.id) AS lastMessageAt,
-       (SELECT content FROM feedback WHERE topic_id = t.id ORDER BY created_at DESC LIMIT 1) AS lastMessagePreview
+       (SELECT content FROM feedback WHERE topic_id = t.id ORDER BY created_at DESC LIMIT 1) AS lastMessagePreview,
+       (SELECT COUNT(*) FROM feedback f2
+          WHERE f2.topic_id = t.id AND f2.sender_id <> ?
+            AND f2.created_at > COALESCE((SELECT last_read_at FROM topic_reads WHERE topic_id = t.id AND user_id = ?), '1970-01-02')
+       ) AS unreadCount
      FROM topics t
      WHERE ${conditions.join(' AND ')}
      ORDER BY lastMessageAt IS NULL, lastMessageAt DESC, t.created_at DESC
      LIMIT ? OFFSET ?`,
-    parameters
+    queryParams
   );
   return rows;
 }
