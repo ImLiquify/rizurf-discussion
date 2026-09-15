@@ -87,7 +87,7 @@ const openapi = {
     },
     '/api/groups/{groupId}/members': {
       get: operation('List a group\'s members.', 'feedback:read', discovery('List Group Members', 'Read who belongs to a project group.', ['groupId'], ['data'])),
-      post: operation('Add a member to a group.', 'feedback:write', discovery('Add Group Member', 'Add any employee to a project group; open to any signed-in caller.', ['groupId', 'userId'], [], ['GET /api/groups/{groupId}/members']))
+      post: operation('Add a member to a group.', 'feedback:write', discovery('Add Group Member', 'Add any employee to a project group; the group\'s leader (creator), an admin, or a manager only.', ['groupId', 'userId'], [], ['GET /api/groups/{groupId}/members']))
     },
     '/api/groups/{groupId}/members/{userId}': {
       delete: operation('Remove a group member.', 'feedback:write', discovery('Remove Group Member', 'Remove an employee from a project group.', ['groupId', 'userId'], [], ['GET /api/groups/{groupId}/members']))
@@ -513,18 +513,22 @@ app.get('/api/groups/:groupId/members', async (request, response, next) => {
   } catch (error) { return next(error); }
 });
 app.post('/api/groups/:groupId/members', async (request, response, next) => {
-  // Intentionally open: any signed-in employee may add any existing user to
-  // any existing group — a product decision, not an oversight. Membership is
-  // a boundary against people who don't know the group exists, not against
-  // any employee who does.
+  // Discord-style leadership: whoever created the group is its leader and
+  // manages membership alongside admins/managers — regular members can
+  // participate but can't add or remove people or edit the group.
   const auth = request.auth || {};
   if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
   const { userId } = request.body || {};
   if (!validText(userId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'userId is required.', { fields: ['userId'] });
   try {
-    if (!await feedbacks.getGroupById(request.params.groupId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
+    const group = await feedbacks.getGroupById(request.params.groupId);
+    if (!group) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
     if (!await feedbacks.getUserById(userId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No user with that id.');
     const addedBy = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+    const callerUser = await feedbacks.getUserById(addedBy);
+    if (!isPrivilegedRole(callerUser?.permissionRole) && group.createdBy !== addedBy) {
+      return sendError(response, request, 403, 'FORBIDDEN', 'Only the group\'s leader, an admin, or a manager can add members.');
+    }
     await feedbacks.addGroupMember({ groupId: request.params.groupId, userId, addedBy });
     return response.status(204).end();
   } catch (error) { return next(error); }
@@ -533,12 +537,12 @@ app.delete('/api/groups/:groupId/members/:userId', async (request, response, nex
   const auth = request.auth || {};
   if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
   try {
-    if (!await feedbacks.getGroupById(request.params.groupId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
+    const group = await feedbacks.getGroupById(request.params.groupId);
+    if (!group) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
     const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
     const callerUser = await feedbacks.getUserById(callerId);
-    const callerIsPrivileged = isPrivilegedRole(callerUser?.permissionRole);
-    if (!callerIsPrivileged && !await feedbacks.isGroupMember(request.params.groupId, callerId)) {
-      return sendError(response, request, 403, 'FORBIDDEN', 'You must be a member of this group to remove members.');
+    if (!isPrivilegedRole(callerUser?.permissionRole) && group.createdBy !== callerId) {
+      return sendError(response, request, 403, 'FORBIDDEN', 'Only the group\'s leader, an admin, or a manager can remove members.');
     }
     await feedbacks.removeGroupMember({ groupId: request.params.groupId, userId: request.params.userId });
     return response.status(204).end();
@@ -551,12 +555,12 @@ app.patch('/api/groups/:groupId', async (request, response, next) => {
   if (name !== undefined && !validText(name)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'name cannot be blank.', { fields: ['name'] });
   if (name === undefined && avatar === undefined) return sendError(response, request, 422, 'VALIDATION_ERROR', 'name or avatar is required.', { fields: ['name', 'avatar'] });
   try {
-    if (!await feedbacks.getGroupById(request.params.groupId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
+    const group = await feedbacks.getGroupById(request.params.groupId);
+    if (!group) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
     const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
     const callerUser = await feedbacks.getUserById(callerId);
-    const callerIsPrivileged = isPrivilegedRole(callerUser?.permissionRole);
-    if (!callerIsPrivileged && !await feedbacks.isGroupMember(request.params.groupId, callerId)) {
-      return sendError(response, request, 403, 'FORBIDDEN', 'You must be a member of this group to edit it.');
+    if (!isPrivilegedRole(callerUser?.permissionRole) && group.createdBy !== callerId) {
+      return sendError(response, request, 403, 'FORBIDDEN', 'Only the group\'s leader, an admin, or a manager can edit it.');
     }
     return sendJson(response, 200, await feedbacks.updateGroup({
       groupId: request.params.groupId,

@@ -418,12 +418,13 @@ export async function deletePrivateRemark({ id, authorId }) {
   return result.affectedRows > 0;
 }
 
-// Project groups for the Feedbacks tab. Membership is intentionally open —
-// any signed-in employee may create a group or add any existing user to any
-// existing group (a product decision, not an oversight): see rizurfApi.js.
-// `parentGroupId` makes this a sub-group (one level only — e.g. "ERP System"
-// -> "Frontend"); a sub-group is a fully independent, postable group with
-// its own membership, not a view onto its parent's.
+// Project groups for the Feedbacks tab. Discord-style leadership: any
+// signed-in employee may create a group (becoming its leader), but managing
+// membership and settings afterward is restricted to that leader plus
+// admins/managers — see the gating in rizurfApi.js. `parentGroupId` makes
+// this a sub-group (one level only — e.g. "ERP System" -> "Frontend"); a
+// sub-group is a fully independent, postable group with its own membership,
+// not a view onto its parent's.
 export async function createGroup({ id, name, createdBy, parentGroupId = null }) {
   await pool.execute(
     'INSERT INTO feedback_groups (id, name, created_by, parent_group_id) VALUES (?, ?, ?, ?)',

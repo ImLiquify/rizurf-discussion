@@ -1996,7 +1996,8 @@
       background: var(--accent-cyan-light);
     }
 
-    .chat-message-row.pending { opacity: 0.6; }
+    .chat-message-row.pending { opacity: 0.85; }
+    .chat-message-status { font-size: 0.7rem; color: var(--text-subtle); font-style: italic; }
 
     .chat-message-meta {
       display: flex;
@@ -3191,6 +3192,15 @@
 
     function isPrivilegedViewer() { return currentRoleView === "admin" || currentRoleView === "manager"; }
 
+    // Discord-style leadership: whoever created a group manages it (members,
+    // name, photo, delete) alongside admins/managers — everyone else can
+    // just participate. Mirrors the gating in rizurfApi.js.
+    function isGroupLeaderOrPrivileged(groupId) {
+      if (isPrivilegedViewer()) return true;
+      const group = myGroups.find(g => g.id === groupId) || allGroupsDirectory.find(g => g.id === groupId);
+      return Boolean(group && group.createdBy === CURRENT_USER.id);
+    }
+
     function updateCurrentUserProfile() {
       const sidebarName = document.getElementById("sidebarUserName");
       const sidebarRole = document.getElementById("sidebarUserRole");
@@ -3303,8 +3313,14 @@
         renderDepartmentChips();
 
         if (CURRENT_USER.id) {
-          try { await loadPrivateRemarksFromBackend(); } catch (error) { console.warn("Private remarks fetch error:", error); }
-          try { await loadFeedbacksData(); } catch (error) { console.warn("Feedbacks tab data fetch error:", error); }
+          // Independent of each other — running them one after another was
+          // costing a whole extra round trip (each pays a live, uncachable
+          // gateway session check) before the Feedbacks tab's topics ever
+          // started loading.
+          await Promise.all([
+            loadPrivateRemarksFromBackend().catch(error => console.warn("Private remarks fetch error:", error)),
+            loadFeedbacksData().catch(error => console.warn("Feedbacks tab data fetch error:", error))
+          ]);
         } else {
           myGroups = []; myTopics = []; activeContainer = null; activeTopic = null; conversationMessages = [];
           renderFeedbacksTab();
@@ -3976,11 +3992,18 @@
       activeTopic = topic;
       renderTopicList();
       await refreshActiveTopicMessages();
+      startTopicPolling();
+      // Mark read with just the one endpoint it needs, then clear the badge
+      // locally instead of a full loadFeedbacksData() reload (groups + all
+      // topics + directory) — that was adding several extra round trips,
+      // each paying its own live gateway session check, to every single
+      // topic open, well after the messages themselves were already shown.
       try {
         await fetch(`${API_BASE_URL}/topics/${topic.id}/read`, { method: "POST" });
-        await loadFeedbacksData();
+        const topicInList = myTopics.find(t => t.id === topic.id);
+        if (topicInList) topicInList.unreadCount = 0;
+        updateFeedbacksUnreadBadge();
       } catch (error) { /* best-effort — the badge just stays stale until the next poll */ }
-      startTopicPolling();
     }
 
     function backToTopicList() {
@@ -4028,15 +4051,27 @@
         const response = await fetch(`${API_BASE_URL}/feedback?visibility=private&topicId=${encodeURIComponent(topicId)}`);
         if (!response.ok || activeTopic?.id !== topicId) return;
         const fetched = (await response.json()).data || [];
-        const pending = conversationMessages.filter(m => m.pending);
-        const currentIds = conversationMessages.filter(m => !m.pending).map(m => m.id).join(",");
-        const fetchedIds = fetched.map(m => m.id).join(",");
-        if (currentIds === fetchedIds && !pending.length) return; // nothing new — skip the render, keep scroll position
+        const priorRealCount = conversationMessages.filter(m => !m.pending).length;
+        // Drop a locally-pending message once the same send has actually
+        // landed (matched by sender+content) — otherwise a send still being
+        // reconciled by sendFeedbacksMessage would show up twice for one
+        // poll cycle: once as the real row here, once as the optimistic one.
+        const pending = conversationMessages.filter(m => m.pending
+          && !fetched.some(f => f.senderId === m.senderId && f.content === m.content));
+
+        // Compare the full sequence (including any still-pending message) —
+        // not just the confirmed rows — so a poll tick while a send is
+        // merely slow (not yet confirmed) doesn't re-render every 3s with
+        // nothing actually new; that redundant re-render was the "message
+        // flickers/disappears" bug.
+        const nextIds = [...fetched.map(m => m.id), ...pending.map(m => m.id)].join(",");
+        const currentIds = conversationMessages.map(m => m.id).join(",");
+        if (nextIds === currentIds) return;
 
         conversationMessages = [...fetched, ...pending];
         renderConversationMessages();
 
-        if (fetchedIds !== currentIds) {
+        if (fetched.length !== priorRealCount) {
           fetch(`${API_BASE_URL}/topics/${topicId}/read`, { method: "POST" }).catch(() => {});
           const topicInList = myTopics.find(t => t.id === topicId);
           if (topicInList) topicInList.unreadCount = 0;
@@ -4047,11 +4082,14 @@
 
     function chatMessageBubbleHtml(message) {
       const mine = message.senderId === CURRENT_USER.id;
+      const statusHtml = message.pending
+        ? `<span class="chat-message-status">Sending…</span>`
+        : `<span class="chat-message-time">${formatDisplayTime(message.timestamp)}</span>`;
       return `
         <div class="chat-message-row${mine ? " mine" : ""}${message.pending ? " pending" : ""}">
           <div class="chat-message-meta">
             <span class="chat-message-sender" style="color:${senderColorFor(message.senderId)}">${escapeHtml(message.senderName)}</span>
-            <span class="chat-message-time">${formatDisplayTime(message.timestamp)}</span>
+            ${statusHtml}
           </div>
           <div class="chat-message-text">${escapeHtml(message.content)}</div>
         </div>
@@ -4113,7 +4151,8 @@
       if (activeTopic) { renderConversationMessages(); return; }
 
       header.hidden = false;
-      const groupActionsHtml = activeContainer.type === "group"
+      const canManageGroup = activeContainer.type === "group" && isGroupLeaderOrPrivileged(activeContainer.id);
+      const groupActionsHtml = canManageGroup
         ? `<div style="display:flex; align-items:center; gap:10px;">
              <button type="button" class="feedbacks-new-group-btn" onclick="addMemberToActiveGroup()">+ Add member</button>
              <button type="button" class="feedbacks-row-icon-btn" onclick="editGroupPrompt('${activeContainer.id}')" title="Group settings">${SETTINGS_GEAR_SVG}</button>
@@ -4187,17 +4226,31 @@
         });
         if (!response.ok) throw new Error("Send failed");
         const saved = await response.json();
-        const pendingIndex = conversationMessages.findIndex(m => m.id === pendingId);
-        if (pendingIndex !== -1) {
-          conversationMessages[pendingIndex] = {
-            id: saved.id, senderId: saved.sender_id, senderName: CURRENT_USER.name,
-            senderAvatar: CURRENT_USER.avatar, content: saved.content, timestamp: saved.created_at
-          };
-          renderConversationMessages();
+        // A poll tick may have already picked up this same message (by id)
+        // while the send was in flight — drop the optimistic placeholder
+        // instead of also keeping it, so the message doesn't show twice.
+        if (conversationMessages.some(m => m.id === saved.id)) {
+          conversationMessages = conversationMessages.filter(m => m.id !== pendingId);
+        } else {
+          const pendingIndex = conversationMessages.findIndex(m => m.id === pendingId);
+          if (pendingIndex !== -1) {
+            conversationMessages[pendingIndex] = {
+              id: saved.id, senderId: saved.sender_id, senderName: CURRENT_USER.name,
+              senderAvatar: CURRENT_USER.avatar, content: saved.content, timestamp: saved.created_at
+            };
+          }
         }
-        // Background sync for sidebar previews/unread counts — not awaited,
-        // so the compose box doesn't sit there waiting on it.
-        loadFeedbacksData();
+        renderConversationMessages();
+        // Update this topic's sidebar preview locally instead of a full
+        // loadFeedbacksData() reload (groups + every topic + directory) on
+        // every single message sent — that was a real, avoidable chunk of
+        // the "everything feels slow" background load.
+        const topicInList = myTopics.find(t => t.id === activeTopic.id);
+        if (topicInList) {
+          topicInList.lastMessagePreview = saved.content;
+          topicInList.lastMessageAt = saved.created_at;
+        }
+        renderFeedbacksTab();
       } catch (error) {
         conversationMessages = conversationMessages.filter(m => m.id !== pendingId);
         renderConversationMessages();
@@ -4630,35 +4683,6 @@
         return !isCurrentUser && matchesDept && matchesSearch;
       });
 
-      // Count for Company Wall
-      const companyFeedbacks = FEEDBACKS.filter(f => f.targetId === "company");
-
-      // Card 1: Workplace & Company Improvement Wall
-      let companyCardHtml = "";
-      if (!search || "company organization workplace improvement suggestions ideas culture".includes(search)) {
-        companyCardHtml = `
-          <div class="company-wall-card" onclick="openWallModal('company')">
-            <div>
-              <div class="company-badge-row">
-                <span class="company-pill">Company Wall</span>
-                <span style="font-size:0.75rem; color:#94A3B8;">Workplace Ideas</span>
-              </div>
-              <div class="company-icon-box">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
-                  <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
-                  <line x1="6" y1="1" x2="6" y2="4"></line>
-                  <line x1="10" y1="1" x2="10" y2="4"></line>
-                  <line x1="14" y1="1" x2="14" y2="4"></line>
-                </svg>
-              </div>
-              <h3 class="company-wall-title">🏢 Workplace & Company Suggestions</h3>
-              <p class="company-wall-desc">Dedicated space for company improvement ideas, workplace feedback, and organizational enhancement suggestions.</p>
-            </div>
-          </div>
-        `;
-      }
-
       // Individual Clean Employee Cards
       const employeeCardsHtml = filtered.map(emp => {
         const empReceivedCount = FEEDBACKS.filter(f => f.targetId === emp.id).length;
@@ -4687,7 +4711,7 @@
         `;
       }).join("");
 
-      if (!companyCardHtml && filtered.length === 0) {
+      if (filtered.length === 0) {
         grid.innerHTML = `
           <div class="empty-feed-card" style="grid-column: 1 / -1;">
             <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
@@ -4695,7 +4719,7 @@
           </div>
         `;
       } else {
-        grid.innerHTML = companyCardHtml + employeeCardsHtml;
+        grid.innerHTML = employeeCardsHtml;
       }
     }
 
