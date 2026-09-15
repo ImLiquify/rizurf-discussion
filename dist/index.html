@@ -1478,6 +1478,38 @@
       transform: translateY(-1px);
     }
 
+    .oversight-search {
+      min-width: 0;
+      margin: 10px 0 12px;
+    }
+    .oversight-search .search-input-field {
+      padding: 9px 12px 9px 36px;
+      font-size: 0.85rem;
+    }
+    .oversight-search svg { left: 12px; width: 13px; height: 13px; }
+
+    .btn-submit-feedback:disabled,
+    .btn-submit-feedback.is-busy {
+      opacity: 0.7;
+      cursor: default;
+      pointer-events: none;
+      transform: none;
+    }
+
+    .btn-spinner {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      border-top-color: #FFFFFF;
+      animation: btn-spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes btn-spin {
+      to { transform: rotate(360deg); }
+    }
+
     /* ==========================================================================
        FEEDBACKS TAB — private chat-style inbox
        ========================================================================== */
@@ -2246,6 +2278,52 @@
       box-shadow: 4px 0 20px rgba(0,0,0,0.18);
     }
 
+    /* ---- Mobile nav: hamburger + off-canvas drawer ----
+       The sidebar is a fixed 260px rail with no responsive width of its
+       own; below the breakpoint it would either permanently eat most of a
+       phone's screen or (worse) sit fixed while .main-panel's own
+       margin-left:260px left no compensating space, so content rendered
+       underneath it. Below 768px it instead starts off-screen and slides
+       in as a full overlay, toggled by a hamburger button that only shows
+       at that width. */
+    .mobile-nav-toggle {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+      background: var(--bg-surface);
+      color: var(--text-main);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .mobile-nav-toggle:hover { background: var(--bg-subtle); }
+
+    .sidebar-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(11, 23, 39, 0.5);
+      z-index: 99;
+    }
+
+    @media (max-width: 768px) {
+      .mobile-nav-toggle { display: inline-flex; }
+      .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.22s ease;
+        width: 260px;
+        min-width: 260px;
+      }
+      .sidebar.mobile-open { transform: translateX(0); }
+      .sidebar-backdrop.visible { display: block; }
+      .main-panel { margin-left: 0 !important; }
+      .top-header-bar { padding: 0 14px; }
+      .content-area { padding: 16px; }
+    }
+
     .sidebar-brand {
       display: flex;
       align-items: center;
@@ -2647,12 +2725,21 @@
 
   </aside>
 
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeMobileSidebar()"></div>
+
   <!-- MAIN PANEL -->
   <div class="main-panel">
 
     <!-- Top Header Bar -->
     <header class="top-header-bar">
       <div class="top-header-left">
+        <button type="button" class="mobile-nav-toggle" onclick="toggleMobileSidebar()" title="Open menu" aria-label="Open menu">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
         <nav class="breadcrumb">
           <span>Feedback</span>
           <span class="breadcrumb-sep">/</span>
@@ -2948,7 +3035,7 @@
       <div class="modal-scrollable-body">
         <label class="group-modal-label" for="topicModalNameInput">Topic name</label>
         <input type="text" id="topicModalNameInput" class="group-modal-name-input" placeholder="e.g. Sprint 12 retro" onkeydown="handleTopicModalKeydown(event)" />
-        <button type="button" class="btn-submit-feedback group-modal-submit" onclick="submitTopicModal()">Create</button>
+        <button type="button" class="btn-submit-feedback group-modal-submit" id="topicModalSubmitBtn" onclick="submitTopicModal()">Create</button>
       </div>
     </div>
   </div>
@@ -3025,6 +3112,8 @@
     let oversightBucket = "given"; // "given" | "received"
     let oversightSelectedLabel = null; // the person/group name drilled into, or null
     let oversightSelectedTopicId = null; // the topic drilled into, or null
+    let oversightPersonSearch = ""; // quick search over the given/received person-or-group list
+    let oversightTopicSearch = ""; // quick search over one person's/group's topic list
 
     const SENDER_COLOR_PALETTE = ["#2563EB", "#DC2626", "#059669", "#D97706", "#7C3AED", "#DB2777", "#0891B2", "#65A30D"];
     function senderColorFor(id) {
@@ -3293,8 +3382,18 @@
       feedbacks: { pane: "feedbacksViewPane", link: "sidebarBtnFeedbacks", label: "Feedbacks" },
       wall: { pane: "wallViewPane", link: "sidebarBtnWall", label: "Employee Wall" }
     };
+    function toggleMobileSidebar() {
+      document.querySelector(".sidebar")?.classList.toggle("mobile-open");
+      document.getElementById("sidebarBackdrop")?.classList.toggle("visible");
+    }
+    function closeMobileSidebar() {
+      document.querySelector(".sidebar")?.classList.remove("mobile-open");
+      document.getElementById("sidebarBackdrop")?.classList.remove("visible");
+    }
+
     function switchMainTab(tab) {
       if (!MAIN_TABS[tab]) return;
+      closeMobileSidebar(); // picking a section on mobile should reveal it, not leave the drawer open over it
       currentMainTab = tab;
       Object.entries(MAIN_TABS).forEach(([name, info]) => {
         const pane = document.getElementById(info.pane);
@@ -3799,9 +3898,13 @@
     }
 
     async function submitGroupModal() {
+      const btn = document.getElementById("groupModalSubmitBtn");
+      if (btn?.disabled) return; // already in flight
+
       if (groupModalMode === "create") {
         const name = document.getElementById("groupModalNameInput").value.trim();
         if (!name) { showToast("Please enter a group name."); return; }
+        setButtonBusy(btn, true, "Creating…");
         try {
           const body = { name };
           if (groupModalParentId) body.parentGroupId = groupModalParentId;
@@ -3824,9 +3927,12 @@
           showToast(`👥 Created "${group.name}"`);
         } catch (error) {
           showToast(error.message || "Could not create the group. Please try again.");
+        } finally {
+          setButtonBusy(btn, false);
         }
       } else if (groupModalMode === "addMember" || groupModalMode === "edit") {
         if (!groupModalSelectedIds.size) { showToast("Select at least one employee."); return; }
+        setButtonBusy(btn, true, "Adding…");
         try {
           await Promise.all([...groupModalSelectedIds].map(memberId =>
             fetch(`${API_BASE_URL}/groups/${groupModalTargetGroupId}/members`, {
@@ -3844,6 +3950,8 @@
           }
         } catch (error) {
           showToast("Could not add members. Please try again.");
+        } finally {
+          setButtonBusy(btn, false);
         }
       }
     }
@@ -3904,14 +4012,24 @@
 
     async function submitTopicModal() {
       if (!activeContainer) return;
+      const btn = document.getElementById("topicModalSubmitBtn");
+      if (btn?.disabled) return; // already in flight — the busy state itself blocks a rapid re-click
       const name = document.getElementById("topicModalNameInput").value.trim();
       if (!name) { showToast("Please enter a topic name."); return; }
+      setButtonBusy(btn, true, "Creating…");
       try {
         const response = await fetch(`${API_BASE_URL}/topics`, {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ targetType: activeContainer.type, targetId: activeContainer.id, name })
         });
-        if (!response.ok) throw new Error("Topic creation failed");
+        if (!response.ok) {
+          // Surface the server's actual reason (e.g. "You must be a member
+          // of this group...") instead of a generic message that hides why
+          // it failed — this used to always show the same fallback string
+          // no matter what the server said.
+          const err = await response.json().catch(() => null);
+          throw new Error(err?.error?.message || "Topic creation failed.");
+        }
         const topic = await response.json();
         closeTopicModal();
         // refreshContainerTopics() updates the middle "topics in this
@@ -3922,7 +4040,9 @@
         await Promise.all([refreshContainerTopics(), refreshMyTopics()]);
         openTopicById(topic.id);
       } catch (error) {
-        showToast("Could not create that topic. Please try again.");
+        showToast(error.message || "Could not create that topic. Please try again.");
+      } finally {
+        setButtonBusy(btn, false);
       }
     }
 
@@ -4855,6 +4975,8 @@
       oversightBucket = "given";
       oversightSelectedLabel = null;
       oversightSelectedTopicId = null;
+      oversightPersonSearch = "";
+      oversightTopicSearch = "";
       renderOversightConversations(targetId);
 
       renderModalWallFeed(targetId);
@@ -4915,7 +5037,15 @@
       const targetId = activeModalTargetId;
       const buckets = { given: new Map(), received: new Map() };
       oversightRows.forEach(row => {
-        const bucketKey = row.topicCreatedBy === targetId ? "given" : "received";
+        // "Given" = a message this employee actually sent; "Received" = one
+        // sent to them by someone else. Matches the simple sender/target
+        // definition the Employee Wall tile itself uses (GET
+        // /api/feedback/counts) — this used to bucket by who created the
+        // TOPIC instead, which disagreed with the tile for anyone who
+        // mostly replies inside a conversation someone else started (every
+        // reply they posted there landed in "received" even though they
+        // sent it), and looked like the tile count was simply wrong.
+        const bucketKey = row.senderId === targetId ? "given" : "received";
         let label, counterpartId, iconType;
         if (row.targetType === "org") {
           label = "Organization"; counterpartId = null; iconType = "org";
@@ -4955,11 +5085,14 @@
       oversightBucket = bucket;
       oversightSelectedLabel = null;
       oversightSelectedTopicId = null;
+      oversightPersonSearch = "";
+      oversightTopicSearch = "";
       renderOversightBody();
     }
     function openOversightLabel(label) {
       oversightSelectedLabel = label;
       oversightSelectedTopicId = null;
+      oversightTopicSearch = "";
       renderOversightBody();
     }
     function openOversightTopic(topicId) {
@@ -4969,10 +5102,19 @@
     function backOversightToLabels() {
       oversightSelectedLabel = null;
       oversightSelectedTopicId = null;
+      oversightTopicSearch = "";
       renderOversightBody();
     }
     function backOversightToTopics() {
       oversightSelectedTopicId = null;
+      renderOversightBody();
+    }
+    function handleOversightPersonSearch(value) {
+      oversightPersonSearch = value;
+      renderOversightBody();
+    }
+    function handleOversightTopicSearch(value) {
+      oversightTopicSearch = value;
       renderOversightBody();
     }
 
@@ -4990,7 +5132,20 @@
       const selectedEntry = oversightSelectedLabel ? byLabel.get(oversightSelectedLabel) : null;
 
       if (!oversightSelectedLabel || !selectedEntry) {
-        const rowsHtml = [...byLabel.entries()].map(([label, entry]) => `
+        const query = oversightPersonSearch.toLowerCase().trim();
+        // Organization pinned first (when it has any activity in this
+        // bucket) — it's company-wide and the one entry every employee is
+        // implicitly part of, so it stays the fixed anchor at the top of
+        // the list instead of sorting in wherever its timestamps land.
+        // Everything else, alphabetical.
+        const entries = [...byLabel.entries()]
+          .filter(([label]) => !query || label.toLowerCase().includes(query))
+          .sort(([labelA], [labelB]) => {
+            if (labelA === "Organization") return -1;
+            if (labelB === "Organization") return 1;
+            return labelA.localeCompare(labelB);
+          });
+        const rowsHtml = entries.map(([label, entry]) => `
           <button type="button" class="oversight-list-row" onclick="openOversightLabel('${escapeHtml(label).replace(/'/g, "&#039;")}')">
             <div class="feedbacks-list-item-icon">${oversightLabelIconHtml(entry, label)}</div>
             <div class="oversight-list-row-body">
@@ -4999,14 +5154,22 @@
             </div>
           </button>
         `).join("");
-        body.innerHTML = tabsHtml + (byLabel.size
+        const searchHtml = byLabel.size ? `
+          <div class="search-input-wrapper oversight-search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" class="search-input-field" placeholder="Search people or groups..." value="${escapeHtml(oversightPersonSearch)}" oninput="handleOversightPersonSearch(this.value)" />
+          </div>` : "";
+        body.innerHTML = tabsHtml + searchHtml + (entries.length
           ? `<div class="oversight-list">${rowsHtml}</div>`
-          : `<div class="feedbacks-empty-state">Nothing ${oversightBucket} yet.</div>`);
+          : `<div class="feedbacks-empty-state">${byLabel.size ? "No matches." : `Nothing ${oversightBucket} yet.`}</div>`);
         return;
       }
 
       if (!oversightSelectedTopicId || !selectedEntry.topics.has(oversightSelectedTopicId)) {
-        const topicsHtml = [...selectedEntry.topics.entries()].map(([topicId, { topicName, messages }]) => `
+        const query = oversightTopicSearch.toLowerCase().trim();
+        const topicEntries = [...selectedEntry.topics.entries()]
+          .filter(([, { topicName }]) => !query || topicName.toLowerCase().includes(query));
+        const topicsHtml = topicEntries.map(([topicId, { topicName, messages }]) => `
           <button type="button" class="oversight-list-row" onclick="openOversightTopic('${topicId}')">
             <div class="oversight-list-row-body">
               <div class="oversight-list-row-name">${escapeHtml(topicName)}</div>
@@ -5014,12 +5177,19 @@
             </div>
           </button>
         `).join("");
+        const topicSearchHtml = selectedEntry.topics.size > 1 ? `
+          <div class="search-input-wrapper oversight-search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" class="search-input-field" placeholder="Search topics..." value="${escapeHtml(oversightTopicSearch)}" oninput="handleOversightTopicSearch(this.value)" />
+          </div>` : "";
         body.innerHTML = tabsHtml + `
           <div class="oversight-drill-header">
             <button type="button" class="topic-back-btn" onclick="backOversightToLabels()" title="Back">&larr;</button>
             <div class="feedbacks-detail-title">${escapeHtml(oversightSelectedLabel)}</div>
           </div>
-          <div class="oversight-list">${topicsHtml}</div>
+          ${topicSearchHtml}
+          <div class="oversight-list">${topicsHtml.length ? topicsHtml : ''}</div>
+          ${!topicEntries.length ? '<div class="feedbacks-empty-state">No matching topics.</div>' : ''}
         `;
         return;
       }
@@ -5526,6 +5696,30 @@
     /* ==========================================================================
        UTILITIES & TOASTS
        ========================================================================== */
+    // Immediate feedback on a submit button the instant it's clicked — a
+    // create/submit action that waits on a network round trip with no visual
+    // change invites exactly what it got: people clicking it again (and
+    // again), firing duplicate requests. Swaps the label for a spinner and
+    // disables the button (pointer-events included, not just the attribute,
+    // so a rapid second click can't slip in before the disabled state paints)
+    // until the caller flips it back off.
+    function setButtonBusy(button, busy, busyLabel = "Working…") {
+      if (!button) return;
+      if (busy) {
+        if (button.dataset.originalLabel === undefined) button.dataset.originalLabel = button.innerHTML;
+        button.disabled = true;
+        button.classList.add("is-busy");
+        button.innerHTML = `<span class="btn-spinner"></span><span>${escapeHtml(busyLabel)}</span>`;
+      } else {
+        button.disabled = false;
+        button.classList.remove("is-busy");
+        if (button.dataset.originalLabel !== undefined) {
+          button.innerHTML = button.dataset.originalLabel;
+          delete button.dataset.originalLabel;
+        }
+      }
+    }
+
     function showToast(message) {
       const container = document.getElementById("toastContainer");
       const toast = document.createElement("div");
