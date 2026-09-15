@@ -30,7 +30,7 @@ const openapi = {
   openapi: '3.0.3',
   info: {
     title: 'PulseFeedback API', version: '1.0.0',
-    description: 'Collect and review workplace feedback, threaded comments, and private remarks. It also reads synchronized intern profiles for employee-facing feedback workflows.',
+    description: 'Collect and review workplace feedback and threaded comments. It also reads synchronized intern profiles for employee-facing feedback workflows.',
     'x-rizurf': {
       domain: 'Human Resources', owner: 'pulsefeedback-team', app_url: '/', category: 'Customer Management',
       industries: ['Human Resources'],
@@ -41,10 +41,7 @@ const openapi = {
           endpoints: ['GET /api/feedback', 'POST /api/feedback', 'GET /api/feedback/{feedbackId}/comments', 'POST /api/feedback/{feedbackId}/comments'] },
         { name: 'Browse People', icon: '👥', description: 'Read people participating in PulseFeedback and refresh intern profiles.',
           does: ['List feedback participants', 'Refresh intern profiles'], best_for: 'Employee directory and feedback targeting experiences.',
-          endpoints: ['GET /api/employees', 'GET /api/interns'] },
-        { name: 'Keep Remarks', icon: '📝', description: 'Store a caller-owned private note about a participant.',
-          does: ['List private remarks', 'Create private remarks', 'Delete private remarks'], best_for: 'Personal follow-up notes that are not part of public feedback.',
-          endpoints: ['GET /api/private-remarks', 'POST /api/private-remarks', 'DELETE /api/private-remarks/{remarkId}'] }
+          endpoints: ['GET /api/employees', 'GET /api/interns'] }
       ],
       workflows: [
         { name: 'Give feedback', steps: ['GET /api/employees', 'POST /api/feedback', 'POST /api/feedback/{feedbackId}/comments'] },
@@ -81,13 +78,6 @@ const openapi = {
     '/api/feedback/{feedbackId}/reactions': {
       post: operation('Toggle an emoji reaction.', 'feedback:write', discovery('Toggle Reaction', 'Add or remove one emoji reaction on a feedback item or a comment.', ['feedbackId', 'reaction', 'commentId'], ['reacted'], ['GET /api/feedback']))
     },
-    '/api/private-remarks': {
-      get: operation('List the caller\'s own private remarks.', 'remark:read', discovery('List Private Remarks', 'Read the signed-in caller\'s own private follow-up notes.', ['limit', 'offset'], ['data'])),
-      post: operation('Create a private remark.', 'remark:write', discovery('Create Private Remark', 'Save a private follow-up note as the signed-in caller.', ['targetId', 'content'], ['id'], ['GET /api/private-remarks']))
-    },
-    '/api/private-remarks/{remarkId}': {
-      delete: operation('Delete a private remark.', 'remark:write', discovery('Delete Private Remark', 'Remove one of the signed-in caller\'s own private notes.', ['remarkId'], [], ['GET /api/private-remarks']))
-    },
     '/api/groups': {
       get: operation('List project groups.', 'feedback:read', discovery('List Groups', 'Read project groups, optionally restricted to the caller\'s own.', ['mine', 'limit', 'offset'], ['data'])),
       post: operation('Create a project group.', 'feedback:write', discovery('Create Group', 'Create a project group; the caller becomes its first member.', ['name'], ['id'], ['GET /api/groups']))
@@ -122,7 +112,6 @@ function routeKey(pathname) {
   if (/^\/api\/feedback\/[^/]+\/comments$/.test(pathname)) return '/api/feedback/{feedbackId}/comments';
   if (/^\/api\/feedback\/[^/]+\/reactions$/.test(pathname)) return '/api/feedback/{feedbackId}/reactions';
   if (/^\/api\/feedback\/[^/]+$/.test(pathname)) return '/api/feedback/{feedbackId}';
-  if (/^\/api\/private-remarks\/[^/]+$/.test(pathname)) return '/api/private-remarks/{remarkId}';
   if (/^\/api\/groups\/[^/]+\/members\/[^/]+$/.test(pathname)) return '/api/groups/{groupId}/members/{userId}';
   if (/^\/api\/groups\/[^/]+\/members$/.test(pathname)) return '/api/groups/{groupId}/members';
   if (/^\/api\/groups\/[^/]+$/.test(pathname)) return '/api/groups/{groupId}';
@@ -569,41 +558,6 @@ app.post('/api/feedback/:feedbackId/reactions', async (request, response, next) 
     return sendJson(response, 200, await feedbacks.toggleReaction({ userId, feedbackId, commentId: commentId || '', reaction }));
   } catch (error) { return next(error); }
 });
-// A private remark is a caller-owned note — authorId must always be the
-// caller's own resolved identity, never a client-supplied filter/target. It
-// used to be trusted straight from the query string/body, which let any
-// signed-in employee read, plant, or delete anyone else's private remarks
-// just by passing a different id (the same identity-spoofing risk
-// createPrivateFeedback already guards against for private messages).
-app.get('/api/private-remarks', async (request, response, next) => {
-  const page = pagination(request, response); if (!page) return;
-  const auth = request.auth || {};
-  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
-  try {
-    const authorId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
-    return sendJson(response, 200, { data: await feedbacks.listPrivateRemarks({ authorId, ...page }), ...page });
-  } catch (error) { return next(error); }
-});
-app.post('/api/private-remarks', async (request, response, next) => {
-  const auth = request.auth || {};
-  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
-  const { targetId, content } = request.body || {};
-  if (![targetId, content].every(validText)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'targetId and content are required.', { fields: ['targetId', 'content'] });
-  try {
-    const authorId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
-    return sendJson(response, 201, await feedbacks.createPrivateRemark({ id: `remark_${crypto.randomUUID()}`, authorId, targetId, content: content.trim() }));
-  } catch (error) { return next(error); }
-});
-app.delete('/api/private-remarks/:remarkId', async (request, response, next) => {
-  const auth = request.auth || {};
-  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
-  try {
-    const authorId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
-    if (!await feedbacks.deletePrivateRemark({ id: request.params.remarkId, authorId })) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No private remark with that id.');
-    return response.status(204).end();
-  } catch (error) { return next(error); }
-});
-
 app.get('/api/groups', async (request, response, next) => {
   const page = pagination(request, response); if (!page) return;
   try {

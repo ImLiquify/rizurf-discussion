@@ -1478,179 +1478,6 @@
       transform: translateY(-1px);
     }
 
-    /* Private remarks are visible only to the current user. */
-    .private-remark-panel {
-      position: absolute;
-      top: 82px;
-      right: 24px;
-      z-index: 2;
-      width: min(380px, calc(100% - 48px));
-      max-height: calc(90vh - 120px);
-      overflow-y: auto;
-      background: #FFFDF5;
-      border: 1px solid #E7C66A;
-      border-radius: 4px 12px 12px 4px;
-      padding: 18px 20px 20px 26px;
-      box-shadow: 10px 12px 24px rgba(15, 23, 42, 0.18);
-      animation: notebookPopIn 0.18s ease-out;
-    }
-
-    .private-remark-panel::before {
-      content: "";
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      left: 13px;
-      width: 1px;
-      background: #E6A7A7;
-    }
-
-    @keyframes notebookPopIn {
-      from {
-        opacity: 0;
-        transform: translateY(-6px) scale(0.98);
-      }
-
-      to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-      }
-    }
-
-    .private-remark-panel[hidden] {
-      display: none;
-    }
-
-    .private-remark-title {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-family: var(--font-heading);
-      font-size: 0.95rem;
-      font-weight: 700;
-      color: var(--text-main);
-      margin-bottom: 4px;
-    }
-
-    .private-remark-close {
-      margin-left: auto;
-      padding: 2px 4px;
-      border: 0;
-      background: transparent;
-      color: var(--text-muted);
-      cursor: pointer;
-      font-size: 0.75rem;
-    }
-
-    .private-remark-close:hover {
-      color: var(--text-main);
-    }
-
-    .personal-remark-link {
-      margin-left: 8px;
-      padding: 0;
-      border: 0;
-      background: transparent;
-      color: var(--accent-cyan-hover);
-      font: inherit;
-      font-size: 0.72rem;
-      font-weight: 600;
-      text-decoration: underline;
-      text-underline-offset: 2px;
-      cursor: pointer;
-      vertical-align: middle;
-    }
-
-    .personal-remark-link:hover {
-      color: var(--accent-cyan);
-    }
-
-    .personal-remark-link:focus-visible {
-      outline: 2px solid var(--accent-cyan);
-      outline-offset: 3px;
-      border-radius: 2px;
-    }
-
-    .private-remark-subtitle {
-      color: var(--text-muted);
-      font-size: 0.75rem;
-      margin-bottom: 12px;
-    }
-
-    .private-remark-input {
-      width: 100%;
-      min-height: 150px;
-      padding: 10px 12px;
-      border: 1px solid #E7C66A;
-      border-radius: 2px;
-      resize: vertical;
-      font: inherit;
-      outline: none;
-      line-height: 1.7;
-      background-color: #FFFFFF;
-      background-image: linear-gradient(to bottom, transparent 31px, #F2E5BE 32px);
-      background-size: 100% 32px;
-    }
-
-    .private-remark-input:focus {
-      border-color: #C58A00;
-      box-shadow: 0 0 0 2px rgba(197, 138, 0, 0.12);
-    }
-
-    .private-remark-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      margin-top: 10px;
-    }
-
-    .private-remark-display {
-      margin-top: 12px;
-      display: grid;
-      gap: 8px;
-    }
-
-    .private-remark-item {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      padding: 10px 12px;
-      border-left: 3px solid #C58A00;
-      background: rgba(255, 255, 255, 0.7);
-    }
-
-    .private-remark-item-text {
-      flex: 1;
-      min-width: 0;
-      color: var(--text-main);
-      font-size: 0.84rem;
-      line-height: 1.5;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
-
-    .private-remark-delete {
-      flex: 0 0 auto;
-      padding: 2px 4px;
-      border: 0;
-      background: transparent;
-      color: var(--text-muted);
-      cursor: pointer;
-      font-size: 0.75rem;
-    }
-
-    .private-remark-delete:hover {
-      color: #B42318;
-    }
-
-    @media (max-width: 600px) {
-      .private-remark-panel {
-        top: 72px;
-        right: 12px;
-        width: calc(100% - 24px);
-      }
-    }
-
     /* ==========================================================================
        FEEDBACKS TAB — private chat-style inbox
        ========================================================================== */
@@ -2287,10 +2114,6 @@
       margin-bottom: 14px;
     }
 
-    .private-remark-display:empty {
-      display: none;
-    }
-
     /* Modal Wall Feed */
     .modal-feed-title {
       font-family: var(--font-heading);
@@ -2868,7 +2691,18 @@
               placeholder="Search employees..." oninput="handleFeedbacksSearch(this.value)" />
           </div>
           <div class="feedbacks-list-scroll" id="feedbacksListScroll">
-            <!-- Rendered by JS: search results, Organization, Groups, Direct Messages -->
+            <!-- Rendered by JS: search results, Organization, Groups, Direct Messages.
+                 Pre-seeded with skeleton rows so the very first paint (before any
+                 script has run) isn't a blank pane. -->
+            <div class="feedbacks-section-label">Organization</div>
+            <div class="skeleton-list-item"><div class="skeleton-block skeleton-avatar"></div><div class="skeleton-lines"><div class="skeleton-block skeleton-line w-60"></div><div class="skeleton-block skeleton-line w-40"></div></div></div>
+            <div class="feedbacks-section-label">Groups</div>
+            <div class="skeleton-list-item"><div class="skeleton-block skeleton-avatar"></div><div class="skeleton-lines"><div class="skeleton-block skeleton-line w-60"></div><div class="skeleton-block skeleton-line w-40"></div></div></div>
+            <div class="skeleton-list-item"><div class="skeleton-block skeleton-avatar"></div><div class="skeleton-lines"><div class="skeleton-block skeleton-line w-60"></div><div class="skeleton-block skeleton-line w-40"></div></div></div>
+            <div class="feedbacks-section-label">Direct messages</div>
+            <div class="skeleton-list-item"><div class="skeleton-block skeleton-avatar"></div><div class="skeleton-lines"><div class="skeleton-block skeleton-line w-60"></div><div class="skeleton-block skeleton-line w-40"></div></div></div>
+            <div class="skeleton-list-item"><div class="skeleton-block skeleton-avatar"></div><div class="skeleton-lines"><div class="skeleton-block skeleton-line w-60"></div><div class="skeleton-block skeleton-line w-40"></div></div></div>
+            <div class="skeleton-list-item"><div class="skeleton-block skeleton-avatar"></div><div class="skeleton-lines"><div class="skeleton-block skeleton-line w-60"></div><div class="skeleton-block skeleton-line w-40"></div></div></div>
           </div>
         </div>
 
@@ -2924,7 +2758,11 @@
 
       <!-- Employee Tiles Grid -->
       <div class="employee-grid" id="employeeTilesGrid">
-        <!-- Rendered by JS: First tile is Workplace Suggestions Wall, followed by individual clean employee cards -->
+        <!-- Rendered by JS. Pre-seeded with skeleton tiles so the very first
+             paint isn't a blank grid. -->
+        <div class="skeleton-tile-card"><div class="skeleton-block skeleton-tile-avatar"></div><div class="skeleton-block skeleton-line name"></div><div class="skeleton-block skeleton-line role"></div><div class="skeleton-stats-row"><div class="skeleton-block skeleton-line stat"></div><div class="skeleton-block skeleton-line stat"></div></div></div>
+        <div class="skeleton-tile-card"><div class="skeleton-block skeleton-tile-avatar"></div><div class="skeleton-block skeleton-line name"></div><div class="skeleton-block skeleton-line role"></div><div class="skeleton-stats-row"><div class="skeleton-block skeleton-line stat"></div><div class="skeleton-block skeleton-line stat"></div></div></div>
+        <div class="skeleton-tile-card"><div class="skeleton-block skeleton-tile-avatar"></div><div class="skeleton-block skeleton-line name"></div><div class="skeleton-block skeleton-line role"></div><div class="skeleton-stats-row"><div class="skeleton-block skeleton-line stat"></div><div class="skeleton-block skeleton-line stat"></div></div></div>
       </div>
 
     </section>
@@ -3006,22 +2844,6 @@
             </button>
 
           </div>
-        </div>
-
-        <!-- Private Remark Panel: never included in the public wall feed. -->
-        <div class="private-remark-panel" id="privateRemarkPanel" hidden>
-          <div class="private-remark-title">
-            <span aria-hidden="true">🔒</span>
-            Private remark for you
-            <button type="button" class="private-remark-close" onclick="togglePersonalRemark()" aria-label="Close personal remark">Close</button>
-          </div>
-          <div class="private-remark-subtitle">Only you can see this note about this colleague.</div>
-          <textarea id="privateRemarkInput" class="private-remark-input" maxlength="500"
-            placeholder="Add a personal reminder about this colleague..."></textarea>
-          <div class="private-remark-actions">
-            <button class="btn-submit-feedback" onclick="savePrivateRemark()">Save remark</button>
-          </div>
-          <div class="private-remark-display" id="privateRemarkDisplay"></div>
         </div>
 
         <!-- Company Wall only: the public suggestions feed, with its own
@@ -3194,7 +3016,6 @@
     let selectedDepartment = "All";
     let searchQuery = "";
     let activeModalTargetId = null; // target employee id or "company"
-    let personalRemarkOpen = false;
 
     // Employee Wall oversight nav state (admin/manager only): a Given/
     // Received filter, drilling from a list of people/groups -> that
@@ -3214,9 +3035,6 @@
     }
     let feedbackSearchQuery = "";
     let feedbackSortOrder = "latest";
-    const PRIVATE_REMARKS_STORAGE_KEY = "pulseFeedback.privateRemarks";
-    let privateRemarks = loadPrivateRemarks();
-
     // Tracking active inline editing states
     let editingPostId = null;
     let editingCommentKey = null; // format: "postId_commentId"
@@ -3276,19 +3094,6 @@
         wallLink.style.display = isPrivilegedViewer() ? "" : "none";
         if (!isPrivilegedViewer() && currentMainTab === "wall") switchMainTab("feedbacks");
       }
-    }
-
-    function loadPrivateRemarks() {
-      try {
-        const stored = JSON.parse(localStorage.getItem(PRIVATE_REMARKS_STORAGE_KEY) || "{}");
-        return stored && typeof stored === "object" ? stored : {};
-      } catch (error) {
-        return {};
-      }
-    }
-
-    function savePrivateRemarksStore() {
-      localStorage.setItem(PRIVATE_REMARKS_STORAGE_KEY, JSON.stringify(privateRemarks));
     }
 
     // Employees Database
@@ -3372,14 +3177,7 @@
         renderDepartmentChips();
 
         if (CURRENT_USER.id) {
-          // Independent of each other — running them one after another was
-          // costing a whole extra round trip (each pays a live, uncachable
-          // gateway session check) before the Feedbacks tab's topics ever
-          // started loading.
-          await Promise.all([
-            loadPrivateRemarksFromBackend().catch(error => console.warn("Private remarks fetch error:", error)),
-            loadFeedbacksData().catch(error => console.warn("Feedbacks tab data fetch error:", error))
-          ]);
+          await loadFeedbacksData().catch(error => console.warn("Feedbacks tab data fetch error:", error));
         } else {
           myGroups = []; myTopics = []; activeContainer = null; activeTopic = null; conversationMessages = [];
           feedbacksListLoading = false;
@@ -3394,41 +3192,6 @@
         employeeTilesLoading = false;
         renderAll();
       }
-    }
-
-    async function loadPrivateRemarksFromBackend() {
-      const response = await fetch(`${API_BASE_URL}/private-remarks?authorId=${encodeURIComponent(CURRENT_USER.id)}`);
-      if (!response.ok) throw new Error("Private remarks request failed");
-
-      const payload = await response.json();
-      let remarks = Array.isArray(payload) ? payload : (payload.data || []);
-      const localRemarks = privateRemarks[CURRENT_USER.id] || {};
-      if (remarks.length === 0 && Object.keys(localRemarks).length > 0) {
-        const migratedRemarks = [];
-        for (const [targetId, targetRemarks] of Object.entries(localRemarks)) {
-          for (const remark of Array.isArray(targetRemarks) ? targetRemarks : [{ text: targetRemarks }]) {
-            const migrationResponse = await fetch(`${API_BASE_URL}/private-remarks`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                authorId: CURRENT_USER.id,
-                targetId,
-                content: remark.text
-              })
-            });
-            if (migrationResponse.ok) migratedRemarks.push(await migrationResponse.json());
-          }
-        }
-        remarks = migratedRemarks;
-        localStorage.removeItem(PRIVATE_REMARKS_STORAGE_KEY);
-      }
-      privateRemarks = {
-        [CURRENT_USER.id]: remarks.reduce((byTarget, remark) => {
-          if (!byTarget[remark.targetId]) byTarget[remark.targetId] = [];
-          byTarget[remark.targetId].push({ id: remark.id, text: remark.content });
-          return byTarget;
-        }, {})
-      };
     }
 
     // A background refresh re-renders the whole feed, which collapses any open
@@ -3886,6 +3649,10 @@
       document.body.style.overflow = "hidden";
 
       if (mode === "addMember" || mode === "edit") {
+        if (mode === "edit") {
+          const listEl = document.getElementById("groupModalCurrentMembersList");
+          if (listEl) listEl.innerHTML = skeletonListRowsHtml(2);
+        }
         await refreshGroupModalCurrentMembers();
       }
     }
@@ -4901,10 +4668,15 @@
       if (!isPrivilegedViewer()) return;
       try {
         const response = await fetch(`${API_BASE_URL}/feedback/counts`);
-        if (!response.ok) return;
+        if (!response.ok) {
+          console.warn("Employee Wall counts request failed:", response.status);
+          return;
+        }
         employeeCounts = (await response.json()).data || {};
         renderEmployeeTiles();
-      } catch (error) { /* silent — next tick tries again */ }
+      } catch (error) {
+        console.warn("Employee Wall counts fetch error:", error);
+      }
     }
     function startWallCountsPolling() {
       stopWallCountsPolling();
@@ -5051,7 +4823,7 @@
               <img src="${escapeHtml(avatarSrc(emp.avatar))}" alt="${safeName}" />
             </div>
             <div class="modal-target-info">
-              <h3>${safeName}<button type="button" class="personal-remark-link" id="personalRemarkToggle" onclick="togglePersonalRemark()" aria-expanded="false">Personal remark</button></h3>
+              <h3>${safeName}</h3>
               <p>${escapeHtml(emp.role)} • ${escapeHtml(emp.department)}</p>
             </div>
           `;
@@ -5073,14 +4845,12 @@
       document.getElementById("publicFeedSection").hidden = targetId !== "company";
 
       // Reset form fields
-      personalRemarkOpen = false;
       feedbackSearchQuery = "";
       feedbackSortOrder = "latest";
       textInput.value = "";
       document.getElementById("anonCheckbox").checked = false;
       document.getElementById("feedbackFeedSearch").value = "";
       document.getElementById("feedbackFeedSort").value = feedbackSortOrder;
-      renderPrivateRemarkPanel(targetId);
       oversightRows = [];
       oversightBucket = "given";
       oversightSelectedLabel = null;
@@ -5090,36 +4860,6 @@
       renderModalWallFeed(targetId);
       overlay.classList.add("open");
       document.body.style.overflow = "hidden";
-    }
-
-    function renderPrivateRemarkPanel(targetId) {
-      const panel = document.getElementById("privateRemarkPanel");
-      const input = document.getElementById("privateRemarkInput");
-      const display = document.getElementById("privateRemarkDisplay");
-      const isEmployeeTarget = targetId && targetId !== "company" && targetId !== CURRENT_USER.id;
-
-      panel.hidden = !isEmployeeTarget || !personalRemarkOpen;
-      if (!isEmployeeTarget) return;
-
-      const toggle = document.getElementById("personalRemarkToggle");
-      if (toggle) {
-        toggle.setAttribute("aria-expanded", String(personalRemarkOpen));
-        toggle.textContent = personalRemarkOpen ? "Close remark" : "Personal remark";
-      }
-
-      const authorRemarks = privateRemarks[CURRENT_USER.id] || {};
-      const remarks = Array.isArray(authorRemarks[targetId])
-        ? authorRemarks[targetId]
-        : authorRemarks[targetId]
-          ? [{ id: `remark_migrated_${targetId}`, text: authorRemarks[targetId] }]
-          : [];
-      input.value = "";
-      display.innerHTML = remarks.map(remark => `
-        <div class="private-remark-item">
-          <div class="private-remark-item-text">${escapeHtml(remark.text)}</div>
-          <button type="button" class="private-remark-delete" onclick="deletePrivateRemark('${remark.id}')" title="Delete this remark">Delete</button>
-        </div>
-      `).join("");
     }
 
     // Admin/manager oversight: "admins and managers can view the feedbacks
@@ -5140,7 +4880,13 @@
       panel.hidden = !canOversee;
       if (!canOversee) return;
 
-      body.innerHTML = `<div class="feedbacks-empty-state">Loading…</div>`;
+      body.innerHTML = `
+        <div class="oversight-bucket-tabs">
+          <button type="button" class="oversight-bucket-tab active">Given</button>
+          <button type="button" class="oversight-bucket-tab">Received</button>
+        </div>
+        ${skeletonListRowsHtml(3)}
+      `;
       try {
         // One request instead of three (DM/org/group used to be fetched
         // separately) — every request already pays a live, uncachable
@@ -5287,76 +5033,6 @@
         </div>
         <div class="oversight-topic-messages">${sorted.map(chatMessageBubbleHtml).join("")}</div>
       `;
-    }
-
-    function togglePersonalRemark() {
-      if (!activeModalTargetId || activeModalTargetId === "company" || activeModalTargetId === CURRENT_USER.id) return;
-
-      personalRemarkOpen = !personalRemarkOpen;
-      renderPrivateRemarkPanel(activeModalTargetId);
-
-      if (personalRemarkOpen) {
-        document.getElementById("privateRemarkInput").focus();
-      }
-    }
-
-    async function savePrivateRemark() {
-      if (!activeModalTargetId || activeModalTargetId === "company" || activeModalTargetId === CURRENT_USER.id) return;
-
-      const input = document.getElementById("privateRemarkInput");
-      const remark = input.value.trim();
-      if (!remark) {
-        showToast("⚠️ Write a remark before saving.");
-        input.focus();
-        return;
-      }
-
-      try {
-        const response = await fetch(`${API_BASE_URL}/private-remarks`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            authorId: CURRENT_USER.id,
-            targetId: activeModalTargetId,
-            content: remark
-          })
-        });
-        if (!response.ok) throw new Error("Remark could not be saved");
-
-        const savedRemark = await response.json();
-        if (!privateRemarks[CURRENT_USER.id]) privateRemarks[CURRENT_USER.id] = {};
-        if (!privateRemarks[CURRENT_USER.id][activeModalTargetId]) {
-          privateRemarks[CURRENT_USER.id][activeModalTargetId] = [];
-        }
-        privateRemarks[CURRENT_USER.id][activeModalTargetId].push({
-          id: savedRemark.id,
-          text: savedRemark.content
-        });
-        input.value = "";
-        renderPrivateRemarkPanel(activeModalTargetId);
-        showToast("🔒 Private remark saved.");
-      } catch (error) {
-        showToast("Could not save private remark. Please try again.");
-      }
-    }
-
-    async function deletePrivateRemark(remarkId) {
-      if (!activeModalTargetId || !privateRemarks[CURRENT_USER.id]) return;
-
-      try {
-        const response = await fetch(
-          `${API_BASE_URL}/private-remarks/${encodeURIComponent(remarkId)}?authorId=${encodeURIComponent(CURRENT_USER.id)}`,
-          { method: "DELETE" }
-        );
-        if (!response.ok) throw new Error("Remark could not be deleted");
-
-        const existingRemarks = privateRemarks[CURRENT_USER.id][activeModalTargetId];
-        privateRemarks[CURRENT_USER.id][activeModalTargetId] = existingRemarks.filter(remark => remark.id !== remarkId);
-        renderPrivateRemarkPanel(activeModalTargetId);
-        showToast("Private remark deleted.");
-      } catch (error) {
-        showToast("Could not delete private remark. Please try again.");
-      }
     }
 
     function renderModalWallFeed(targetId) {

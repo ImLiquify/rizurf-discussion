@@ -474,32 +474,6 @@ export async function deleteCommentById(id) {
   return result.affectedRows > 0;
 }
 
-export async function listPrivateRemarks({ authorId, limit, offset }) {
-  const [rows] = await pool.execute(
-    `SELECT id, author_id AS authorId, target_id AS targetId, content, created_at AS createdAt
-     FROM private_remarks WHERE author_id = ? ORDER BY created_at ASC LIMIT ? OFFSET ?`,
-    [authorId, limit, offset]
-  );
-  return rows;
-}
-
-export async function createPrivateRemark({ id, authorId, targetId, content }) {
-  await pool.execute(
-    'INSERT INTO private_remarks (id, author_id, target_id, content) VALUES (?, ?, ?, ?)',
-    [id, authorId, targetId, content]
-  );
-  const [rows] = await pool.execute(
-    `SELECT id, author_id AS authorId, target_id AS targetId, content, created_at AS createdAt FROM private_remarks WHERE id = ?`,
-    [id]
-  );
-  return rows[0];
-}
-
-export async function deletePrivateRemark({ id, authorId }) {
-  const [result] = await pool.execute('DELETE FROM private_remarks WHERE id = ? AND author_id = ?', [id, authorId]);
-  return result.affectedRows > 0;
-}
-
 // Project groups for the Feedbacks tab. Discord-style leadership: any
 // signed-in employee may create a group (becoming its leader), but managing
 // membership and settings afterward is restricted to that leader plus
