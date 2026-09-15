@@ -3187,6 +3187,7 @@
     let topicSearchQuery = "";
     let activeTopic = null; // { id, name, targetType, targetId, createdBy } — the open thread, or null while browsing topics
     let conversationMessages = [];
+    let topicPollTimer = null; // short poll for near-real-time delivery while a conversation is actually open
 
     function isPrivilegedViewer() { return currentRoleView === "admin" || currentRoleView === "manager"; }
 
@@ -3898,6 +3899,7 @@
     // Selecting a container (Organization / a group / an employee) shows its
     // topic list first — the convo doesn't happen until a topic is opened.
     async function openContainer(type, id, name) {
+      stopTopicPolling();
       activeContainer = { type, id, name };
       activeTopic = null;
       containerTopics = [];
@@ -3978,9 +3980,11 @@
         await fetch(`${API_BASE_URL}/topics/${topic.id}/read`, { method: "POST" });
         await loadFeedbacksData();
       } catch (error) { /* best-effort — the badge just stays stale until the next poll */ }
+      startTopicPolling();
     }
 
     function backToTopicList() {
+      stopTopicPolling();
       activeTopic = null;
       conversationMessages = [];
       renderTopicList();
@@ -3996,6 +4000,49 @@
         conversationMessages = [];
       }
       renderConversationMessages();
+    }
+
+    // Near-real-time delivery for an open conversation: while it's actually
+    // visible on screen, poll just that one topic's messages every 3s — far
+    // cheaper than the old "refetch everything" pattern (see refreshPublicFeed)
+    // since at most one conversation is ever polled per browser tab, and it
+    // stops the moment the topic closes, the tab is hidden, or another modal
+    // takes focus. Every request still pays a live, uncachable gateway
+    // session check (MICROAPP_AUTH.md §5) — true push (WebSockets/SSE) isn't
+    // practical on this app's plain Vercel serverless functions without a
+    // third-party realtime service, so this is the closest "instant" gets
+    // without adding one.
+    function startTopicPolling() {
+      stopTopicPolling();
+      topicPollTimer = window.setInterval(pollActiveTopicMessages, 3000);
+    }
+
+    function stopTopicPolling() {
+      if (topicPollTimer) { window.clearInterval(topicPollTimer); topicPollTimer = null; }
+    }
+
+    async function pollActiveTopicMessages() {
+      if (!activeTopic || currentMainTab !== "feedbacks" || activeModalTargetId || document.visibilityState !== "visible") return;
+      const topicId = activeTopic.id;
+      try {
+        const response = await fetch(`${API_BASE_URL}/feedback?visibility=private&topicId=${encodeURIComponent(topicId)}`);
+        if (!response.ok || activeTopic?.id !== topicId) return;
+        const fetched = (await response.json()).data || [];
+        const pending = conversationMessages.filter(m => m.pending);
+        const currentIds = conversationMessages.filter(m => !m.pending).map(m => m.id).join(",");
+        const fetchedIds = fetched.map(m => m.id).join(",");
+        if (currentIds === fetchedIds && !pending.length) return; // nothing new — skip the render, keep scroll position
+
+        conversationMessages = [...fetched, ...pending];
+        renderConversationMessages();
+
+        if (fetchedIds !== currentIds) {
+          fetch(`${API_BASE_URL}/topics/${topicId}/read`, { method: "POST" }).catch(() => {});
+          const topicInList = myTopics.find(t => t.id === topicId);
+          if (topicInList) topicInList.unreadCount = 0;
+          updateFeedbacksUnreadBadge();
+        }
+      } catch (error) { /* silent — next tick tries again */ }
     }
 
     function chatMessageBubbleHtml(message) {
