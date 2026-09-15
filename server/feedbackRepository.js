@@ -274,6 +274,31 @@ export async function listFeedback({ targetId, senderId, participantId, groupMem
   return rows;
 }
 
+// Given/received tallies across every feedback row (public wall + private
+// DMs/groups/Organization) — the Employee Wall tile used to count only
+// public rows, so an employee's private activity never moved the numbers.
+// 'given' = rows they sent; 'received' = rows addressed directly to them
+// (a DM, or a public post targeting them) — a group/org row's target_id is
+// the group/sentinel, not a person, so a broadcast message doesn't count as
+// "received by" any one individual, same as a public 'company' post
+// already didn't. One aggregate query, not one per employee.
+export async function getFeedbackCounts() {
+  const [rows] = await pool.query(`
+    SELECT id, kind, COUNT(*) AS count FROM (
+      SELECT sender_id AS id, 'given' AS kind FROM feedback
+      UNION ALL
+      SELECT target_id AS id, 'received' AS kind FROM feedback
+    ) counted
+    GROUP BY id, kind
+  `);
+  const counts = {};
+  for (const row of rows) {
+    if (!counts[row.id]) counts[row.id] = { given: 0, received: 0 };
+    counts[row.id][row.kind] = Number(row.count);
+  }
+  return counts;
+}
+
 export async function createFeedback({ id, senderId, targetId, targetName, content, isAnonymous, visibility = 'public', targetType = 'user', topicId = null }) {
   await pool.execute(
     'INSERT INTO feedback (id, sender_id, target_id, target_name, content, is_anonymous, visibility, target_type, topic_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',

@@ -63,6 +63,9 @@ const openapi = {
       get: operation('List workplace feedback.', 'feedback:read', discovery('List Feedback', 'Read feedback filtered by sender or target.', ['targetId', 'senderId', 'visibility', 'participantId', 'groupMemberId', 'oversightFor', 'topicId', 'mine', 'limit', 'offset'], ['data'])),
       post: operation('Create workplace feedback.', 'feedback:write', discovery('Create Feedback', 'Submit feedback for a participant or the company.', ['senderId', 'targetId', 'targetName', 'content', 'isAnonymous'], ['id'], ['GET /api/feedback']))
     },
+    '/api/feedback/counts': {
+      get: operation('Read given/received feedback counts per employee.', 'feedback:read', discovery('Read Feedback Counts', 'Read a per-employee tally of given and received feedback, across public and private, for the Employee Wall; an admin or manager only.', [], ['data']))
+    },
     '/api/feedback/{feedbackId}': {
       patch: operation('Edit a feedback item.', 'feedback:write', discovery('Edit Feedback', 'Update the text of a feedback item; the author, an admin, or a manager only.', ['feedbackId', 'content'], ['id'], ['GET /api/feedback'])),
       delete: operation('Delete a feedback item.', 'feedback:write', discovery('Delete Feedback', 'Remove a feedback item; the author, an admin, or a manager only.', ['feedbackId'], []))
@@ -356,6 +359,14 @@ app.get('/api/feedback', async (request, response, next) => {
       applyReactions(item, item.id, '');
     }
     return sendJson(response, 200, { data, ...page });
+  } catch (error) { return next(error); }
+});
+app.get('/api/feedback/counts', async (request, response, next) => {
+  try {
+    const { viewerId, isPrivileged } = await resolveViewerForRead(request.auth);
+    if (!viewerId) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+    if (!isPrivileged) return sendError(response, request, 403, 'FORBIDDEN', 'Only an admin or a manager can read feedback counts.');
+    return sendJson(response, 200, { data: await feedbacks.getFeedbackCounts() });
   } catch (error) { return next(error); }
 });
 app.post('/api/feedback', async (request, response, next) => {

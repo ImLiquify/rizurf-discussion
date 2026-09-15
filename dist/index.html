@@ -1979,6 +1979,51 @@
       max-width: 320px;
     }
 
+    /* ==========================================================================
+       SKELETON LOADING — shown while a panel's first real data is still in
+       flight, instead of a blank pane or a plain "Loading…" line.
+       ========================================================================== */
+    .skeleton-block {
+      background: linear-gradient(100deg, var(--bg-subtle) 30%, var(--bg-surface) 50%, var(--bg-subtle) 70%);
+      background-size: 250% 100%;
+      animation: skeleton-shimmer 1.4s ease-in-out infinite;
+      border-radius: var(--radius-md);
+    }
+    @keyframes skeleton-shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -50% 0; }
+    }
+    .skeleton-list-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px; }
+    .skeleton-avatar { width: 36px; height: 36px; border-radius: var(--radius-full); flex-shrink: 0; }
+    .skeleton-lines { flex: 1; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+    .skeleton-line { height: 9px; }
+    .skeleton-line.w-60 { width: 60%; }
+    .skeleton-line.w-40 { width: 40%; }
+    .skeleton-line.w-80 { width: 80%; }
+
+    .skeleton-tile-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .skeleton-tile-avatar { width: 72px; height: 72px; border-radius: var(--radius-xl); margin-bottom: 14px; }
+    .skeleton-tile-card .skeleton-line { margin: 0 auto; }
+    .skeleton-tile-card .skeleton-line.name { width: 70%; height: 14px; margin-bottom: 8px; }
+    .skeleton-tile-card .skeleton-line.role { width: 50%; margin-bottom: 14px; }
+    .skeleton-tile-card .skeleton-stats-row { display: flex; gap: 24px; margin-top: 14px; width: 100%; justify-content: center; }
+    .skeleton-tile-card .skeleton-line.stat { width: 32px; height: 20px; }
+
+    .skeleton-bubble-row { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; max-width: 60%; }
+    .skeleton-bubble-row.mine { align-self: flex-end; align-items: flex-end; }
+    .skeleton-bubble { height: 38px; border-radius: 14px; }
+    .skeleton-bubble.w-140 { width: 140px; }
+    .skeleton-bubble.w-200 { width: 200px; }
+    .skeleton-bubble.w-90 { width: 90px; }
+
     /* Messenger-style layout: my own messages align to the right, everyone
        else's align to the left, so a back-and-forth reads like a chat
        instead of a flat feed. The messages scroll container is already a
@@ -3189,6 +3234,19 @@
     let activeTopic = null; // { id, name, targetType, targetId, createdBy } — the open thread, or null while browsing topics
     let conversationMessages = [];
     let topicPollTimer = null; // short poll for near-real-time delivery while a conversation is actually open
+    let myTopicsPollTimer = null; // short poll for the Feedbacks sidebar itself — new/updated conversations, unread counts
+    let employeeCounts = {}; // employeeId -> { given, received } across public + private feedback, privileged viewers only
+    let wallCountsPollTimer = null; // short poll refreshing employeeCounts while Employee Wall is open
+
+    // Skeleton-loading flags — true only while a panel's first real request
+    // for its current subject is in flight, so a skeleton shows instead of a
+    // blank pane or empty-state flash. Background polls never touch these:
+    // once a panel has shown real content, it keeps showing it (stale-while-
+    // revalidating) instead of skeletoning again on every refresh.
+    let feedbacksListLoading = true; // Organization/Groups/Direct Messages left list
+    let employeeTilesLoading = true; // Employee Wall grid
+    let containerTopicsLoading = false; // topics-in-this-container middle panel
+    let conversationLoading = false; // messages in the open topic
 
     function isPrivilegedViewer() { return currentRoleView === "admin" || currentRoleView === "manager"; }
 
@@ -3273,6 +3331,7 @@
         } else {
           EMPLOYEES.splice(0, EMPLOYEES.length);
         }
+        employeeTilesLoading = false;
 
         if (feedbackResponse.ok) {
           const fbJson = await feedbackResponse.json();
@@ -3323,6 +3382,7 @@
           ]);
         } else {
           myGroups = []; myTopics = []; activeContainer = null; activeTopic = null; conversationMessages = [];
+          feedbacksListLoading = false;
           renderFeedbacksTab();
           renderTopicList();
         }
@@ -3330,6 +3390,9 @@
         renderAll();
       } catch (error) {
         console.warn("Backend data fetch error:", error);
+        feedbacksListLoading = false;
+        employeeTilesLoading = false;
+        renderAll();
       }
     }
 
@@ -3450,6 +3513,8 @@
       await loadBackendData();
       renderAll();
       window.setInterval(refreshPublicFeed, 45000);
+      if (currentMainTab === "feedbacks") startMyTopicsPolling();
+      else { refreshEmployeeCounts(); startWallCountsPolling(); }
     });
 
     function renderAll() {
@@ -3478,8 +3543,16 @@
       const breadcrumb = document.getElementById("breadcrumbActive");
       if (breadcrumb) breadcrumb.textContent = MAIN_TABS[tab].label;
 
-      if (tab === "feedbacks") renderFeedbacksTab();
-      else renderEmployeeTiles();
+      if (tab === "feedbacks") {
+        stopWallCountsPolling();
+        renderFeedbacksTab();
+        startMyTopicsPolling();
+      } else {
+        stopMyTopicsPolling();
+        renderEmployeeTiles();
+        refreshEmployeeCounts();
+        startWallCountsPolling();
+      }
     }
 
     /* ==========================================================================
@@ -3492,7 +3565,7 @@
     // anyone else; oversight of OTHER people's threads is a separate,
     // deliberate lookup from the Employee Wall modal, not blended in here).
     async function loadFeedbacksData() {
-      if (!CURRENT_USER.id) { myGroups = []; myTopics = []; renderFeedbacksTab(); renderTopicList(); return; }
+      if (!CURRENT_USER.id) { myGroups = []; myTopics = []; feedbacksListLoading = false; renderFeedbacksTab(); renderTopicList(); return; }
       try {
         // The full group directory only exists to resolve a sub-group's
         // parent name for display and rarely changes — fetch it once, not
@@ -3509,6 +3582,7 @@
       } catch (error) {
         console.warn("Feedbacks tab data fetch error:", error);
       }
+      feedbacksListLoading = false;
       renderFeedbacksTab();
       updateFeedbacksUnreadBadge();
       if (activeTopic) await refreshActiveTopicMessages();
@@ -3521,6 +3595,50 @@
       const total = myTopics.reduce((sum, t) => sum + (t.unreadCount || 0), 0);
       badge.textContent = total;
       badge.hidden = total === 0;
+    }
+
+    // Refetches just myTopics — used right after creating a topic (so it
+    // shows up in the left-hand Organization/Groups/Direct Messages list
+    // immediately, instead of only after the next full loadFeedbacksData())
+    // and by the background poll below.
+    async function refreshMyTopics() {
+      try {
+        const response = await fetch(`${API_BASE_URL}/topics?mine=1`);
+        if (!response.ok) return;
+        const fetched = (await response.json()).data || [];
+        // The topic that's actually open is already kept live by the 3s
+        // per-topic poll (pollActiveTopicMessages), which marks it read the
+        // moment new messages arrive. A fetch here can land a half-second
+        // before that mark-read round trip finishes server-side and briefly
+        // report a stale non-zero unreadCount for it — force it to 0 locally
+        // so the sidebar/badge never flash a wrong "unread" notification for
+        // a conversation the user is actively looking at.
+        if (activeTopic) {
+          const openOne = fetched.find(t => t.id === activeTopic.id);
+          if (openOne) openOne.unreadCount = 0;
+        }
+        myTopics = fetched;
+        renderFeedbacksTab();
+        updateFeedbacksUnreadBadge();
+      } catch (error) { /* silent — next tick tries again */ }
+    }
+
+    // Near-real-time delivery for the Feedbacks sidebar itself: while the
+    // tab is open, poll the list of conversations (not their content — that's
+    // the separate, tighter topicPollTimer below) so a brand new DM/group
+    // topic — one you just created, or one someone else just started with
+    // you — appears without a manual reload, and unread counts/previews stay
+    // current across every conversation, not just whichever one is open.
+    function startMyTopicsPolling() {
+      stopMyTopicsPolling();
+      myTopicsPollTimer = window.setInterval(pollMyTopics, 4000);
+    }
+    function stopMyTopicsPolling() {
+      if (myTopicsPollTimer) { window.clearInterval(myTopicsPollTimer); myTopicsPollTimer = null; }
+    }
+    function pollMyTopics() {
+      if (currentMainTab !== "feedbacks" || document.visibilityState !== "visible") return;
+      refreshMyTopics();
     }
 
     // Organization is one shared company-wide channel now, not a private
@@ -3573,6 +3691,42 @@
       `;
     }
 
+    function skeletonListRowsHtml(count) {
+      return Array.from({ length: count }, () => `
+        <div class="skeleton-list-item">
+          <div class="skeleton-block skeleton-avatar"></div>
+          <div class="skeleton-lines">
+            <div class="skeleton-block skeleton-line w-60"></div>
+            <div class="skeleton-block skeleton-line w-40"></div>
+          </div>
+        </div>
+      `).join("");
+    }
+    function skeletonTileCardsHtml(count) {
+      return Array.from({ length: count }, () => `
+        <div class="skeleton-tile-card">
+          <div class="skeleton-block skeleton-tile-avatar"></div>
+          <div class="skeleton-block skeleton-line name"></div>
+          <div class="skeleton-block skeleton-line role"></div>
+          <div class="skeleton-stats-row">
+            <div class="skeleton-block skeleton-line stat"></div>
+            <div class="skeleton-block skeleton-line stat"></div>
+          </div>
+        </div>
+      `).join("");
+    }
+    function skeletonBubblesHtml() {
+      const rows = [
+        { mine: false, w: "w-200" }, { mine: true, w: "w-140" },
+        { mine: false, w: "w-90" }, { mine: true, w: "w-200" }
+      ];
+      return rows.map(r => `
+        <div class="skeleton-bubble-row${r.mine ? " mine" : ""}">
+          <div class="skeleton-block skeleton-bubble ${r.w}"></div>
+        </div>
+      `).join("");
+    }
+
     const SETTINGS_GEAR_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`;
     const TRASH_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
 
@@ -3604,6 +3758,18 @@
     function renderFeedbacksTab() {
       const listEl = document.getElementById("feedbacksListScroll");
       if (!listEl) return;
+
+      if (feedbacksListLoading) {
+        listEl.innerHTML = `
+          <div class="feedbacks-section-label">Organization</div>
+          ${skeletonListRowsHtml(1)}
+          <div class="feedbacks-section-label">Groups</div>
+          ${skeletonListRowsHtml(2)}
+          <div class="feedbacks-section-label">Direct messages</div>
+          ${skeletonListRowsHtml(3)}
+        `;
+        return;
+      }
 
       const query = feedbacksSearchQuery.toLowerCase().trim();
       const dmMap = dmTopicsByCounterpart();
@@ -3922,6 +4088,7 @@
       activeContainer = { type, id, name };
       activeTopic = null;
       containerTopics = [];
+      containerTopicsLoading = true;
       topicSearchQuery = "";
       renderFeedbacksTab();
       renderTopicList();
@@ -3938,6 +4105,7 @@
       } catch (error) {
         containerTopics = [];
       }
+      containerTopicsLoading = false;
       if (!activeTopic) renderTopicList();
     }
 
@@ -3979,7 +4147,12 @@
         if (!response.ok) throw new Error("Topic creation failed");
         const topic = await response.json();
         closeTopicModal();
-        await refreshContainerTopics();
+        // refreshContainerTopics() updates the middle "topics in this
+        // container" panel; refreshMyTopics() updates the left-hand
+        // Organization/Groups/Direct Messages list — without this second
+        // call, a topic you just created (a brand new DM in particular)
+        // never appeared there until the next full page load.
+        await Promise.all([refreshContainerTopics(), refreshMyTopics()]);
         openTopicById(topic.id);
       } catch (error) {
         showToast("Could not create that topic. Please try again.");
@@ -3993,6 +4166,8 @@
 
     async function openTopic(topic) {
       activeTopic = topic;
+      conversationMessages = [];
+      conversationLoading = true;
       renderTopicList();
       await refreshActiveTopicMessages();
       startTopicPolling();
@@ -4031,6 +4206,7 @@
       } catch (error) {
         conversationMessages = [];
       }
+      conversationLoading = false;
       renderConversationMessages(true);
     }
 
@@ -4046,7 +4222,7 @@
     // without adding one.
     function startTopicPolling() {
       stopTopicPolling();
-      topicPollTimer = window.setInterval(pollActiveTopicMessages, 3000);
+      topicPollTimer = window.setInterval(pollActiveTopicMessages, 1500);
     }
 
     function stopTopicPolling() {
@@ -4162,6 +4338,14 @@
       if (activeTopic) { renderConversationMessages(); return; }
 
       header.hidden = false;
+
+      if (containerTopicsLoading) {
+        header.innerHTML = `<div class="skeleton-block skeleton-line w-40" style="height:16px;"></div>`;
+        composeBar.hidden = true;
+        scroll.innerHTML = skeletonListRowsHtml(3);
+        return;
+      }
+
       const canManageGroup = activeContainer.type === "group" && isGroupLeaderOrPrivileged(activeContainer.id);
       const groupActionsHtml = canManageGroup
         ? `<div style="display:flex; align-items:center; gap:10px;">
@@ -4208,6 +4392,10 @@
       `;
 
       composeBar.hidden = false;
+      if (conversationLoading) {
+        scroll.innerHTML = skeletonBubblesHtml();
+        return;
+      }
       const sorted = [...conversationMessages].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
       scroll.innerHTML = sorted.length
         ? sorted.map(chatMessageBubbleHtml).join("")
@@ -4703,8 +4891,43 @@
     /* ==========================================================================
        TAB 2: EMPLOYEE WALL LOGIC (CLEAN TILES, ACCURATE DYNAMIC COUNTERS)
        ========================================================================== */
+    // Given/Received on each Employee Wall tile used to count only public
+    // wall posts (the FEEDBACKS array) — an employee's private DMs, group
+    // messages, and Organization activity never moved the numbers, so they
+    // looked frozen the moment someone's activity was mostly private.
+    // Admin/manager-only endpoint, since it's a coarse signal of private
+    // message volume even without any content.
+    async function refreshEmployeeCounts() {
+      if (!isPrivilegedViewer()) return;
+      try {
+        const response = await fetch(`${API_BASE_URL}/feedback/counts`);
+        if (!response.ok) return;
+        employeeCounts = (await response.json()).data || {};
+        renderEmployeeTiles();
+      } catch (error) { /* silent — next tick tries again */ }
+    }
+    function startWallCountsPolling() {
+      stopWallCountsPolling();
+      if (!isPrivilegedViewer()) return;
+      wallCountsPollTimer = window.setInterval(pollWallCounts, 5000);
+    }
+    function stopWallCountsPolling() {
+      if (wallCountsPollTimer) { window.clearInterval(wallCountsPollTimer); wallCountsPollTimer = null; }
+    }
+    function pollWallCounts() {
+      if (currentMainTab !== "wall" || document.visibilityState !== "visible") return;
+      refreshEmployeeCounts();
+    }
+
     function renderEmployeeTiles() {
       const grid = document.getElementById("employeeTilesGrid");
+      if (!grid) return;
+
+      if (employeeTilesLoading) {
+        grid.innerHTML = skeletonTileCardsHtml(6);
+        return;
+      }
+
       const search = searchQuery.toLowerCase().trim();
 
       // Filter employees
@@ -4721,8 +4944,12 @@
 
       // Individual Clean Employee Cards
       const employeeCardsHtml = filtered.map(emp => {
-        const empReceivedCount = FEEDBACKS.filter(f => f.targetId === emp.id).length;
-        const empGivenCount = FEEDBACKS.filter(f => f.senderId === emp.id).length;
+        // employeeCounts (public + private feedback) once populated for a
+        // privileged viewer; falls back to the public-only tally so the
+        // numbers are never blank while that request is still in flight.
+        const counts = employeeCounts[emp.id];
+        const empReceivedCount = counts ? counts.received : FEEDBACKS.filter(f => f.targetId === emp.id).length;
+        const empGivenCount = counts ? counts.given : FEEDBACKS.filter(f => f.senderId === emp.id).length;
 
         return `
           <div class="employee-tile-card" onclick="openWallModal('${emp.id}')">
