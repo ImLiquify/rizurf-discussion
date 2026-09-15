@@ -185,15 +185,23 @@ export async function listSyncedInterns({ limit, offset }) {
 // "target_id is a user id" shape), or a member of the target group.
 // Parametrized by table alias + owner column so `feedback` and `topics` can
 // share one definition instead of drifting apart.
+//
+// 'org' is a single shared company-wide channel (target_id = the
+// ORG_SHARED_TARGET_ID sentinel in rizurfApi.js) — anyone signed in can read
+// it, same as everyone being an implicit member. Older rows created before
+// that change used a per-employee sentinel (target_id = that employee's own
+// id, a private 1:1 thread with leadership) — those keep their original
+// privacy: only that employee and a privileged viewer can still see them.
 function accessSql(alias, ownerColumn) {
   return `(
     ? OR ${alias}.${ownerColumn} = ?
-    OR (${alias}.target_type IN ('user','org') AND ${alias}.target_id = ?)
+    OR (${alias}.target_type = 'user' AND ${alias}.target_id = ?)
+    OR (${alias}.target_type = 'org' AND (${alias}.target_id = 'organization' OR ${alias}.target_id = ?))
     OR (${alias}.target_type = 'group' AND ${alias}.target_id IN (SELECT group_id FROM group_members WHERE user_id = ?))
   )`;
 }
 function accessParams(viewerIsPrivileged, viewerId) {
-  return [Boolean(viewerIsPrivileged), viewerId || '', viewerId || '', viewerId || ''];
+  return [Boolean(viewerIsPrivileged), viewerId || '', viewerId || '', viewerId || '', viewerId || ''];
 }
 const PRIVATE_ACCESS_SQL = accessSql('f', 'sender_id');
 const privateAccessParams = accessParams;
@@ -216,19 +224,23 @@ export async function listFeedback({ targetId, senderId, participantId, groupMem
       conditions.push('f.target_type = \'group\' AND f.target_id IN (SELECT group_id FROM group_members WHERE user_id = ?)');
       parameters.push(groupMemberId);
     }
-    // Employee Wall oversight: every DM, Organization thread, and group
+    // Employee Wall oversight: every DM, Organization message, and group
     // message involving one employee, in a single round trip — the OR of
-    // what participantId + targetId + groupMemberId would each match
-    // separately. Every request already pays a live, uncachable gateway
-    // introspection check (see MICROAPP_AUTH.md §5), so collapsing what used
-    // to be three separate GETs into one cuts that fixed cost by two thirds.
+    // what participantId + groupMemberId would each match separately, plus
+    // this employee's own activity in the shared Organization channel
+    // (sender_id — there's no "target" to key off any more since it's a
+    // shared channel, not 1:1) or, for messages predating that change, their
+    // old private per-employee org thread (target_id). Every request already
+    // pays a live, uncachable gateway introspection check (see
+    // MICROAPP_AUTH.md §5), so collapsing what used to be three separate
+    // GETs into one cuts that fixed cost by two thirds.
     if (oversightFor) {
       conditions.push(`(
         (f.target_type = 'user' AND (f.sender_id = ? OR f.target_id = ?))
-        OR f.target_id = ?
+        OR (f.target_type = 'org' AND (f.sender_id = ? OR f.target_id = ?))
         OR (f.target_type = 'group' AND f.target_id IN (SELECT group_id FROM group_members WHERE user_id = ?))
       )`);
-      parameters.push(oversightFor, oversightFor, oversightFor, oversightFor);
+      parameters.push(oversightFor, oversightFor, oversightFor, oversightFor, oversightFor);
     }
     if (topicId) { conditions.push('f.topic_id = ?'); parameters.push(topicId); }
   } else {
@@ -557,14 +569,21 @@ export async function deleteTopic(topicId) {
 // Topics within one specific container, from `viewerId`'s point of view.
 // 'user' containers are directional per row (a DM topic's `target_id` is
 // "the other person" from ITS OWN creator's perspective), so matching "the
-// topics between me and this counterpart" needs both orderings; 'group' and
-// 'org' containers use a group/employee id directly, unambiguous either way.
+// topics between me and this counterpart" needs both orderings; 'group'
+// containers use the group id directly, unambiguous either way.
 export async function listTopicsInContainer({ targetType, targetId, viewerId, search, limit, offset }) {
   const conditions = ['t.target_type = ?'];
   const parameters = [targetType];
   if (targetType === 'user') {
     conditions.push('((t.created_by = ? AND t.target_id = ?) OR (t.created_by = ? AND t.target_id = ?))');
     parameters.push(viewerId, targetId, targetId, viewerId);
+  } else if (targetType === 'org') {
+    // The shared Organization channel (target_id = ORG_SHARED_TARGET_ID),
+    // plus — for a viewer who still has one — their own topic from before
+    // 'org' became shared (created under the old per-employee sentinel,
+    // where target_id was always their own id, same as created_by).
+    conditions.push('(t.target_id = ? OR t.created_by = ?)');
+    parameters.push(targetId, viewerId);
   } else {
     conditions.push('t.target_id = ?');
     parameters.push(targetId);

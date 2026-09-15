@@ -154,6 +154,14 @@ function validText(value) { return typeof value === 'string' && value.trim(); }
 // mapRoleToView so Employee Wall visibility and API access agree.
 function isPrivilegedRole(role) { return role === 'admin' || role === 'supervisor'; }
 
+// Organization is one shared company-wide channel, not a private thread per
+// employee — every 'org' topic/message uses this fixed sentinel as its
+// target_id, the same way the public Company Wall uses target_id='company'.
+// (An older design keyed 'org' rows by each employee's own id instead, for
+// a private 1:1 thread with leadership; feedbackRepository.js's accessSql
+// still honors that shape for rows written before this change.)
+const ORG_SHARED_TARGET_ID = 'organization';
+
 // Read-only viewer resolution for hot read paths (the feedback poll) that
 // must not write on every call — see findAccountIdByEmail's own comment.
 async function resolveViewerForRead(auth) {
@@ -350,8 +358,8 @@ app.post('/api/feedback', async (request, response, next) => {
 // client: for a 'user' topic the direction flips per sender (so each
 // message keeps the original per-row sender/target shape the access
 // predicate expects); for 'group'/'org' it's always the topic's own
-// target_id (a group id, or — for org — the employee whose thread this is,
-// fixed regardless of whether an admin or the employee themself is posting).
+// target_id (a group id, or ORG_SHARED_TARGET_ID for the one shared
+// Organization channel — fixed no matter who's posting).
 async function createPrivateFeedback(request, response, next) {
   const auth = request.auth || {};
   if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
@@ -589,9 +597,8 @@ app.get('/api/topics', async (request, response, next) => {
     if (targetType === 'group' && !isPrivileged && !await feedbacks.isGroupMember(targetId, viewerId)) {
       return sendError(response, request, 403, 'FORBIDDEN', 'You are not a member of this group.');
     }
-    if (targetType === 'org' && !isPrivileged && targetId !== viewerId) {
-      return sendError(response, request, 403, 'FORBIDDEN', 'You can only browse your own Organization thread.');
-    }
+    // 'org' is a single shared company-wide channel — every signed-in
+    // employee is an implicit member, no membership check needed.
     const page = pagination(request, response); if (!page) return;
     const data = await feedbacks.listTopicsInContainer({ targetType, targetId, viewerId, search: request.query.search, ...page });
     return sendJson(response, 200, { data, ...page });
@@ -609,7 +616,9 @@ app.post('/api/topics', async (request, response, next) => {
     const createdBy = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
     let resolvedTargetId;
     if (targetType === 'org') {
-      resolvedTargetId = createdBy;
+      // A single shared company-wide channel — any signed-in employee may
+      // start a topic in it, same as decision for who may post in it.
+      resolvedTargetId = ORG_SHARED_TARGET_ID;
     } else if (targetType === 'group') {
       if (!validText(targetId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'targetId is required.', { fields: ['targetId'] });
       if (!await feedbacks.getGroupById(targetId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');

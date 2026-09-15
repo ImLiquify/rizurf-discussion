@@ -3503,7 +3503,10 @@
       badge.hidden = total === 0;
     }
 
-    function myOrgTopics() { return myTopics.filter(t => t.targetType === "org" && t.targetId === CURRENT_USER.id); }
+    // Organization is one shared company-wide channel now, not a private
+    // per-employee thread — every topic with this type is relevant to
+    // everyone, no target_id filter needed.
+    function myOrgTopics() { return myTopics.filter(t => t.targetType === "org"); }
     function topicsForGroup(groupId) { return myTopics.filter(t => t.targetType === "group" && t.targetId === groupId); }
     // DM topics grouped by counterpart — a 'user' topic's target_id is "the
     // other person" from ITS OWN creator's perspective, so the counterpart
@@ -3592,8 +3595,8 @@
 
       const orgSummary = containerSummary(myOrgTopics());
       const orgHtml = feedbacksListItemHtml({
-        type: "org", id: CURRENT_USER.id, name: "Organization", icon: "🏢",
-        preview: orgSummary.preview || "Message admins & managers privately", unread: orgSummary.unread,
+        type: "org", id: "organization", name: "Organization", icon: "🏢",
+        preview: orgSummary.preview || "Company-wide announcements & discussion", unread: orgSummary.unread,
         active: activeContainer?.type === "org"
       });
 
@@ -4785,16 +4788,14 @@
     }
 
     // Admin/manager oversight: "admins and managers can view the feedbacks
-    // from the Employee Wall tab" — every private DM, group, and
-    // Organization message involving this employee, read-only. A Given/
-    // Received filter tab narrows to topics this employee started vs. topics
-    // someone else started with them; picking a person-or-group, then a
-    // topic, drills down to the actual conversation — a topic's own
-    // back-and-forth always stays together as one thread, only the topic
-    // itself is bucketed. Two lookups because participantId only matches DM
-    // (target_type='user') rows by design, while targetId also catches this
-    // employee's own Organization thread (target_type='org', keyed by their
-    // own id); merged and de-duped here, then cached in oversightRows so
+    // from the Employee Wall tab" — every private DM, group message, and
+    // this employee's own activity in the shared Organization channel,
+    // read-only. A Given/Received filter tab narrows to topics this employee
+    // started vs. topics someone else started with them; picking a
+    // person-or-group, then a topic, drills down to the actual conversation
+    // — a topic's own back-and-forth always stays together as one thread,
+    // only the topic itself is bucketed. One request (oversightFor, see
+    // feedbackRepository.js) covers all three, cached in oversightRows so
     // switching tabs/drilling down re-renders instead of re-fetching.
     async function renderOversightConversations(targetId) {
       const panel = document.getElementById("oversightConversations");
