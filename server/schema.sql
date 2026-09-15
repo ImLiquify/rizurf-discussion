@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS `feedback_groups` (
   `name`             varchar(160) NOT NULL,
   `created_by`       varchar(50)  NOT NULL,
   `parent_group_id`  varchar(50)  DEFAULT NULL,
+  `avatar`           varchar(500) DEFAULT NULL,
   `created_at`       timestamp    NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_feedback_groups_created_by` (`created_by`),

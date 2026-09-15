@@ -116,8 +116,12 @@ export async function ensureSchemaCompatibility() {
   // NULL means a top-level group. A sub-group is a fully independent,
   // postable group (its own row, own membership) — parent_group_id is only
   // for grouping them in the UI, not an access-control relationship.
+  // `avatar` is an optional photo URL (no upload storage in this app, so
+  // it's set the same way an employee's synced avatar already is: a URL),
+  // shown in place of the generic group icon once set.
   await addMissingColumns('feedback_groups', [
-    ['parent_group_id', 'VARCHAR(50) NULL']
+    ['parent_group_id', 'VARCHAR(50) NULL'],
+    ['avatar', 'VARCHAR(500) NULL']
   ], await columnsOf('feedback_groups'));
 
   // Topics: every private conversation (a DM, a group, or an employee's

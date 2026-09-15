@@ -405,7 +405,7 @@ export async function createGroup({ id, name, createdBy, parentGroupId = null })
   );
   await pool.execute('INSERT IGNORE INTO group_members (group_id, user_id, added_by) VALUES (?, ?, ?)', [id, createdBy, createdBy]);
   const [rows] = await pool.execute(
-    `SELECT id, name, created_by AS createdBy, parent_group_id AS parentGroupId, created_at AS createdAt
+    `SELECT id, name, created_by AS createdBy, parent_group_id AS parentGroupId, avatar, created_at AS createdAt
      FROM feedback_groups WHERE id = ?`, [id]
   );
   return rows[0];
@@ -413,7 +413,7 @@ export async function createGroup({ id, name, createdBy, parentGroupId = null })
 
 export async function getGroupById(id) {
   const [rows] = await pool.execute(
-    `SELECT id, name, created_by AS createdBy, parent_group_id AS parentGroupId, created_at AS createdAt
+    `SELECT id, name, created_by AS createdBy, parent_group_id AS parentGroupId, avatar, created_at AS createdAt
      FROM feedback_groups WHERE id = ? LIMIT 1`, [id]
   );
   return rows[0] || null;
@@ -436,9 +436,28 @@ export async function removeGroupMember({ groupId, userId }) {
   await pool.execute('DELETE FROM group_members WHERE group_id = ? AND user_id = ?', [groupId, userId]);
 }
 
-export async function renameGroup({ groupId, name }) {
-  await pool.execute('UPDATE feedback_groups SET name = ? WHERE id = ?', [name, groupId]);
+// `name` and/or `avatar` — whichever is provided (undefined means "leave
+// as-is"); `avatar: null` explicitly clears a previously-set photo.
+export async function updateGroup({ groupId, name, avatar }) {
+  const sets = [];
+  const params = [];
+  if (name !== undefined) { sets.push('name = ?'); params.push(name); }
+  if (avatar !== undefined) { sets.push('avatar = ?'); params.push(avatar); }
+  if (sets.length) {
+    params.push(groupId);
+    await pool.execute(`UPDATE feedback_groups SET ${sets.join(', ')} WHERE id = ?`, params);
+  }
   return getGroupById(groupId);
+}
+
+// Deletes the group row itself; group_members and any sub-groups cascade
+// via their own foreign keys. Historical feedback/topics that referenced
+// this group aren't cleaned up (target_id there is never FK-constrained,
+// by design — see createFeedback) — they keep showing the group's name as
+// it was stored at post time instead of pointing at a live group.
+export async function deleteGroup(groupId) {
+  const [result] = await pool.execute('DELETE FROM feedback_groups WHERE id = ?', [groupId]);
+  return result.affectedRows > 0;
 }
 
 // `mine` (a viewer id) restricts to groups that viewer belongs to, for the
@@ -456,7 +475,7 @@ export async function listGroups({ mine, parentId, limit, offset }) {
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   parameters.push(limit, offset);
   const [rows] = await pool.execute(
-    `SELECT g.id, g.name, g.created_by AS createdBy, g.parent_group_id AS parentGroupId, g.created_at AS createdAt,
+    `SELECT g.id, g.name, g.created_by AS createdBy, g.parent_group_id AS parentGroupId, g.avatar, g.created_at AS createdAt,
        (SELECT COUNT(*) FROM group_members WHERE group_id = g.id) AS memberCount,
        (SELECT COUNT(*) FROM feedback_groups WHERE parent_group_id = g.id) AS subgroupCount
      FROM feedback_groups g ${join} ${where}
@@ -504,6 +523,21 @@ export async function createTopic({ id, targetType, targetId, name, createdBy })
     [id, targetType, targetId, name, createdBy]
   );
   return getTopicById(id);
+}
+
+export async function countTopicMessages(topicId) {
+  const [rows] = await pool.execute('SELECT COUNT(*) AS count FROM feedback WHERE topic_id = ?', [topicId]);
+  return rows[0].count;
+}
+
+// Deletes every message in the topic first — comments/reactions on them
+// cascade via their own foreign keys to feedback.id — so an admin/manager
+// force-deleting a non-empty topic actually clears its history instead of
+// orphaning it; topic_reads cascades from the topics row itself.
+export async function deleteTopic(topicId) {
+  await pool.execute('DELETE FROM feedback WHERE topic_id = ?', [topicId]);
+  const [result] = await pool.execute('DELETE FROM topics WHERE id = ?', [topicId]);
+  return result.affectedRows > 0;
 }
 
 // Topics within one specific container, from `viewerId`'s point of view.

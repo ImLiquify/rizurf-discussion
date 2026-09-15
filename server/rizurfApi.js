@@ -82,7 +82,8 @@ const openapi = {
       post: operation('Create a project group.', 'feedback:write', discovery('Create Group', 'Create a project group; the caller becomes its first member.', ['name'], ['id'], ['GET /api/groups']))
     },
     '/api/groups/{groupId}': {
-      patch: operation('Rename a project group.', 'feedback:write', discovery('Rename Group', 'Rename a project group.', ['groupId', 'name'], ['id'], ['GET /api/groups']))
+      patch: operation('Rename or re-photo a project group.', 'feedback:write', discovery('Edit Group', 'Rename a project group or set its photo.', ['groupId', 'name', 'avatar'], ['id'], ['GET /api/groups'])),
+      delete: operation('Delete a project group.', 'feedback:write', discovery('Delete Group', 'Delete a project group; its sub-groups and memberships go with it.', ['groupId'], []))
     },
     '/api/groups/{groupId}/members': {
       get: operation('List a group\'s members.', 'feedback:read', discovery('List Group Members', 'Read who belongs to a project group.', ['groupId'], ['data'])),
@@ -97,6 +98,9 @@ const openapi = {
     },
     '/api/topics/{topicId}/read': {
       post: operation('Mark a topic read.', 'feedback:write', discovery('Mark Topic Read', 'Record that the caller has read a topic up to now.', ['topicId'], []))
+    },
+    '/api/topics/{topicId}': {
+      delete: operation('Delete a topic.', 'feedback:write', discovery('Delete Topic', 'Delete a topic; anyone can delete an empty one, admins and managers can delete any.', ['topicId'], []))
     }
   }
 };
@@ -110,6 +114,7 @@ function routeKey(pathname) {
   if (/^\/api\/groups\/[^/]+\/members$/.test(pathname)) return '/api/groups/{groupId}/members';
   if (/^\/api\/groups\/[^/]+$/.test(pathname)) return '/api/groups/{groupId}';
   if (/^\/api\/topics\/[^/]+\/read$/.test(pathname)) return '/api/topics/{topicId}/read';
+  if (/^\/api\/topics\/[^/]+$/.test(pathname)) return '/api/topics/{topicId}';
   return null;
 }
 function sendJson(response, status, body) { response.status(status).type('application/json').json(body); }
@@ -534,17 +539,38 @@ app.delete('/api/groups/:groupId/members/:userId', async (request, response, nex
 app.patch('/api/groups/:groupId', async (request, response, next) => {
   const auth = request.auth || {};
   if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
-  const { name } = request.body || {};
-  if (!validText(name)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'name is required.', { fields: ['name'] });
+  const { name, avatar } = request.body || {};
+  if (name !== undefined && !validText(name)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'name cannot be blank.', { fields: ['name'] });
+  if (name === undefined && avatar === undefined) return sendError(response, request, 422, 'VALIDATION_ERROR', 'name or avatar is required.', { fields: ['name', 'avatar'] });
   try {
     if (!await feedbacks.getGroupById(request.params.groupId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
     const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
     const callerUser = await feedbacks.getUserById(callerId);
     const callerIsPrivileged = isPrivilegedRole(callerUser?.permissionRole);
     if (!callerIsPrivileged && !await feedbacks.isGroupMember(request.params.groupId, callerId)) {
-      return sendError(response, request, 403, 'FORBIDDEN', 'You must be a member of this group to rename it.');
+      return sendError(response, request, 403, 'FORBIDDEN', 'You must be a member of this group to edit it.');
     }
-    return sendJson(response, 200, await feedbacks.renameGroup({ groupId: request.params.groupId, name: name.trim() }));
+    return sendJson(response, 200, await feedbacks.updateGroup({
+      groupId: request.params.groupId,
+      name: name !== undefined ? name.trim() : undefined,
+      avatar: avatar !== undefined ? (validText(avatar) ? avatar.trim() : null) : undefined
+    }));
+  } catch (error) { return next(error); }
+});
+app.delete('/api/groups/:groupId', async (request, response, next) => {
+  const auth = request.auth || {};
+  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+  try {
+    const group = await feedbacks.getGroupById(request.params.groupId);
+    if (!group) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
+    const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+    const callerUser = await feedbacks.getUserById(callerId);
+    const callerIsPrivileged = isPrivilegedRole(callerUser?.permissionRole);
+    if (!callerIsPrivileged && group.createdBy !== callerId) {
+      return sendError(response, request, 403, 'FORBIDDEN', 'Only the group\'s creator, an admin, or a manager can delete it.');
+    }
+    await feedbacks.deleteGroup(request.params.groupId);
+    return response.status(204).end();
   } catch (error) { return next(error); }
 });
 
@@ -615,6 +641,27 @@ app.post('/api/topics/:topicId/read', async (request, response, next) => {
       return sendError(response, request, 403, 'FORBIDDEN', 'You do not have access to this topic.');
     }
     await feedbacks.markTopicRead({ topicId: request.params.topicId, userId: viewerId });
+    return response.status(204).end();
+  } catch (error) { return next(error); }
+});
+app.delete('/api/topics/:topicId', async (request, response, next) => {
+  const auth = request.auth || {};
+  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+  try {
+    const { viewerId, isPrivileged } = await resolveViewerForRead(request.auth);
+    if (!viewerId) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+    const topic = await feedbacks.getTopicById(request.params.topicId);
+    if (!topic) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No topic with that id.');
+    if (!isPrivileged) {
+      if (!await feedbacks.canViewTopic({ topicId: request.params.topicId, viewerId, viewerIsPrivileged: false })) {
+        return sendError(response, request, 403, 'FORBIDDEN', 'You do not have access to this topic.');
+      }
+      // Admins/managers can delete any topic; everyone else only an empty one.
+      if (await feedbacks.countTopicMessages(request.params.topicId) > 0) {
+        return sendError(response, request, 403, 'FORBIDDEN', 'Only an empty topic can be deleted. Ask an admin or manager to remove one with messages.');
+      }
+    }
+    await feedbacks.deleteTopic(request.params.topicId);
     return response.status(204).end();
   } catch (error) { return next(error); }
 });

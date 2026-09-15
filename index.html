@@ -1876,23 +1876,25 @@
       color: var(--text-subtle);
     }
 
-    .feedbacks-group-edit-btn {
+    /* A small icon-only affordance button (settings gear on a group header,
+       delete on a topic row) — always visible, subtle until hovered. */
+    .feedbacks-row-icon-btn {
       flex-shrink: 0;
-      width: 24px;
-      height: 24px;
+      width: 28px;
+      height: 28px;
       display: flex;
       align-items: center;
       justify-content: center;
       color: var(--text-subtle);
       border-radius: var(--radius-md);
-      opacity: 0;
-      transition: opacity var(--transition-fast);
+      font-size: 0.95rem;
     }
 
-    .feedbacks-group-block-row:hover .feedbacks-group-edit-btn,
-    .feedbacks-subgroup-row:hover .feedbacks-group-edit-btn { opacity: 1; }
+    .feedbacks-row-icon-btn:hover { color: var(--accent-cyan); background: var(--bg-subtle); }
+    .feedbacks-row-icon-btn.danger:hover { color: #DC2626; }
 
-    .feedbacks-group-edit-btn:hover { color: var(--accent-cyan); background: var(--bg-subtle); }
+    .feedbacks-topic-row { display: flex; align-items: center; gap: 2px; }
+    .feedbacks-topic-row .feedbacks-list-item { flex: 1; width: auto; min-width: 0; }
 
     .feedbacks-subgroup-add-btn:hover { color: var(--accent-cyan); }
 
@@ -2134,6 +2136,37 @@
 
     .group-modal-member-remove:hover { color: #E11D48; background: var(--bg-subtle); }
 
+    .group-modal-avatar-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .group-modal-avatar-preview {
+      width: 44px;
+      height: 44px;
+      border-radius: var(--radius-md);
+      object-fit: cover;
+      flex-shrink: 0;
+      background: var(--bg-subtle);
+    }
+
+    .group-modal-avatar-row .group-modal-name-input { flex: 1; }
+
+    .group-modal-delete-btn {
+      width: 100%;
+      margin-top: 10px;
+      padding: 10px 0;
+      text-align: center;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #DC2626;
+      border-radius: var(--radius-md);
+    }
+
+    .group-modal-delete-btn:hover { background: rgba(220, 38, 38, 0.08); }
+
     /* Profile modal (placeholder) */
     .profile-modal-body { text-align: center; }
     .profile-modal-note { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 18px; }
@@ -2152,8 +2185,11 @@
 
     /* Admin/manager oversight section inside the Wall modal: private
        conversations, filtered by a Given/Received tab, drilling down from a
-       list of people/groups -> that person's topics -> the conversation. */
-    .oversight-conversations {
+       list of people/groups -> that person's topics -> the conversation.
+       Only gets a top divider when the public feed section above it is
+       actually visible (the Company Wall) — on an employee's own wall,
+       Given/Received is the only content, right under the modal header. */
+    #publicFeedSection:not([hidden]) + .oversight-conversations {
       margin-top: 20px;
       padding-top: 20px;
       border-top: 1px solid var(--border-light);
@@ -2183,7 +2219,7 @@
     .oversight-list-row {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      gap: 10px;
       width: 100%;
       padding: 12px 14px;
       border-radius: var(--radius-md);
@@ -2194,6 +2230,7 @@
     }
 
     .oversight-list-row:hover { background: var(--accent-cyan-light); }
+    .oversight-list-row-body { flex: 1; min-width: 0; }
     .oversight-list-row-name { font-size: 0.88rem; font-weight: 700; color: var(--text-main); }
     .oversight-list-row-meta { font-size: 0.76rem; color: var(--text-subtle); }
 
@@ -2941,13 +2978,11 @@
           <div class="private-remark-display" id="privateRemarkDisplay"></div>
         </div>
 
-        <!-- Praise & Feedback: everything involving this employee under one
-             heading — public wall posts, then (admins/managers only) every
-             private conversation, grouped by who it's with and then by
-             topic, so a back-and-forth reads as its own separate thread
-             instead of one flat interleaved list. Deliberately one section,
-             not a second competing heading, so it reads as a single page. -->
-        <div>
+        <!-- Company Wall only: the public suggestions feed, with its own
+             "Wall Activity & Feedback" title. An employee's own wall skips
+             this entirely — the modal header above already names them, so
+             Given/Received sits directly under that, no second title. -->
+        <div id="publicFeedSection">
           <div class="modal-feed-title" id="modalFeedTitle">
             Wall Activity & Feedback
           </div>
@@ -2967,9 +3002,10 @@
           <div class="feed-cards-list" id="modalTargetFeed" style="margin-top: 14px;">
             <!-- Rendered by JS -->
           </div>
-          <div class="oversight-conversations" id="oversightConversations" hidden>
-            <div id="oversightConversationsBody"></div>
-          </div>
+        </div>
+
+        <div class="oversight-conversations" id="oversightConversations" hidden>
+          <div id="oversightConversationsBody"></div>
         </div>
 
       </div>
@@ -2998,6 +3034,14 @@
           <input type="text" id="groupModalNameInput" class="group-modal-name-input" placeholder="e.g. Frontend" />
           <button type="button" class="group-modal-rename-btn" id="groupModalRenameBtn" onclick="submitGroupRename()" hidden>Save name</button>
         </div>
+        <div id="groupModalAvatarField" hidden>
+          <label class="group-modal-label">Group photo</label>
+          <div class="group-modal-avatar-row">
+            <img id="groupModalAvatarPreview" class="group-modal-avatar-preview" src="" alt="Group photo preview" />
+            <input type="text" id="groupModalAvatarInput" class="group-modal-name-input" placeholder="Photo URL (optional)" oninput="handleGroupModalAvatarInput(this.value)" />
+          </div>
+          <button type="button" class="group-modal-rename-btn" onclick="submitGroupAvatar()">Save photo</button>
+        </div>
         <div id="groupModalCurrentMembersField" hidden>
           <label class="group-modal-label">Current members</label>
           <div class="group-modal-member-list" id="groupModalCurrentMembersList"></div>
@@ -3012,6 +3056,7 @@
         </div>
         <div class="group-modal-member-list" id="groupModalMemberList"></div>
         <button type="button" class="btn-submit-feedback group-modal-submit" id="groupModalSubmitBtn" onclick="submitGroupModal()">Create</button>
+        <button type="button" class="group-modal-delete-btn" id="groupModalDeleteBtn" onclick="submitGroupDelete()" hidden>Delete group</button>
       </div>
     </div>
   </div>
@@ -3063,7 +3108,7 @@
       </div>
       <div class="modal-scrollable-body profile-modal-body">
         <p class="profile-modal-note">A full profile page is coming soon.</p>
-        <button type="button" class="btn-logout" onclick="handleLogout()">Sign out</button>
+        <button type="button" class="btn-logout" onclick="handleGoToAllApps()">Go back to all apps</button>
       </div>
     </div>
   </div>
@@ -3485,14 +3530,13 @@
       `;
     }
 
-    const EDIT_PENCIL_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
-    function groupEditButtonHtml(groupId) {
-      return `<button type="button" class="feedbacks-group-edit-btn" onclick="event.stopPropagation(); editGroupPrompt('${groupId}')" title="Edit group">${EDIT_PENCIL_SVG}</button>`;
-    }
+    const SETTINGS_GEAR_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`;
+    const TRASH_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
 
     // Sub-groups render as plain clickable text, no icon box — just a row
-    // you can press, nested under their expanded parent, with an edit
-    // button alongside so they're not just a floating unlabeled name.
+    // you can press, nested under their expanded parent. Editing (rename,
+    // photo, members, delete) happens via the settings button once you've
+    // opened the group, not from this list.
     function subgroupTextRowHtml(sub) {
       const summary = containerSummary(topicsForGroup(sub.id));
       const active = activeContainer?.type === "group" && activeContainer?.id === sub.id;
@@ -3504,7 +3548,6 @@
             <span class="feedbacks-subgroup-textrow-name">${safeName}</span>
             ${summary.unread ? `<span class="feedbacks-unread-dot">${summary.unread}</span>` : ""}
           </button>
-          ${groupEditButtonHtml(sub.id)}
         </div>
       `;
     }
@@ -3538,7 +3581,7 @@
       const groupBlocksHtml = topLevelGroups.map(group => {
         const summary = containerSummary(topicsForGroup(group.id));
         const row = feedbacksListItemHtml({
-          type: "group", id: group.id, name: group.name, icon: "👥",
+          type: "group", id: group.id, name: group.name, icon: "👥", avatarUrl: group.avatar,
           preview: summary.preview || `${group.memberCount} member${group.memberCount === 1 ? "" : "s"}`, unread: summary.unread,
           active: activeContainer?.type === "group" && activeContainer?.id === group.id
         });
@@ -3550,7 +3593,7 @@
         const subgroupsHtml = expanded && subgroups.length
           ? `<div class="feedbacks-subgroup-list">${subgroups.map(subgroupTextRowHtml).join("")}</div>` : "";
         return `<div class="feedbacks-group-block">
-          <div class="feedbacks-group-block-row">${expandToggle}${row}${groupEditButtonHtml(group.id)}</div>
+          <div class="feedbacks-group-block-row">${expandToggle}${row}</div>
           ${subgroupsHtml}
           <button type="button" class="feedbacks-subgroup-add-btn" onclick="createSubgroupPrompt('${group.id}')">+ Sub-group</button>
         </div>`;
@@ -3595,7 +3638,7 @@
     }
     function editGroupPrompt(groupId) {
       const group = myGroups.find(g => g.id === groupId) || allGroupsDirectory.find(g => g.id === groupId);
-      openGroupModal({ mode: "edit", targetGroupId: groupId, initialName: group?.name || "" });
+      openGroupModal({ mode: "edit", targetGroupId: groupId, initialName: group?.name || "", initialAvatar: group?.avatar || "" });
     }
 
     // ---- Group modal: create a group/sub-group, add members to one, or
@@ -3608,7 +3651,7 @@
     let groupModalSelectedIds = new Set();
     let groupModalCurrentMembers = []; // fetched for "addMember"/"edit" so existing members aren't offered as candidates
 
-    async function openGroupModal({ mode, parentGroupId = null, targetGroupId = null, initialName = "" }) {
+    async function openGroupModal({ mode, parentGroupId = null, targetGroupId = null, initialName = "", initialAvatar = "" }) {
       groupModalMode = mode;
       groupModalParentId = parentGroupId;
       groupModalTargetGroupId = targetGroupId;
@@ -3621,7 +3664,11 @@
       document.getElementById("groupModalNameField").hidden = mode === "addMember";
       document.getElementById("groupModalNameInput").value = mode === "edit" ? initialName : "";
       document.getElementById("groupModalRenameBtn").hidden = mode !== "edit";
+      document.getElementById("groupModalAvatarField").hidden = mode !== "edit";
+      document.getElementById("groupModalAvatarInput").value = initialAvatar || "";
+      document.getElementById("groupModalAvatarPreview").src = avatarSrc(initialAvatar);
       document.getElementById("groupModalCurrentMembersField").hidden = mode !== "edit";
+      document.getElementById("groupModalDeleteBtn").hidden = mode !== "edit";
       document.getElementById("groupModalAddLabel").textContent = mode === "create" ? "Members" : "Add members";
       document.getElementById("groupModalMemberSearch").value = "";
       document.getElementById("groupModalSubmitBtn").textContent = mode === "create" ? "Create" : "Add";
@@ -3631,6 +3678,50 @@
 
       if (mode === "addMember" || mode === "edit") {
         await refreshGroupModalCurrentMembers();
+      }
+    }
+
+    function handleGroupModalAvatarInput(value) {
+      document.getElementById("groupModalAvatarPreview").src = avatarSrc(value.trim());
+    }
+
+    async function submitGroupAvatar() {
+      if (!groupModalTargetGroupId) return;
+      const avatar = document.getElementById("groupModalAvatarInput").value.trim();
+      try {
+        const response = await fetch(`${API_BASE_URL}/groups/${groupModalTargetGroupId}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ avatar })
+        });
+        if (!response.ok) throw new Error("Could not save the group photo.");
+        showToast("Group photo updated.");
+        await loadFeedbacksData();
+      } catch (error) {
+        showToast(error.message || "Could not save the group photo.");
+      }
+    }
+
+    async function submitGroupDelete() {
+      if (!groupModalTargetGroupId) return;
+      const groupId = groupModalTargetGroupId;
+      try {
+        const response = await fetch(`${API_BASE_URL}/groups/${groupId}`, { method: "DELETE" });
+        if (!response.ok) {
+          const err = await response.json().catch(() => null);
+          throw new Error(err?.error?.message || "Could not delete the group.");
+        }
+        closeGroupModal();
+        await loadFeedbacksData();
+        // Covers both the deleted group itself and any sub-groups that
+        // cascaded away with it.
+        if (activeContainer?.type === "group" && !myGroups.some(g => g.id === activeContainer.id)) {
+          activeContainer = null;
+          activeTopic = null;
+          renderFeedbacksTab();
+          renderTopicList();
+        }
+        showToast("🗑️ Group deleted.");
+      } catch (error) {
+        showToast(error.message || "Could not delete the group. Please try again.");
       }
     }
 
@@ -3898,16 +3989,41 @@
     }
 
     function topicListItemHtml(topic) {
+      // Anyone can delete an empty topic; admins/managers can delete any.
+      const canDelete = isPrivilegedViewer() || !topic.lastMessageAt;
+      const deleteBtn = canDelete
+        ? `<button type="button" class="feedbacks-row-icon-btn danger" onclick="event.stopPropagation(); deleteTopicPrompt('${topic.id}')" title="Delete topic">${TRASH_SVG}</button>`
+        : "";
       return `
-        <button type="button" class="feedbacks-list-item${activeTopic?.id === topic.id ? " active" : ""}" onclick="openTopicById('${topic.id}')">
-          <div class="feedbacks-list-item-icon"><span>💬</span></div>
-          <div class="feedbacks-list-item-body">
-            <div class="feedbacks-list-item-name">${escapeHtml(topic.name)}</div>
-            <div class="feedbacks-list-item-preview">${escapeHtml(topic.lastMessagePreview || "No messages yet")}</div>
-          </div>
-          ${topic.unreadCount ? `<span class="feedbacks-unread-dot">${topic.unreadCount}</span>` : ""}
-        </button>
+        <div class="feedbacks-topic-row">
+          <button type="button" class="feedbacks-list-item${activeTopic?.id === topic.id ? " active" : ""}" onclick="openTopicById('${topic.id}')">
+            <div class="feedbacks-list-item-icon"><span>💬</span></div>
+            <div class="feedbacks-list-item-body">
+              <div class="feedbacks-list-item-name">${escapeHtml(topic.name)}</div>
+              <div class="feedbacks-list-item-preview">${escapeHtml(topic.lastMessagePreview || "No messages yet")}</div>
+            </div>
+            ${topic.unreadCount ? `<span class="feedbacks-unread-dot">${topic.unreadCount}</span>` : ""}
+          </button>
+          ${deleteBtn}
+        </div>
       `;
+    }
+
+    async function deleteTopicPrompt(topicId) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/topics/${topicId}`, { method: "DELETE" });
+        if (!response.ok) {
+          const err = await response.json().catch(() => null);
+          throw new Error(err?.error?.message || "Could not delete that topic.");
+        }
+        containerTopics = containerTopics.filter(t => t.id !== topicId);
+        if (activeTopic?.id === topicId) activeTopic = null;
+        renderTopicList();
+        await loadFeedbacksData();
+        showToast("🗑️ Topic deleted.");
+      } catch (error) {
+        showToast(error.message || "Could not delete that topic.");
+      }
     }
 
     // Shows the topic list for the open container — the middle step between
@@ -3927,9 +4043,13 @@
       if (activeTopic) { renderConversationMessages(); return; }
 
       header.hidden = false;
-      const addMemberBtn = activeContainer.type === "group"
-        ? `<button type="button" class="feedbacks-new-group-btn" onclick="addMemberToActiveGroup()">+ Add member</button>` : "";
-      header.innerHTML = `<div class="feedbacks-detail-title">${escapeHtml(activeContainer.name)}</div>${addMemberBtn}`;
+      const groupActionsHtml = activeContainer.type === "group"
+        ? `<div style="display:flex; align-items:center; gap:10px;">
+             <button type="button" class="feedbacks-new-group-btn" onclick="addMemberToActiveGroup()">+ Add member</button>
+             <button type="button" class="feedbacks-row-icon-btn" onclick="editGroupPrompt('${activeContainer.id}')" title="Group settings">${SETTINGS_GEAR_SVG}</button>
+           </div>`
+        : "";
+      header.innerHTML = `<div class="feedbacks-detail-title">${escapeHtml(activeContainer.name)}</div>${groupActionsHtml}`;
 
       composeBar.hidden = true;
       const query = topicSearchQuery.toLowerCase().trim();
@@ -4016,8 +4136,8 @@
       }
     }
 
-    function handleLogout() {
-      fetch(`${API_BASE_URL}/logout`, { method: "POST" }).finally(() => { window.location.href = "/"; });
+    function handleGoToAllApps() {
+      window.location.href = "https://web-omega-two-47.vercel.app/apps";
     }
 
     // Placeholder profile modal — just identity + sign out, until a real
@@ -4586,10 +4706,13 @@
         }
       }
 
-      // Write Feedback stays only for the public Company Wall — an
-      // employee's own wall is oversight-only now (no way to post to it
-      // from here; feedback for a person happens via the Feedbacks tab).
+      // Write Feedback and the public feed both stay only for the Company
+      // Wall — an employee's own wall is Given/Received oversight only (no
+      // way to post from here; feedback for a person happens via the
+      // Feedbacks tab), with no separate "Praise & Feedback" section — the
+      // modal header above already names them.
       document.getElementById("writeFeedbackPanel").hidden = targetId !== "company";
+      document.getElementById("publicFeedSection").hidden = targetId !== "company";
 
       // Reset form fields
       personalRemarkOpen = false;
@@ -4688,19 +4811,39 @@
       const buckets = { given: new Map(), received: new Map() };
       oversightRows.forEach(row => {
         const bucketKey = row.topicCreatedBy === targetId ? "given" : "received";
-        const label = row.targetType === "org"
-          ? "Organization"
-          : row.targetType === "group"
-            ? (row.targetName || "Group")
-            : (row.senderId === targetId ? row.targetName : row.senderName) || "Unknown";
+        let label, counterpartId, iconType;
+        if (row.targetType === "org") {
+          label = "Organization"; counterpartId = null; iconType = "org";
+        } else if (row.targetType === "group") {
+          label = row.targetName || "Group"; counterpartId = row.targetId; iconType = "group";
+        } else {
+          counterpartId = row.senderId === targetId ? row.targetId : row.senderId;
+          label = (row.senderId === targetId ? row.targetName : row.senderName) || "Unknown";
+          iconType = "user";
+        }
         const byLabel = buckets[bucketKey];
-        if (!byLabel.has(label)) byLabel.set(label, new Map());
-        const topicsMap = byLabel.get(label);
+        if (!byLabel.has(label)) byLabel.set(label, { counterpartId, iconType, topics: new Map() });
+        const entry = byLabel.get(label);
         const topicId = row.topicId || "general";
-        if (!topicsMap.has(topicId)) topicsMap.set(topicId, { topicName: row.topicName || "General", messages: [] });
-        topicsMap.get(topicId).messages.push(row);
+        if (!entry.topics.has(topicId)) entry.topics.set(topicId, { topicName: row.topicName || "General", messages: [] });
+        entry.topics.get(topicId).messages.push(row);
       });
       return buckets;
+    }
+
+    // A person's real profile picture for a "user" row; a plain icon for a
+    // group or the Organization thread, since those aren't one person.
+    function oversightLabelIconHtml(entry, label) {
+      if (entry.iconType === "user") {
+        const avatarUrl = EMPLOYEES.find(e => e.id === entry.counterpartId)?.avatar;
+        return `<img src="${avatarSrc(avatarUrl)}" alt="${escapeHtml(label)}" class="feedbacks-list-item-avatar" />`;
+      }
+      if (entry.iconType === "group") {
+        const groupAvatar = allGroupsDirectory.find(g => g.id === entry.counterpartId)?.avatar
+          || myGroups.find(g => g.id === entry.counterpartId)?.avatar;
+        if (groupAvatar) return `<img src="${avatarSrc(groupAvatar)}" alt="${escapeHtml(label)}" class="feedbacks-list-item-avatar" />`;
+      }
+      return `<span>${entry.iconType === "org" ? "🏢" : "👥"}</span>`;
     }
 
     function setOversightBucket(bucket) {
@@ -4739,13 +4882,16 @@
         </div>
       `;
       const byLabel = buckets[oversightBucket];
-      const topicsMap = oversightSelectedLabel ? byLabel.get(oversightSelectedLabel) : null;
+      const selectedEntry = oversightSelectedLabel ? byLabel.get(oversightSelectedLabel) : null;
 
-      if (!oversightSelectedLabel || !topicsMap) {
-        const rowsHtml = [...byLabel.entries()].map(([label, labelTopics]) => `
+      if (!oversightSelectedLabel || !selectedEntry) {
+        const rowsHtml = [...byLabel.entries()].map(([label, entry]) => `
           <button type="button" class="oversight-list-row" onclick="openOversightLabel('${escapeHtml(label).replace(/'/g, "&#039;")}')">
-            <span class="oversight-list-row-name">${escapeHtml(label)}</span>
-            <span class="oversight-list-row-meta">${labelTopics.size} topic${labelTopics.size === 1 ? "" : "s"}</span>
+            <div class="feedbacks-list-item-icon">${oversightLabelIconHtml(entry, label)}</div>
+            <div class="oversight-list-row-body">
+              <div class="oversight-list-row-name">${escapeHtml(label)}</div>
+              <div class="oversight-list-row-meta">${entry.topics.size} topic${entry.topics.size === 1 ? "" : "s"}</div>
+            </div>
           </button>
         `).join("");
         body.innerHTML = tabsHtml + (byLabel.size
@@ -4754,11 +4900,13 @@
         return;
       }
 
-      if (!oversightSelectedTopicId || !topicsMap.has(oversightSelectedTopicId)) {
-        const topicsHtml = [...topicsMap.entries()].map(([topicId, { topicName, messages }]) => `
+      if (!oversightSelectedTopicId || !selectedEntry.topics.has(oversightSelectedTopicId)) {
+        const topicsHtml = [...selectedEntry.topics.entries()].map(([topicId, { topicName, messages }]) => `
           <button type="button" class="oversight-list-row" onclick="openOversightTopic('${topicId}')">
-            <span class="oversight-list-row-name">${escapeHtml(topicName)}</span>
-            <span class="oversight-list-row-meta">${messages.length} message${messages.length === 1 ? "" : "s"}</span>
+            <div class="oversight-list-row-body">
+              <div class="oversight-list-row-name">${escapeHtml(topicName)}</div>
+              <div class="oversight-list-row-meta">${messages.length} message${messages.length === 1 ? "" : "s"}</div>
+            </div>
           </button>
         `).join("");
         body.innerHTML = tabsHtml + `
@@ -4771,7 +4919,7 @@
         return;
       }
 
-      const topic = topicsMap.get(oversightSelectedTopicId);
+      const topic = selectedEntry.topics.get(oversightSelectedTopicId);
       const sorted = [...topic.messages].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
       body.innerHTML = tabsHtml + `
         <div class="oversight-drill-header">
