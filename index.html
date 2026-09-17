@@ -1924,6 +1924,46 @@
       align-items: flex-end;
       padding: 14px 20px;
       border-top: 1px solid var(--border-color);
+      position: relative;
+    }
+
+    /* @mention autocomplete — groups and Organization only (see
+       handleComposeInput). Pops up above the compose box. */
+    .mention-dropdown {
+      position: absolute;
+      bottom: 100%;
+      left: 20px;
+      right: 20px;
+      margin-bottom: 6px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-lg);
+      max-height: 220px;
+      overflow-y: auto;
+      z-index: 20;
+    }
+    .mention-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 8px 12px;
+      text-align: left;
+      font-size: 0.86rem;
+      color: var(--text-main);
+    }
+    .mention-dropdown-item img {
+      width: 22px; height: 22px; border-radius: 50%; object-fit: cover; flex-shrink: 0;
+    }
+    .mention-dropdown-item:hover, .mention-dropdown-item.highlighted { background: var(--bg-subtle); }
+
+    .chat-mention {
+      color: var(--accent-cyan-hover);
+      font-weight: 700;
+      background: var(--accent-cyan-light);
+      padding: 0 3px;
+      border-radius: 4px;
     }
 
     .feedbacks-compose-input {
@@ -2811,8 +2851,9 @@
             </div>
           </div>
           <div class="feedbacks-compose-bar" id="feedbacksComposeBar" hidden>
+            <div class="mention-dropdown" id="mentionDropdown" hidden></div>
             <textarea id="feedbacksComposeInput" class="feedbacks-compose-input"
-              placeholder="Write a message..." onkeydown="handleFeedbacksComposeKeydown(event)"></textarea>
+              placeholder="Write a message..." onkeydown="handleFeedbacksComposeKeydown(event)" oninput="handleComposeInput(this)"></textarea>
             <button class="btn-submit-feedback" onclick="sendFeedbacksMessage()">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                 stroke-linecap="round" stroke-linejoin="round">
@@ -3165,6 +3206,15 @@
     let containerTopicsLoading = false; // topics-in-this-container middle panel
     let conversationLoading = false; // messages in the open topic
     let editingChatMessageId = null; // chat message currently showing its inline edit box, or null
+
+    // @mention autocomplete — groups and Organization only, never DMs (a 1:1
+    // conversation has no one else to tag). Group mentions are scoped to
+    // that group's own members.
+    let mentionActive = false;
+    let mentionMatches = [];
+    let mentionHighlightIndex = 0;
+    let mentionTriggerStart = -1;
+    let activeGroupMembers = []; // members of the open group container, fetched by openContainer
 
     function isPrivilegedViewer() { return currentRoleView === "admin" || currentRoleView === "manager"; }
 
@@ -3990,9 +4040,23 @@
       containerTopics = [];
       containerTopicsLoading = true;
       topicSearchQuery = "";
+      activeGroupMembers = [];
       renderFeedbacksTab();
       renderTopicList();
-      await refreshContainerTopics();
+      const tasks = [refreshContainerTopics()];
+      if (type === "group") tasks.push(refreshActiveGroupMembers());
+      await Promise.all(tasks);
+    }
+
+    // Only for @mention scoping in a group chat — the group-edit modal has
+    // its own separate member fetch/cache.
+    async function refreshActiveGroupMembers() {
+      const requestedContainer = activeContainer;
+      try {
+        const response = await fetch(`${API_BASE_URL}/groups/${requestedContainer.id}/members`);
+        const fetched = response.ok ? (await response.json()).data || [] : [];
+        if (activeContainer === requestedContainer) activeGroupMembers = fetched;
+      } catch (error) { /* mentions just won't suggest anyone — not worth a toast */ }
     }
 
     async function refreshContainerTopics() {
@@ -4193,6 +4257,28 @@
 
     const CHAT_EDIT_WINDOW_MS = 60 * 60 * 1000;
 
+    // Highlights "@Full Name" for a real employee (or the current user)
+    // found in the text — matched against live names, not stored as an id.
+    // Never called for a DM message (see chatMessageBubbleHtml) — there's
+    // no one to mention in a 1:1 besides the two people already talking.
+    function highlightMentionsHtml(content) {
+      const names = [...new Set([...EMPLOYEES, CURRENT_USER].map(e => e.name).filter(Boolean))]
+        .sort((a, b) => b.length - a.length); // longest first, so "Bob Test" wins over a shorter "Bob"
+      if (!names.length) return escapeHtml(content);
+      const pattern = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+      const mentionRe = new RegExp(`@(${pattern})\\b`, "g");
+      let out = "";
+      let lastIndex = 0;
+      let match;
+      while ((match = mentionRe.exec(content))) {
+        out += escapeHtml(content.slice(lastIndex, match.index));
+        out += `<span class="chat-mention">@${escapeHtml(match[1])}</span>`;
+        lastIndex = match.index + match[0].length;
+      }
+      out += escapeHtml(content.slice(lastIndex));
+      return out;
+    }
+
     function chatMessageBubbleHtml(message) {
       const mine = message.senderId === CURRENT_USER.id;
       const editable = mine && !message.pending && (Date.now() - new Date(message.timestamp).getTime()) < CHAT_EDIT_WINDOW_MS;
@@ -4210,7 +4296,7 @@
                <button class="btn-save-inline" onclick="saveChatMessageEdit('${message.id}')">Save</button>
              </div>
            </div>`
-        : `<div class="chat-message-text">${escapeHtml(message.content)}</div>`;
+        : `<div class="chat-message-text">${message.targetType === "user" ? escapeHtml(message.content) : highlightMentionsHtml(message.content)}</div>`;
       return `
         <div class="chat-message-row${mine ? " mine" : ""}${message.pending ? " pending" : ""}" id="chat-msg-${message.id}">
           <div class="chat-message-meta">
@@ -4387,7 +4473,91 @@
       }
     }
 
+    // Looks backward from the cursor for an "@" that starts the current word
+    // (start of text, or right after whitespace) with no space typed since —
+    // that's an in-progress mention. No-ops entirely in a DM (activeContainer
+    // is null there? no — it's "user" — either way, nothing to mention).
+    function handleComposeInput(textarea) {
+      if (!activeContainer || activeContainer.type === "user") { closeMentionDropdown(); return; }
+      const cursor = textarea.selectionStart;
+      const beforeCursor = textarea.value.slice(0, cursor);
+      const match = /(?:^|\s)@([A-Za-z0-9._-]*)$/.exec(beforeCursor);
+      if (!match) { closeMentionDropdown(); return; }
+      const query = match[1].toLowerCase();
+      mentionTriggerStart = cursor - match[1].length - 1;
+      // Group chats can only tag that group's own members; Organization is
+      // company-wide, so any employee is fair game.
+      const pool = activeContainer.type === "group" ? activeGroupMembers : EMPLOYEES;
+      mentionMatches = pool.filter(e => e.id !== CURRENT_USER.id && e.name.toLowerCase().includes(query)).slice(0, 6);
+      mentionHighlightIndex = 0;
+      mentionActive = mentionMatches.length > 0;
+      renderMentionDropdown();
+    }
+
+    function renderMentionDropdown() {
+      const dropdown = document.getElementById("mentionDropdown");
+      if (!dropdown) return;
+      if (!mentionActive) { dropdown.hidden = true; dropdown.innerHTML = ""; return; }
+      dropdown.hidden = false;
+      dropdown.innerHTML = mentionMatches.map((e, index) => `
+        <button type="button" class="mention-dropdown-item${index === mentionHighlightIndex ? " highlighted" : ""}"
+          onmousedown="event.preventDefault(); insertMention(${index})">
+          <img src="${escapeHtml(avatarSrc(e.avatar))}" alt="" />
+          <span>${escapeHtml(e.name)}</span>
+        </button>
+      `).join("");
+    }
+
+    function closeMentionDropdown() {
+      mentionActive = false;
+      mentionMatches = [];
+      mentionTriggerStart = -1;
+      renderMentionDropdown();
+    }
+
+    // Replaces the in-progress "@query" with the picked person's full name
+    // (plain text — matched back against the live employee/member list at
+    // render time, see highlightMentionsHtml — no id is stored).
+    function insertMention(index) {
+      const employee = mentionMatches[index];
+      const input = document.getElementById("feedbacksComposeInput");
+      if (!employee || !input || mentionTriggerStart < 0) return;
+      const cursor = input.selectionStart;
+      const before = input.value.slice(0, mentionTriggerStart);
+      const after = input.value.slice(cursor);
+      const mentionText = `@${employee.name} `;
+      input.value = before + mentionText + after;
+      const newCursor = before.length + mentionText.length;
+      input.focus();
+      input.setSelectionRange(newCursor, newCursor);
+      closeMentionDropdown();
+    }
+
     function handleFeedbacksComposeKeydown(event) {
+      if (mentionActive) {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          mentionHighlightIndex = (mentionHighlightIndex + 1) % mentionMatches.length;
+          renderMentionDropdown();
+          return;
+        }
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          mentionHighlightIndex = (mentionHighlightIndex - 1 + mentionMatches.length) % mentionMatches.length;
+          renderMentionDropdown();
+          return;
+        }
+        if (event.key === "Enter" || event.key === "Tab") {
+          event.preventDefault();
+          insertMention(mentionHighlightIndex);
+          return;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeMentionDropdown();
+          return;
+        }
+      }
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
         sendFeedbacksMessage();
@@ -4404,6 +4574,7 @@
       const content = input.value.trim();
       if (!content) return;
       input.value = "";
+      closeMentionDropdown();
 
       // Capture which topic this send belongs to — activeTopic/conversationMessages/
       // the compose box are all single shared globals that can point at a
