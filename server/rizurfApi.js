@@ -388,8 +388,15 @@ app.patch('/api/feedback/:feedbackId', async (request, response, next) => {
     if (!meta) return;
     const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
     const callerUser = await feedbacks.getUserById(callerId);
-    if (meta.senderId !== callerId && !isPrivilegedRole(callerUser?.permissionRole)) {
+    const isPrivileged = isPrivilegedRole(callerUser?.permissionRole);
+    if (meta.senderId !== callerId && !isPrivileged) {
       return sendError(response, request, 403, 'FORBIDDEN', 'Only the author, an admin, or a manager can edit this.');
+    }
+    // Chat messages (private) are editable by their own author for one hour
+    // only — after that it's part of the conversation history, not a draft.
+    // Admins/managers still edit anytime, same as the delete bypass above.
+    if (meta.visibility === 'private' && !isPrivileged && Date.now() - new Date(meta.createdAt).getTime() > 60 * 60 * 1000) {
+      return sendError(response, request, 403, 'FORBIDDEN', 'This message is more than an hour old and can no longer be edited.');
     }
     return sendJson(response, 200, await feedbacks.updateFeedbackContent({ id: request.params.feedbackId, content: content.trim() }));
   } catch (error) { return next(error); }

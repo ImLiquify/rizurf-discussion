@@ -348,7 +348,7 @@ export async function deleteFeedback(id) {
 // comment and reaction routes, in one query.
 export async function getFeedbackMeta(id) {
   const [rows] = await pool.execute(
-    `SELECT id, visibility, target_type AS targetType, target_id AS targetId, sender_id AS senderId
+    `SELECT id, visibility, target_type AS targetType, target_id AS targetId, sender_id AS senderId, created_at AS createdAt
      FROM feedback WHERE id = ? LIMIT 1`,
     [id]
   );

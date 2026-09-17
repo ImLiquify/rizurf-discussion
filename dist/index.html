@@ -1489,7 +1489,9 @@
     .oversight-search svg { left: 12px; width: 13px; height: 13px; }
 
     .btn-submit-feedback:disabled,
-    .btn-submit-feedback.is-busy {
+    .btn-submit-feedback.is-busy,
+    .group-modal-delete-btn:disabled,
+    .group-modal-delete-btn.is-busy {
       opacity: 0.7;
       cursor: default;
       pointer-events: none;
@@ -1922,46 +1924,6 @@
       align-items: flex-end;
       padding: 14px 20px;
       border-top: 1px solid var(--border-color);
-      position: relative;
-    }
-
-    /* @mention autocomplete — pops up above the compose box while typing
-       "@" followed by the start of someone's name. */
-    .mention-dropdown {
-      position: absolute;
-      bottom: 100%;
-      left: 20px;
-      right: 20px;
-      margin-bottom: 6px;
-      background: var(--bg-surface);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      box-shadow: var(--shadow-lg);
-      max-height: 220px;
-      overflow-y: auto;
-      z-index: 20;
-    }
-    .mention-dropdown-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      width: 100%;
-      padding: 8px 12px;
-      text-align: left;
-      font-size: 0.86rem;
-      color: var(--text-main);
-    }
-    .mention-dropdown-item img {
-      width: 22px; height: 22px; border-radius: 50%; object-fit: cover; flex-shrink: 0;
-    }
-    .mention-dropdown-item:hover, .mention-dropdown-item.highlighted { background: var(--bg-subtle); }
-
-    .chat-mention {
-      color: var(--accent-cyan-hover);
-      font-weight: 700;
-      background: var(--accent-cyan-light);
-      padding: 0 3px;
-      border-radius: 4px;
     }
 
     .feedbacks-compose-input {
@@ -2489,6 +2451,14 @@
       background: rgba(255,255,255,0.25);
     }
 
+    /* Flashes once when a new message pushes the unread total up, then
+       fades back to normal on its own — no JS cleanup needed. */
+    @keyframes ping-flash {
+      0% { background: var(--status-danger, #E0533D); transform: scale(1.5); }
+      100% { background: rgba(255,255,255,0.15); transform: scale(1); }
+    }
+    .nav-badge.ping-flash { animation: ping-flash 1.1s ease-out; }
+
     /* ---- Sidebar User Badge ---- */
     .sidebar-user-badge {
       display: flex;
@@ -2841,9 +2811,8 @@
             </div>
           </div>
           <div class="feedbacks-compose-bar" id="feedbacksComposeBar" hidden>
-            <div class="mention-dropdown" id="mentionDropdown" hidden></div>
             <textarea id="feedbacksComposeInput" class="feedbacks-compose-input"
-              placeholder="Write a message... (@ to mention someone)" onkeydown="handleFeedbacksComposeKeydown(event)" oninput="handleComposeInput(this)"></textarea>
+              placeholder="Write a message..." onkeydown="handleFeedbacksComposeKeydown(event)"></textarea>
             <button class="btn-submit-feedback" onclick="sendFeedbacksMessage()">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                 stroke-linecap="round" stroke-linejoin="round">
@@ -3195,12 +3164,7 @@
     let employeeTilesLoading = true; // Employee Wall grid
     let containerTopicsLoading = false; // topics-in-this-container middle panel
     let conversationLoading = false; // messages in the open topic
-
-    // @mention autocomplete in the message compose box.
-    let mentionActive = false;
-    let mentionMatches = []; // employees currently matching the "@query" being typed
-    let mentionHighlightIndex = 0;
-    let mentionTriggerStart = -1; // index of the "@" in the textarea value
+    let editingChatMessageId = null; // chat message currently showing its inline edit box, or null
 
     function isPrivilegedViewer() { return currentRoleView === "admin" || currentRoleView === "manager"; }
 
@@ -3498,10 +3462,19 @@
       else if (activeContainer) await refreshContainerTopics();
     }
 
+    let previousUnreadTotal = 0;
     function updateFeedbacksUnreadBadge() {
       const badge = document.getElementById("feedbacksUnreadBadge");
       if (!badge) return;
       const total = myTopics.reduce((sum, t) => sum + (t.unreadCount || 0), 0);
+      if (total > previousUnreadTotal) {
+        // Restart the CSS animation even if it's already mid-flash from a
+        // previous ping (re-adding the same class is a no-op otherwise).
+        badge.classList.remove("ping-flash");
+        void badge.offsetWidth;
+        badge.classList.add("ping-flash");
+      }
+      previousUnreadTotal = total;
       badge.textContent = total;
       badge.hidden = total === 0;
     }
@@ -3638,6 +3611,7 @@
 
     const SETTINGS_GEAR_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`;
     const TRASH_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+    const EDIT_PENCIL_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
 
     // Sub-groups render as plain clickable text, no icon box — just a row
     // you can press, nested under their expanded parent. Editing (rename,
@@ -3825,6 +3799,9 @@
     async function submitGroupDelete() {
       if (!groupModalTargetGroupId) return;
       const groupId = groupModalTargetGroupId;
+      const btn = document.getElementById("groupModalDeleteBtn");
+      if (btn?.disabled) return;
+      setButtonBusy(btn, true, "Deleting…");
       try {
         const response = await fetch(`${API_BASE_URL}/groups/${groupId}`, { method: "DELETE" });
         if (!response.ok) {
@@ -3844,6 +3821,7 @@
         showToast("🗑️ Group deleted.");
       } catch (error) {
         showToast(error.message || "Could not delete the group. Please try again.");
+        setButtonBusy(btn, false);
       }
     }
 
@@ -4019,14 +3997,21 @@
 
     async function refreshContainerTopics() {
       if (!activeContainer) return;
+      // Switching containers quickly (org -> a DM before org's fetch lands)
+      // could let the stale org response win the race and overwrite
+      // containerTopics for whatever's actually open now — capture which
+      // container this fetch is for and drop the result if it's stale.
+      const requestedContainer = activeContainer;
+      let fetched;
       try {
-        const params = new URLSearchParams({ targetType: activeContainer.type, targetId: activeContainer.id });
+        const params = new URLSearchParams({ targetType: requestedContainer.type, targetId: requestedContainer.id });
         const response = await fetch(`${API_BASE_URL}/topics?${params}`);
-        const json = response.ok ? await response.json() : { data: [] };
-        containerTopics = json.data || [];
+        fetched = response.ok ? (await response.json()).data || [] : [];
       } catch (error) {
-        containerTopics = [];
+        fetched = [];
       }
+      if (activeContainer !== requestedContainer) return;
+      containerTopics = fetched;
       containerTopicsLoading = false;
       if (!activeTopic) renderTopicList();
     }
@@ -4133,15 +4118,20 @@
 
     async function refreshActiveTopicMessages() {
       if (!activeTopic) return;
+      // Same race as refreshContainerTopics: switching topics before this
+      // resolves must not let a stale response overwrite what's open now.
+      const requestedTopicId = activeTopic.id;
+      let fetched;
       try {
-        const response = await fetch(`${API_BASE_URL}/feedback?visibility=private&topicId=${encodeURIComponent(activeTopic.id)}`);
-        const json = response.ok ? await response.json() : { data: [] };
-        conversationMessages = json.data || [];
+        const response = await fetch(`${API_BASE_URL}/feedback?visibility=private&topicId=${encodeURIComponent(requestedTopicId)}`);
+        fetched = response.ok ? (await response.json()).data || [] : [];
       } catch (error) {
-        conversationMessages = [];
+        fetched = [];
       }
+      if (activeTopic?.id !== requestedTopicId) return;
+      conversationMessages = fetched;
       conversationLoading = false;
-      renderConversationMessages(true);
+      renderConversationMessages(true, true);
     }
 
     // Near-real-time delivery for an open conversation: while it's actually
@@ -4201,51 +4191,74 @@
       } catch (error) { /* silent — next tick tries again */ }
     }
 
-    // Highlights "@Full Name" for any real employee (or the current user)
-    // found in the text — matched against live names, not stored as an id,
-    // so no schema change was needed to support it. Everything outside a
-    // recognized mention still goes through escapeHtml, so this can't be
-    // used to smuggle in unescaped HTML via a name that happens to contain
-    // markup-looking characters.
-    function highlightMentionsHtml(content) {
-      const names = [...new Set([...EMPLOYEES, CURRENT_USER].map(e => e.name).filter(Boolean))]
-        .sort((a, b) => b.length - a.length); // longest first, so "Bob Test" wins over a shorter "Bob"
-      if (!names.length) return escapeHtml(content);
-      const pattern = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
-      const mentionRe = new RegExp(`@(${pattern})\\b`, "g");
-      let out = "";
-      let lastIndex = 0;
-      let match;
-      while ((match = mentionRe.exec(content))) {
-        out += escapeHtml(content.slice(lastIndex, match.index));
-        out += `<span class="chat-mention">@${escapeHtml(match[1])}</span>`;
-        lastIndex = match.index + match[0].length;
-      }
-      out += escapeHtml(content.slice(lastIndex));
-      return out;
-    }
+    const CHAT_EDIT_WINDOW_MS = 60 * 60 * 1000;
 
     function chatMessageBubbleHtml(message) {
       const mine = message.senderId === CURRENT_USER.id;
+      const editable = mine && !message.pending && (Date.now() - new Date(message.timestamp).getTime()) < CHAT_EDIT_WINDOW_MS;
       const statusHtml = message.pending
         ? `<span class="chat-message-status">Sending…</span>`
-        : `<span class="chat-message-time">${formatDisplayTime(message.timestamp)}</span>`;
+        : `<span class="chat-message-time">${formatDisplayTime(message.timestamp)}${message.isEdited ? " · edited" : ""}</span>`;
+      const editBtn = editable && editingChatMessageId !== message.id
+        ? `<button type="button" class="btn-action-icon-mini" onclick="startChatMessageEdit('${message.id}')" title="Edit message">${EDIT_PENCIL_SVG}</button>`
+        : "";
+      const bodyHtml = editingChatMessageId === message.id
+        ? `<div class="inline-edit-box" style="margin-top:4px;">
+             <textarea id="chat_edit_${message.id}" class="inline-edit-textarea" style="min-height:60px;">${escapeHtml(message.content)}</textarea>
+             <div class="inline-edit-controls">
+               <button class="btn-cancel-inline" onclick="cancelChatMessageEdit()">Cancel</button>
+               <button class="btn-save-inline" onclick="saveChatMessageEdit('${message.id}')">Save</button>
+             </div>
+           </div>`
+        : `<div class="chat-message-text">${escapeHtml(message.content)}</div>`;
       return `
-        <div class="chat-message-row${mine ? " mine" : ""}${message.pending ? " pending" : ""}">
+        <div class="chat-message-row${mine ? " mine" : ""}${message.pending ? " pending" : ""}" id="chat-msg-${message.id}">
           <div class="chat-message-meta">
             <span class="chat-message-sender" style="color:${senderColorFor(message.senderId)}">${escapeHtml(message.senderName)}</span>
             ${statusHtml}
+            ${editBtn}
           </div>
-          <div class="chat-message-text">${highlightMentionsHtml(message.content)}</div>
+          ${bodyHtml}
         </div>
       `;
+    }
+
+    function startChatMessageEdit(messageId) {
+      editingChatMessageId = messageId;
+      renderConversationMessages();
+      setTimeout(() => document.getElementById(`chat_edit_${messageId}`)?.focus(), 30);
+    }
+    function cancelChatMessageEdit() {
+      editingChatMessageId = null;
+      renderConversationMessages();
+    }
+    async function saveChatMessageEdit(messageId) {
+      const textarea = document.getElementById(`chat_edit_${messageId}`);
+      if (!textarea) return;
+      const newContent = textarea.value.trim();
+      if (!newContent) { showToast("Message can't be empty."); return; }
+      try {
+        const response = await fetch(`${API_BASE_URL}/feedback/${messageId}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: newContent })
+        });
+        if (!response.ok) {
+          const err = await response.json().catch(() => null);
+          throw new Error(err?.error?.message || "Could not save the edit.");
+        }
+        const message = conversationMessages.find(m => m.id === messageId);
+        if (message) { message.content = newContent; message.isEdited = true; }
+        editingChatMessageId = null;
+        renderConversationMessages();
+      } catch (error) {
+        showToast(error.message || "Could not save the edit.");
+      }
     }
 
     function topicListItemHtml(topic) {
       // Anyone can delete an empty topic; admins/managers can delete any.
       const canDelete = isPrivilegedViewer() || !topic.lastMessageAt;
       const deleteBtn = canDelete
-        ? `<button type="button" class="feedbacks-row-icon-btn danger" onclick="event.stopPropagation(); deleteTopicPrompt('${topic.id}')" title="Delete topic">${TRASH_SVG}</button>`
+        ? `<button type="button" class="feedbacks-row-icon-btn danger" onclick="event.stopPropagation(); deleteTopicPrompt('${topic.id}', this)" title="Delete topic">${TRASH_SVG}</button>`
         : "";
       return `
         <div class="feedbacks-topic-row">
@@ -4262,7 +4275,8 @@
       `;
     }
 
-    async function deleteTopicPrompt(topicId) {
+    async function deleteTopicPrompt(topicId, btn) {
+      if (btn) { btn.disabled = true; btn.innerHTML = `<span class="btn-spinner" style="border-top-color:currentColor; border-color:currentColor; opacity:0.35;"></span>`; }
       try {
         const response = await fetch(`${API_BASE_URL}/topics/${topicId}`, { method: "DELETE" });
         if (!response.ok) {
@@ -4276,6 +4290,7 @@
         showToast("🗑️ Topic deleted.");
       } catch (error) {
         showToast(error.message || "Could not delete that topic.");
+        if (btn) { btn.disabled = false; btn.innerHTML = TRASH_SVG; }
       }
     }
 
@@ -4332,7 +4347,11 @@
     // there — otherwise every 3s poll yanked anyone scrolled up into
     // history straight back down, making it impossible to read past
     // messages in an active conversation.
-    function renderConversationMessages(forceScrollBottom = false) {
+    // scrollToFirstUnread: only meaningful together with forceScrollBottom,
+    // and only for a fresh topic open (refreshActiveTopicMessages) — jumps
+    // to the oldest unread message instead of the very bottom, so reopening
+    // a topic with unread history doesn't skip straight past it.
+    function renderConversationMessages(forceScrollBottom = false, scrollToFirstUnread = false) {
       const header = document.getElementById("feedbacksDetailHeader");
       const scroll = document.getElementById("feedbacksMessagesScroll");
       const composeBar = document.getElementById("feedbacksComposeBar");
@@ -4358,93 +4377,17 @@
       scroll.innerHTML = sorted.length
         ? sorted.map(chatMessageBubbleHtml).join("")
         : `<div class="feedbacks-empty-state">No messages yet — say hello.</div>`;
-      if (shouldStickToBottom) scroll.scrollTop = scroll.scrollHeight;
-    }
 
-    // Looks backward from the cursor for an "@" that starts the current word
-    // (start of the text, or right after whitespace) with no space typed
-    // since — that's an in-progress mention. Anything else (an email-looking
-    // "name@domain", a stray "@" with a space after it) is left alone.
-    function handleComposeInput(textarea) {
-      const cursor = textarea.selectionStart;
-      const beforeCursor = textarea.value.slice(0, cursor);
-      const match = /(?:^|\s)@([A-Za-z0-9._-]*)$/.exec(beforeCursor);
-      if (!match) { closeMentionDropdown(); return; }
-      const query = match[1].toLowerCase();
-      mentionTriggerStart = cursor - match[1].length - 1;
-      mentionMatches = EMPLOYEES
-        .filter(e => e.id !== CURRENT_USER.id && e.name.toLowerCase().includes(query))
-        .slice(0, 6);
-      mentionHighlightIndex = 0;
-      mentionActive = mentionMatches.length > 0;
-      renderMentionDropdown();
-    }
-
-    function renderMentionDropdown() {
-      const dropdown = document.getElementById("mentionDropdown");
-      if (!dropdown) return;
-      if (!mentionActive) { dropdown.hidden = true; dropdown.innerHTML = ""; return; }
-      dropdown.hidden = false;
-      dropdown.innerHTML = mentionMatches.map((e, index) => `
-        <button type="button" class="mention-dropdown-item${index === mentionHighlightIndex ? " highlighted" : ""}"
-          onmousedown="event.preventDefault(); insertMention(${index})">
-          <img src="${escapeHtml(avatarSrc(e.avatar))}" alt="" />
-          <span>${escapeHtml(e.name)}</span>
-        </button>
-      `).join("");
-    }
-
-    function closeMentionDropdown() {
-      mentionActive = false;
-      mentionMatches = [];
-      mentionTriggerStart = -1;
-      renderMentionDropdown();
-    }
-
-    // Replaces the in-progress "@query" with the picked person's full name
-    // (plain text — no id is stored, so rendering re-matches it against the
-    // live employee list; see chatMessageBubbleHtml) and puts the cursor
-    // right after the inserted mention.
-    function insertMention(index) {
-      const employee = mentionMatches[index];
-      const input = document.getElementById("feedbacksComposeInput");
-      if (!employee || !input || mentionTriggerStart < 0) return;
-      const cursor = input.selectionStart;
-      const before = input.value.slice(0, mentionTriggerStart);
-      const after = input.value.slice(cursor);
-      const mentionText = `@${employee.name} `;
-      input.value = before + mentionText + after;
-      const newCursor = before.length + mentionText.length;
-      input.focus();
-      input.setSelectionRange(newCursor, newCursor);
-      closeMentionDropdown();
+      const unread = scrollToFirstUnread ? (myTopics.find(t => t.id === activeTopic.id)?.unreadCount || 0) : 0;
+      const firstUnread = unread > 0 && unread < sorted.length ? sorted[sorted.length - unread] : null;
+      if (firstUnread) {
+        document.getElementById(`chat-msg-${firstUnread.id}`)?.scrollIntoView({ block: "start" });
+      } else if (shouldStickToBottom) {
+        scroll.scrollTop = scroll.scrollHeight;
+      }
     }
 
     function handleFeedbacksComposeKeydown(event) {
-      if (mentionActive) {
-        if (event.key === "ArrowDown") {
-          event.preventDefault();
-          mentionHighlightIndex = (mentionHighlightIndex + 1) % mentionMatches.length;
-          renderMentionDropdown();
-          return;
-        }
-        if (event.key === "ArrowUp") {
-          event.preventDefault();
-          mentionHighlightIndex = (mentionHighlightIndex - 1 + mentionMatches.length) % mentionMatches.length;
-          renderMentionDropdown();
-          return;
-        }
-        if (event.key === "Enter" || event.key === "Tab") {
-          event.preventDefault();
-          insertMention(mentionHighlightIndex);
-          return;
-        }
-        if (event.key === "Escape") {
-          event.preventDefault();
-          closeMentionDropdown();
-          return;
-        }
-      }
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
         sendFeedbacksMessage();
@@ -4461,7 +4404,6 @@
       const content = input.value.trim();
       if (!content) return;
       input.value = "";
-      closeMentionDropdown();
 
       // Capture which topic this send belongs to — activeTopic/conversationMessages/
       // the compose box are all single shared globals that can point at a
@@ -5009,11 +4951,11 @@
             
             <div class="tile-stats-row">
               <div class="tile-stat-item">
-                <span class="tile-stat-val">${empReceivedCount}</span>
+                <span class="tile-stat-val">${empGivenCount}</span>
                 <span class="tile-stat-lbl">Received</span>
               </div>
               <div class="tile-stat-item">
-                <span class="tile-stat-val">${empGivenCount}</span>
+                <span class="tile-stat-val">${empReceivedCount}</span>
                 <span class="tile-stat-lbl">Given</span>
               </div>
             </div>
