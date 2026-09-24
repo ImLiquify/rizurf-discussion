@@ -72,17 +72,17 @@ export async function upsertGatewayUser({ sub, email, name, role }) {
 // intern directory, or provisioned on an earlier sign-in — reuse it instead
 // of minting a second `gw_<sub>` row (which is what produced duplicate
 // accounts). A `gw_<sub>` row is created only when the email is new here.
-// Read-only counterpart of resolveIdentityAccount: the canonical account id
-// for an email, or null. Used on hot read paths (the feedback poll) that must
-// not write on every call.
-export async function findAccountIdByEmail(email) {
-  if (!email) return null;
+// Read-only counterpart of resolveIdentityAccount, for hot read paths (the
+// feedback poll) that must not write on every call: the canonical account
+// and its permission role in one round trip. An email match wins (directory
+// rows first), else the gateway-only `gw_<sub>` row.
+export async function findViewerForRead(email, fallbackId) {
   const [rows] = await pool.execute(
-    `SELECT id FROM users WHERE email = ?
-     ORDER BY (source = 'intern-api') DESC, synced_at DESC, id ASC LIMIT 1`,
-    [email]
+    `SELECT id, permission_role AS permissionRole FROM users WHERE email = ? OR id = ?
+     ORDER BY (email <=> ?) DESC, (source = 'intern-api') DESC, synced_at DESC, id ASC LIMIT 1`,
+    [email ?? null, fallbackId ?? null, email ?? null]
   );
-  return rows[0]?.id || null;
+  return rows[0] || null;
 }
 
 // This runs on every authenticated write (send a message, create a topic,

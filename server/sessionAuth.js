@@ -26,7 +26,7 @@ export async function verifyGatewayToken(token, expectedUse) {
   const header = JSON.parse(decode(headerB64).toString('utf8'));
   if (header.alg !== 'RS256') throw new Error(`Unexpected algorithm "${header.alg}".`);
   if (!jwksCache) {
-    const response = await fetch(`${config.gatewayUrl}/.well-known/jwks.json`);
+    const response = await fetch(`${config.gatewayUrl}/.well-known/jwks.json`, { signal: AbortSignal.timeout(5000) });
     if (!response.ok) throw new Error(`JWKS fetch failed: ${response.status}`);
     jwksCache = await response.json();
   }
@@ -69,7 +69,8 @@ export async function gatewaySessionIsLive(session) {
   if (!session?.sid || !session?.sub) return false;
   try {
     const response = await fetch(`${config.gatewayUrl}/oauth/introspect`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sid: session.sid, sub: session.sub })
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sid: session.sid, sub: session.sub }),
+      signal: AbortSignal.timeout(5000)
     });
     if (!response.ok) return true;
     return Boolean((await response.json()).active);
@@ -79,7 +80,8 @@ export async function gatewaySessionIsLive(session) {
 export async function exchangeAuthorizationCode(code) {
   const response = await fetch(`${config.gatewayUrl}/oauth/token`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ code, redirect_uri: `${config.publicUrl}/` })
+    body: JSON.stringify({ code, redirect_uri: `${config.publicUrl}/` }),
+    signal: AbortSignal.timeout(5000)
   });
   if (!response.ok) throw new Error('Gateway authorization-code exchange failed.');
   const payload = await response.json();

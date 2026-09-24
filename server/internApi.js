@@ -35,7 +35,8 @@ async function getInternAccessToken(correlationId) {
       grant_type: 'client_credentials',
       audience: config.internApiAudience,
       scope: 'intern:read'
-    })
+    }),
+    signal: AbortSignal.timeout(5000)
   });
 
   if (!response.ok) throw new Error(`Gateway token request failed with status ${response.status}`);
@@ -75,7 +76,8 @@ async function internApiGet(pathname, searchParams, correlationId) {
       Authorization: `Bearer ${await getInternAccessToken(correlationId)}`,
       Accept: 'application/json',
       ...(correlationId ? { 'X-Correlation-ID': correlationId } : {})
-    }
+    },
+    signal: AbortSignal.timeout(5000)
   });
   if (!response.ok) throw new Error(`Intern API GET ${pathname} failed with status ${response.status}`);
   return response.json();

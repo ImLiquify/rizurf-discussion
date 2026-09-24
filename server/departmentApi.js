@@ -24,7 +24,8 @@ async function getAccessToken(correlationId) {
       'Content-Type': 'application/json',
       ...(correlationId ? { 'X-Correlation-ID': correlationId } : {})
     },
-    body: JSON.stringify({ grant_type: 'client_credentials', audience: AUDIENCE, scope: SCOPE })
+    body: JSON.stringify({ grant_type: 'client_credentials', audience: AUDIENCE, scope: SCOPE }),
+    signal: AbortSignal.timeout(5000)
   });
   if (!response.ok) throw new Error(`Gateway token request failed with status ${response.status}`);
   const payload = await response.json();
@@ -48,7 +49,8 @@ export async function getDepartmentMap(correlationId) {
         Authorization: `Bearer ${await getAccessToken(correlationId)}`,
         Accept: 'application/json',
         ...(correlationId ? { 'X-Correlation-ID': correlationId } : {})
-      }
+      },
+      signal: AbortSignal.timeout(5000)
     });
     if (!response.ok) throw new Error(`Department API request failed with status ${response.status}`);
     const payload = await response.json();

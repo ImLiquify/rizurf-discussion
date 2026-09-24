@@ -119,9 +119,22 @@ function routeKey(pathname) {
   if (/^\/api\/topics\/[^/]+$/.test(pathname)) return '/api/topics/{topicId}';
   return null;
 }
-function sendJson(response, status, body) { response.status(status).type('application/json').json(body); }
+// MICROAPP_PERFORMANCE.md §5a: on a session GET the introspect call runs
+// alongside the route's data loading (request.sessionLive, set by the auth
+// middleware) — nothing is sent until it answers, and a dead session gets
+// the 401 instead of the data.
+function afterLiveCheck(response, send) {
+  const live = response.req.sessionLive;
+  if (!live) return send();
+  live.then(ok => {
+    if (ok) return send();
+    response.status(401).type('application/json').json({ error: { code: 'UNAUTHORIZED',
+      message: 'Sign in or present a bearer token to use this endpoint.', correlation_id: response.req.correlationId, details: null } });
+  });
+}
+function sendJson(response, status, body) { afterLiveCheck(response, () => response.status(status).type('application/json').json(body)); }
 function sendError(response, request, status, code, message, details = null) {
-  response.status(status).type('application/json').json({ error: { code, message, correlation_id: request.correlationId, details } });
+  afterLiveCheck(response, () => response.status(status).type('application/json').json({ error: { code, message, correlation_id: request.correlationId, details } }));
 }
 function requiredScopes(operationDefinition) {
   return (operationDefinition.security || []).flatMap(requirement => Object.values(requirement)).flat();
@@ -165,13 +178,12 @@ function isPrivilegedRole(role) { return role === 'admin' || role === 'superviso
 const ORG_SHARED_TARGET_ID = 'organization';
 
 // Read-only viewer resolution for hot read paths (the feedback poll) that
-// must not write on every call — see findAccountIdByEmail's own comment.
+// must not write on every call — see findViewerForRead's own comment.
 async function resolveViewerForRead(auth) {
-  const viewerId = await feedbacks.findAccountIdByEmail(auth?.email)
-    || (auth?.sub ? `gw_${auth.sub}`.slice(0, 50) : null);
-  if (!viewerId) return { viewerId: null, isPrivileged: false };
-  const user = await feedbacks.getUserById(viewerId);
-  return { viewerId, isPrivileged: isPrivilegedRole(user?.permissionRole) };
+  const fallbackId = auth?.sub ? `gw_${auth.sub}`.slice(0, 50) : null;
+  if (!auth?.email && !fallbackId) return { viewerId: null, isPrivileged: false };
+  const user = await feedbacks.findViewerForRead(auth?.email, fallbackId);
+  return { viewerId: user?.id || fallbackId, isPrivileged: isPrivilegedRole(user?.permissionRole) };
 }
 
 // A real sync means: a token round trip to the gateway, a call to
@@ -242,11 +254,18 @@ app.use(async (request, response, next) => {
   // per-request liveness check every authenticated request gets (section 5).
   // The cookie is HMAC-signed, so a forged one fails readSession() — no
   // identity is ever trusted from a plain header (SS-25).
+  //
+  // Reads (GET) don't wait for that check before starting — see
+  // afterLiveCheck. Writes still check first and write second.
   if (!match) {
     const session = readSession(request);
-    if (session && await gatewaySessionIsLive(session)) {
-      request.auth = { ...session, token_use: 'session', scope: FIRST_PARTY_SCOPES.join(' ') };
-      return next();
+    if (session) {
+      const live = gatewaySessionIsLive(session);
+      if (request.method === 'GET' || await live) {
+        if (request.method === 'GET') request.sessionLive = live;
+        request.auth = { ...session, token_use: 'session', scope: FIRST_PARTY_SCOPES.join(' ') };
+        return next();
+      }
     }
     return sendError(response, request, 401, 'UNAUTHORIZED', 'Sign in or present a bearer token to use this endpoint.');
   }
@@ -267,7 +286,10 @@ app.get('/health', async (request, response) => {
   try { await databaseIsHealthy(); return sendJson(response, 200, { status: 'ok', service: config.serviceId, version: openapi.info.version, uptime_seconds: Math.floor((Date.now() - startedAt) / 1000), checks: { database: true } }); }
   catch { return sendJson(response, 200, { status: 'degraded', service: config.serviceId, version: openapi.info.version, uptime_seconds: Math.floor((Date.now() - startedAt) / 1000), checks: { database: false } }); }
 });
-app.get('/openapi.json', (_request, response) => sendJson(response, 200, openapi));
+const OPENAPI_JSON = JSON.stringify(openapi);
+app.get('/openapi.json', (_request, response) => {
+  response.set('cache-control', 'public, max-age=60').type('application/json').send(OPENAPI_JSON);
+});
 
 app.get('/api/employees', async (request, response, next) => {
   const page = pagination(request, response); if (!page) return;

@@ -18,17 +18,25 @@ function backfillTopicId(targetType, key) {
 // On Vercel each invocation may spin up its own process, so a large pool
 // (fine for one long-lived server) can exhaust a small hosted MySQL plan's
 // max_connections under concurrent invocations. Keep the limit small when
-// VERCEL is set; local dev keeps the old default.
+// VERCEL is set (MICROAPP_PERFORMANCE.md §6: 2–5), but above 1 so a route's
+// Promise.all actually runs its queries in parallel; local dev keeps 10.
 export const pool = mysql.createPool({
   ...config.db,
   waitForConnections: true,
-  connectionLimit: process.env.VERCEL ? 1 : 10,
+  connectionLimit: process.env.VERCEL ? 3 : 10,
   namedPlaceholders: true,
   ...(config.db.ssl ? { ssl: { rejectUnauthorized: true } } : {})
 });
 
-export async function databaseIsHealthy() {
-  await pool.query('SELECT 1');
+// Time-boxed so a hanging DB reports `degraded` instead of hanging /health.
+export async function databaseIsHealthy(ms = 800) {
+  let timer;
+  try {
+    await Promise.race([
+      pool.query('SELECT 1'),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), ms); })
+    ]);
+  } finally { clearTimeout(timer); }
   return true;
 }
 
