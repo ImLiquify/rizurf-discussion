@@ -1531,8 +1531,11 @@
        .content-area's own overflow-y:auto to add a scrollbar (shrinking
        this pane's usable width and defeating the edge-to-edge fill).
        .feedbacks-layout already scrolls internally, so suppress the outer
-       scrollbar while this pane is the active one. */
-    .content-area:has(#feedbacksViewPane.active) { overflow: hidden; }
+       scrollbar while this pane is the active one. Its bottom padding goes
+       too: with it, .content-area's content was 28px taller than its box,
+       and a hidden scrollbar still lets scrollIntoView() (jump to first
+       unread) scroll it — leaving the whole pane stuck shifted up. */
+    .content-area:has(#feedbacksViewPane.active) { overflow: hidden; padding-bottom: 0; }
 
     .feedbacks-layout {
       display: flex;
@@ -4484,7 +4487,7 @@
       if (editWindowExpired(messageId)) return;
       editingChatMessageId = messageId;
       renderConversationMessages();
-      setTimeout(() => document.getElementById(`chat_edit_${messageId}`)?.focus(), 30);
+      setTimeout(() => document.getElementById(`chat_edit_${messageId}`)?.focus({ preventScroll: true }), 30);
     }
     function cancelChatMessageEdit() {
       editingChatMessageId = null;
@@ -4657,13 +4660,16 @@
       renderTypingIndicator();
       if (editDraft !== undefined) {
         const restored = document.getElementById(`chat_edit_${editingChatMessageId}`);
-        if (restored) { restored.value = editDraft; if (editHadFocus) restored.focus(); }
+        if (restored) { restored.value = editDraft; if (editHadFocus) restored.focus({ preventScroll: true }); }
       }
 
       const unread = scrollToFirstUnread ? (myTopics.find(t => t.id === activeTopic.id)?.unreadCount || 0) : 0;
       const firstUnread = unread > 0 && unread < sorted.length ? sorted[sorted.length - unread] : null;
-      if (firstUnread) {
-        document.getElementById(`chat-msg-${firstUnread.id}`)?.scrollIntoView({ block: "start" });
+      const firstUnreadEl = firstUnread && document.getElementById(`chat-msg-${firstUnread.id}`);
+      if (firstUnreadEl) {
+        // Not scrollIntoView(): that also scrolls every ancestor, including
+        // the overflow:hidden page container, shifting the whole pane up.
+        scroll.scrollTop += firstUnreadEl.getBoundingClientRect().top - scroll.getBoundingClientRect().top;
       } else if (shouldStickToBottom) {
         scroll.scrollTop = scroll.scrollHeight;
       }
@@ -4749,7 +4755,7 @@
       const mentionText = `@${employee.name} `;
       input.value = before + mentionText + after;
       const newCursor = before.length + mentionText.length;
-      input.focus();
+      input.focus({ preventScroll: true });
       input.setSelectionRange(newCursor, newCursor);
       closeMentionDropdown();
     }
