@@ -97,6 +97,15 @@ const openapi = {
       get: operation('List topics.', 'feedback:read', discovery('List Topics', 'Read topics in one conversation, or every topic the caller participates in.', ['mine', 'targetType', 'targetId', 'search'], ['data'])),
       post: operation('Create a topic.', 'feedback:write', discovery('Create Topic', 'Start a new topic inside a DM, group, or the Organization thread.', ['targetType', 'targetId', 'name'], ['id'], ['GET /api/topics']))
     },
+    '/api/topics/{topicId}/typing': {
+      post: operation('Signal typing in a topic.', 'feedback:write', discovery('Signal Typing', 'Tell the other people in a topic that the caller is typing; lasts a few seconds.', ['topicId'], []))
+    },
+    '/api/attachments': {
+      post: operation('Upload a chat attachment.', 'feedback:write', discovery('Upload Attachment', 'Upload an image or file (raw body, up to 3 MB; X-Filename and X-File-Type headers) to attach to a private message.', ['X-Filename', 'X-File-Type'], ['id', 'name', 'type', 'size'], ['POST /api/feedback']))
+    },
+    '/api/attachments/{attachmentId}': {
+      get: operation('Download a chat attachment.', 'feedback:read', discovery('Read Attachment', 'Download an attachment; visible to whoever can see the message it belongs to.', ['attachmentId'], []))
+    },
     '/api/topics/{topicId}/read': {
       post: operation('Mark a topic read.', 'feedback:write', discovery('Mark Topic Read', 'Record that the caller has read a topic up to now.', ['topicId'], []))
     },
@@ -116,6 +125,8 @@ function routeKey(pathname) {
   if (/^\/api\/groups\/[^/]+\/members$/.test(pathname)) return '/api/groups/{groupId}/members';
   if (/^\/api\/groups\/[^/]+$/.test(pathname)) return '/api/groups/{groupId}';
   if (/^\/api\/topics\/[^/]+\/read$/.test(pathname)) return '/api/topics/{topicId}/read';
+  if (/^\/api\/topics\/[^/]+\/typing$/.test(pathname)) return '/api/topics/{topicId}/typing';
+  if (/^\/api\/attachments\/[^/]+$/.test(pathname)) return '/api/attachments/{attachmentId}';
   if (/^\/api\/topics\/[^/]+$/.test(pathname)) return '/api/topics/{topicId}';
   return null;
 }
@@ -339,9 +350,11 @@ app.get('/api/feedback', async (request, response, next) => {
       viewerIsPrivileged: mine ? false : isPrivileged
     });
     const ids = data.map(item => item.id);
-    const [comments, reactions] = await Promise.all([
+    const topicId = visibility === 'private' ? request.query.topicId : undefined;
+    const [comments, reactions, typing] = await Promise.all([
       feedbacks.listCommentsForFeedback(ids),
-      feedbacks.listReactionsForFeedback(ids, viewerId)
+      feedbacks.listReactionsForFeedback(ids, viewerId),
+      topicId ? feedbacks.listTyping({ topicId, viewerId, viewerIsPrivileged: isPrivileged }) : null
     ]);
 
     // reactionsFor: "<feedbackId>\0<commentId>" -> { counts:{emoji:n}, mine:[emoji] }
@@ -369,7 +382,7 @@ app.get('/api/feedback', async (request, response, next) => {
       item.comments = byFeedback.get(item.id) || [];
       applyReactions(item, item.id, '');
     }
-    return sendJson(response, 200, { data, ...page });
+    return sendJson(response, 200, { data, ...page, ...(typing && { typing }) });
   } catch (error) { return next(error); }
 });
 app.get('/api/feedback/counts', async (request, response, next) => {
@@ -414,10 +427,10 @@ app.patch('/api/feedback/:feedbackId', async (request, response, next) => {
     if (meta.senderId !== callerId && !isPrivileged) {
       return sendError(response, request, 403, 'FORBIDDEN', 'Only the author, an admin, or a manager can edit this.');
     }
-    // Chat messages (private) are editable by their own author for one hour
-    // only — after that it's part of the conversation history, not a draft.
-    // Admins/managers still edit anytime, same as the delete bypass above.
-    if (meta.visibility === 'private' && !isPrivileged && Date.now() - new Date(meta.createdAt).getTime() > 60 * 60 * 1000) {
+    // Chat messages (private) are editable for one hour after sending, by
+    // anyone — no admin/manager bypass. Age is measured in MySQL's clock
+    // (ageSeconds), not Date.now() vs created_at: the two clocks disagree.
+    if (meta.visibility === 'private' && Number(meta.ageSeconds) > 60 * 60) {
       return sendError(response, request, 403, 'FORBIDDEN', 'This message is more than an hour old and can no longer be edited.');
     }
     return sendJson(response, 200, await feedbacks.updateFeedbackContent({ id: request.params.feedbackId, content: content.trim() }));
@@ -452,11 +465,19 @@ app.delete('/api/feedback/:feedbackId', async (request, response, next) => {
 async function createPrivateFeedback(request, response, next) {
   const auth = request.auth || {};
   if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
-  const { topicId, content } = request.body || {};
+  const { topicId, content, attachmentId } = request.body || {};
   if (!validText(topicId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'topicId is required.', { fields: ['topicId'] });
-  if (!validText(content)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'content is required.', { fields: ['content'] });
+  if (!validText(content) && !validText(attachmentId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'content or attachmentId is required.', { fields: ['content', 'attachmentId'] });
   try {
     const senderId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+    let text = validText(content) ? content.trim() : '';
+    if (validText(attachmentId)) {
+      const attachment = await feedbacks.getClaimableAttachment(attachmentId, senderId);
+      if (!attachment) return sendError(response, request, 422, 'VALIDATION_ERROR', 'attachmentId must be your own, not-yet-sent upload.', { fields: ['attachmentId'] });
+      // A caption-less attachment still gets text, so sidebar previews and
+      // anything else that reads `content` show something meaningful.
+      if (!text) text = `📎 ${attachment.filename}`;
+    }
     const topic = await feedbacks.getTopicById(topicId);
     if (!topic) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No topic with that id.');
     const senderUser = await feedbacks.getUserById(senderId);
@@ -478,9 +499,13 @@ async function createPrivateFeedback(request, response, next) {
 
     const created = await feedbacks.createFeedback({
       id: `fb_${crypto.randomUUID()}`, senderId, targetId, targetName,
-      content: content.trim(), isAnonymous: false, visibility: 'private', targetType, topicId
+      content: text, isAnonymous: false, visibility: 'private', targetType, topicId,
+      attachmentId: validText(attachmentId) ? attachmentId : null
     });
-    await feedbacks.markTopicRead({ topicId, userId: senderId });
+    await Promise.all([
+      feedbacks.markTopicRead({ topicId, userId: senderId }),
+      feedbacks.clearTyping({ topicId, userId: senderId })
+    ]);
     return sendJson(response, 201, created);
   } catch (error) { return next(error); }
 }
@@ -754,6 +779,10 @@ app.post('/api/topics', async (request, response, next) => {
       if (!validText(targetId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'targetId is required.', { fields: ['targetId'] });
       if (targetId === createdBy) return sendError(response, request, 422, 'VALIDATION_ERROR', 'You cannot start a topic with yourself.');
       if (!await feedbacks.getUserById(targetId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No user with that id.');
+      // A DM is one continuous thread per pair of people — hand back the
+      // existing one instead of starting a second.
+      const [existing] = await feedbacks.listTopicsInContainer({ targetType: 'user', targetId, viewerId: createdBy, limit: 1, offset: 0 });
+      if (existing) return sendJson(response, 200, existing);
       resolvedTargetId = targetId;
     }
     const topic = await feedbacks.createTopic({ id: `topic_${crypto.randomUUID()}`, targetType, targetId: resolvedTargetId, name: name.trim(), createdBy });
@@ -775,6 +804,68 @@ app.post('/api/topics/:topicId/read', async (request, response, next) => {
     return response.status(204).end();
   } catch (error) { return next(error); }
 });
+app.post('/api/topics/:topicId/typing', async (request, response, next) => {
+  try {
+    const { viewerId, isPrivileged } = await resolveViewerForRead(request.auth);
+    if (!viewerId) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+    if (!await feedbacks.canViewTopic({ topicId: request.params.topicId, viewerId, viewerIsPrivileged: isPrivileged })) {
+      return sendError(response, request, 403, 'FORBIDDEN', 'You do not have access to this topic.');
+    }
+    await feedbacks.setTyping({ topicId: request.params.topicId, userId: viewerId });
+    return response.status(204).end();
+  } catch (error) { return next(error); }
+});
+
+const ATTACHMENT_MAX_BYTES = 3 * 1024 * 1024;
+// Only these render inline; everything else (including SVG and HTML, which
+// can carry script) is served as a download, never interpreted by the browser.
+const INLINE_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+
+// Raw body, not JSON/base64 — the client always sends application/octet-stream
+// (so the global express.json never touches it) with the real name/type in
+// headers.
+app.post('/api/attachments', express.raw({ type: () => true, limit: ATTACHMENT_MAX_BYTES }), async (request, response, next) => {
+  const auth = request.auth || {};
+  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+  const data = request.body;
+  if (!Buffer.isBuffer(data) || !data.length) return sendError(response, request, 422, 'VALIDATION_ERROR', 'The request body must be the file.');
+  let filename = 'file';
+  try { filename = decodeURIComponent(String(request.headers['x-filename'] || 'file')); } catch { /* keep default */ }
+  filename = filename.replace(/[\r\n"\\/]/g, '_').slice(0, 255) || 'file';
+  const suppliedType = String(request.headers['x-file-type'] || '').toLowerCase();
+  const mimeType = /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(suppliedType) && suppliedType.length <= 120 ? suppliedType : 'application/octet-stream';
+  try {
+    const uploaderId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+    return sendJson(response, 201, await feedbacks.createAttachment({ id: `att_${crypto.randomUUID()}`, uploaderId, filename, mimeType, data }));
+  } catch (error) { return next(error); }
+});
+
+app.get('/api/attachments/:attachmentId', async (request, response, next) => {
+  try {
+    const attachment = await feedbacks.getAttachment(request.params.attachmentId);
+    if (!attachment) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No attachment with that id.');
+    if (attachment.feedbackId) {
+      // Same rule as the message it's attached to.
+      if (!await loadAccessibleFeedback(request, response, attachment.feedbackId)) return;
+    } else {
+      // Uploaded but not sent yet: only its uploader.
+      const { viewerId } = await resolveViewerForRead(request.auth);
+      if (viewerId !== attachment.uploaderId) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No attachment with that id.');
+    }
+    const inline = INLINE_IMAGE_TYPES.has(attachment.mimeType);
+    afterLiveCheck(response, () => {
+      response.set({
+        'content-type': inline ? attachment.mimeType : 'application/octet-stream',
+        'content-disposition': `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(attachment.filename)}`,
+        'x-content-type-options': 'nosniff',
+        'content-security-policy': "default-src 'none'; sandbox",
+        'cache-control': 'private, max-age=86400'
+      });
+      response.send(attachment.data);
+    });
+  } catch (error) { return next(error); }
+});
+
 app.delete('/api/topics/:topicId', async (request, response, next) => {
   const auth = request.auth || {};
   if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
@@ -832,6 +923,9 @@ app.use((error, request, response, _next) => {
   if (response.headersSent) return;
   if (error.type === 'entity.parse.failed') {
     return sendError(response, request, 422, 'VALIDATION_ERROR', 'The request body must be valid JSON.');
+  }
+  if (error.type === 'entity.too.large') {
+    return sendError(response, request, 413, 'PAYLOAD_TOO_LARGE', 'That file is too large (3 MB max).');
   }
   return sendError(response, request, 500, 'INTERNAL_ERROR', 'An unexpected internal error occurred.');
 });

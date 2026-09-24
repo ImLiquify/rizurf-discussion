@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS `feedback` (
   `visibility`   varchar(10)  NOT NULL DEFAULT 'public',
   `target_type`  varchar(10)  NOT NULL DEFAULT 'user',
   `topic_id`     varchar(60)  DEFAULT NULL,
+  `attachment_id` varchar(60) DEFAULT NULL,
   `created_at`   timestamp    NOT NULL DEFAULT current_timestamp(),
   `updated_at`   timestamp    NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
@@ -143,4 +144,26 @@ CREATE TABLE IF NOT EXISTS `topic_reads` (
   PRIMARY KEY (`topic_id`, `user_id`),
   CONSTRAINT `fk_topic_reads_topic` FOREIGN KEY (`topic_id`) REFERENCES `topics` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_topic_reads_user`  FOREIGN KEY (`user_id`)  REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Chat attachments, stored in the database (no persistent disk on Vercel);
+-- 3 MB per file, enforced by the upload route.
+CREATE TABLE IF NOT EXISTS `attachments` (
+  `id`          varchar(60)  NOT NULL,
+  `uploader_id` varchar(50)  NOT NULL,
+  `filename`    varchar(255) NOT NULL,
+  `mime_type`   varchar(120) NOT NULL,
+  `size`        int          NOT NULL,
+  `data`        mediumblob   NOT NULL,
+  `created_at`  timestamp    NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_attachments_uploader` (`uploader_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- "X is typing…" heartbeats, one row per person per topic.
+CREATE TABLE IF NOT EXISTS `topic_typing` (
+  `topic_id`   varchar(60) NOT NULL,
+  `user_id`    varchar(50) NOT NULL,
+  `updated_at` timestamp   NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`topic_id`, `user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

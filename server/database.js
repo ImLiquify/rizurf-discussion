@@ -122,7 +122,8 @@ export async function ensureSchemaCompatibility() {
   await addMissingColumns('feedback', [
     ['visibility', "VARCHAR(10) NOT NULL DEFAULT 'public'"],
     ['target_type', "VARCHAR(10) NOT NULL DEFAULT 'user'"],
-    ['topic_id', 'VARCHAR(60) NULL']
+    ['topic_id', 'VARCHAR(60) NULL'],
+    ['attachment_id', 'VARCHAR(60) NULL']
   ], columns.get('feedback'));
 
   // Project groups. Named `feedback_groups`, not `groups` — GROUPS is a
@@ -236,4 +237,39 @@ export async function ensureSchemaCompatibility() {
       [topicId, a, b, b, a]
     );
   }
+
+  // DMs are one continuous thread per pair of people (no topics). Fold any
+  // pair that still has several DM topics into its lowest-id one, then drop
+  // the now-empty extras (topic_reads cascades). A no-op once merged.
+  const dmPairs = `(SELECT LEAST(created_by, target_id) AS a, GREATEST(created_by, target_id) AS b, MIN(id) AS keep_id
+    FROM topics WHERE target_type = 'user' GROUP BY a, b HAVING COUNT(*) > 1) k
+    ON k.a = LEAST(t.created_by, t.target_id) AND k.b = GREATEST(t.created_by, t.target_id)`;
+  await pool.query(`UPDATE feedback f JOIN topics t ON t.id = f.topic_id AND t.target_type = 'user' JOIN ${dmPairs}
+    SET f.topic_id = k.keep_id WHERE f.topic_id <> k.keep_id`);
+  await pool.query(`DELETE t FROM topics t JOIN ${dmPairs} WHERE t.target_type = 'user' AND t.id <> k.keep_id`);
+
+  // Chat attachments live in the database (Vercel has no persistent disk).
+  // Capped at 3 MB per file by the upload route — under both Vercel's 4.5 MB
+  // request limit and MySQL 5.7's default 4 MB max_allowed_packet.
+  await pool.query(`CREATE TABLE IF NOT EXISTS attachments (
+    id varchar(60) NOT NULL,
+    uploader_id varchar(50) NOT NULL,
+    filename varchar(255) NOT NULL,
+    mime_type varchar(120) NOT NULL,
+    size int NOT NULL,
+    data mediumblob NOT NULL,
+    created_at timestamp NOT NULL DEFAULT current_timestamp(),
+    PRIMARY KEY (id),
+    KEY idx_attachments_uploader (uploader_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
+
+  // "X is typing…" — one heartbeat row per person per topic, refreshed while
+  // they type and read back by the open-topic poll. Shared through the DB
+  // because serverless instances don't share memory.
+  await pool.query(`CREATE TABLE IF NOT EXISTS topic_typing (
+    topic_id varchar(60) NOT NULL,
+    user_id varchar(50) NOT NULL,
+    updated_at timestamp NOT NULL DEFAULT current_timestamp(),
+    PRIMARY KEY (topic_id, user_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
 }

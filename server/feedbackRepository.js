@@ -262,9 +262,11 @@ export async function listFeedback({ targetId, senderId, participantId, groupMem
          WHEN f.target_type = 'org' THEN 'Organization'
          ELSE COALESCE(target_user.name, f.target_name)
        END AS targetName,
-       f.content, f.is_anonymous AS isAnonymous, f.is_edited AS isEdited, f.created_at AS timestamp
+       f.content, f.is_anonymous AS isAnonymous, f.is_edited AS isEdited, f.created_at AS timestamp,
+       f.attachment_id AS attachmentId, att.filename AS attachmentName, att.mime_type AS attachmentType, att.size AS attachmentSize
      FROM feedback f
      JOIN users u ON u.id = f.sender_id
+     LEFT JOIN attachments att ON att.id = f.attachment_id
      LEFT JOIN users target_user ON target_user.id = f.target_id
      LEFT JOIN topics tp ON tp.id = f.topic_id
      ${where}
@@ -318,10 +320,10 @@ export async function getFeedbackCounts() {
   return counts;
 }
 
-export async function createFeedback({ id, senderId, targetId, targetName, content, isAnonymous, visibility = 'public', targetType = 'user', topicId = null }) {
+export async function createFeedback({ id, senderId, targetId, targetName, content, isAnonymous, visibility = 'public', targetType = 'user', topicId = null, attachmentId = null }) {
   await pool.execute(
-    'INSERT INTO feedback (id, sender_id, target_id, target_name, content, is_anonymous, visibility, target_type, topic_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [id, senderId, targetId, targetName, content, isAnonymous, visibility, targetType, topicId]
+    'INSERT INTO feedback (id, sender_id, target_id, target_name, content, is_anonymous, visibility, target_type, topic_id, attachment_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [id, senderId, targetId, targetName, content, isAnonymous, visibility, targetType, topicId, attachmentId]
   );
   const [rows] = await pool.execute('SELECT * FROM feedback WHERE id = ?', [id]);
   return rows[0];
@@ -348,7 +350,8 @@ export async function deleteFeedback(id) {
 // comment and reaction routes, in one query.
 export async function getFeedbackMeta(id) {
   const [rows] = await pool.execute(
-    `SELECT id, visibility, target_type AS targetType, target_id AS targetId, sender_id AS senderId, created_at AS createdAt
+    `SELECT id, visibility, target_type AS targetType, target_id AS targetId, sender_id AS senderId, created_at AS createdAt,
+       TIMESTAMPDIFF(SECOND, created_at, NOW()) AS ageSeconds
      FROM feedback WHERE id = ? LIMIT 1`,
     [id]
   );
@@ -718,6 +721,60 @@ export async function listMyTopics({ viewerId, viewerIsPrivileged }) {
      WHERE ${TOPIC_ACCESS_SQL}
      ORDER BY lastMessageAt IS NULL, lastMessageAt DESC, t.created_at DESC`,
     [viewerId || '', viewerId || '', ...accessParams(viewerIsPrivileged, viewerId)]
+  );
+  return rows;
+}
+
+export async function createAttachment({ id, uploaderId, filename, mimeType, data }) {
+  await pool.execute(
+    'INSERT INTO attachments (id, uploader_id, filename, mime_type, size, data) VALUES (?, ?, ?, ?, ?, ?)',
+    [id, uploaderId, filename, mimeType, data.length, data]
+  );
+  return { id, name: filename, type: mimeType, size: data.length };
+}
+
+// Everything needed to serve one attachment, plus the message it's attached
+// to (null until sent) so the route can apply that message's access rule.
+export async function getAttachment(id) {
+  const [rows] = await pool.execute(
+    `SELECT a.id, a.uploader_id AS uploaderId, a.filename, a.mime_type AS mimeType, a.data,
+       (SELECT f.id FROM feedback f WHERE f.attachment_id = a.id LIMIT 1) AS feedbackId
+     FROM attachments a WHERE a.id = ? LIMIT 1`, [id]
+  );
+  return rows[0] || null;
+}
+
+// Only the uploader may attach a file, and only to one message.
+export async function getClaimableAttachment(id, uploaderId) {
+  const [rows] = await pool.execute(
+    `SELECT a.filename FROM attachments a
+     WHERE a.id = ? AND a.uploader_id = ? AND NOT EXISTS (SELECT 1 FROM feedback f WHERE f.attachment_id = a.id) LIMIT 1`,
+    [id, uploaderId]
+  );
+  return rows[0] || null;
+}
+
+export async function setTyping({ topicId, userId }) {
+  await pool.execute(
+    `INSERT INTO topic_typing (topic_id, user_id, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE updated_at = CURRENT_TIMESTAMP`, [topicId, userId]
+  );
+}
+
+export async function clearTyping({ topicId, userId }) {
+  await pool.execute('DELETE FROM topic_typing WHERE topic_id = ? AND user_id = ?', [topicId, userId]);
+}
+
+// Anyone but the viewer with a typing heartbeat in the last few seconds, in
+// a topic the viewer can see — compared in MySQL's own clock, same reason as
+// isInternSyncFresh.
+export async function listTyping({ topicId, viewerId, viewerIsPrivileged }) {
+  const [rows] = await pool.execute(
+    `SELECT u.id, u.name FROM topic_typing tt
+     JOIN users u ON u.id = tt.user_id
+     JOIN topics t ON t.id = tt.topic_id AND ${TOPIC_ACCESS_SQL}
+     WHERE tt.topic_id = ? AND tt.user_id <> ? AND tt.updated_at > NOW() - INTERVAL 6 SECOND`,
+    [...accessParams(viewerIsPrivileged, viewerId), topicId, viewerId || '']
   );
   return rows;
 }

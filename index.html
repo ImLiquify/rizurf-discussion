@@ -1984,6 +1984,85 @@
 
     .feedbacks-detail-header[hidden], .feedbacks-compose-bar[hidden] { display: none; }
 
+    /* iMessage-style "…" bubble for whoever else is typing in this topic. */
+    .chat-typing {
+      align-self: flex-start;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.74rem;
+      color: var(--text-subtle);
+    }
+    .chat-typing[hidden] { display: none; }
+    .chat-typing-dots {
+      display: inline-flex;
+      gap: 4px;
+      padding: 11px 14px;
+      border-radius: var(--radius-lg);
+      background: var(--bg-subtle);
+    }
+    .chat-typing-dots span {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--text-subtle);
+      animation: chat-typing-bounce 1.2s infinite ease-in-out;
+    }
+    .chat-typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+    .chat-typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes chat-typing-bounce {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+      30% { transform: translateY(-4px); opacity: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .chat-typing-dots span { animation: none; opacity: 0.7; }
+    }
+
+    /* Fixed height so an image loading in doesn't shift the scroll position. */
+    .chat-attachment-img {
+      display: block;
+      height: 200px;
+      max-width: 100%;
+      object-fit: cover;
+      border-radius: var(--radius-md);
+      margin: 4px 0;
+      background: var(--bg-canvas);
+    }
+    .chat-attachment-file {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      max-width: 100%;
+      margin: 4px 0;
+      padding: 8px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      background: var(--bg-surface);
+      color: var(--text-main);
+      font-size: 0.85rem;
+      text-decoration: none;
+    }
+    .chat-attachment-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chat-attachment-file small { color: var(--text-subtle); flex-shrink: 0; }
+    .chat-attachment-file:hover { border-color: var(--accent-cyan); }
+
+    .compose-attach-btn {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      background: var(--bg-canvas);
+      color: var(--text-subtle);
+      cursor: pointer;
+    }
+    .compose-attach-btn:hover:not(:disabled) { color: var(--accent-cyan-hover); border-color: var(--accent-cyan); }
+    .compose-attach-btn:disabled { cursor: progress; }
+    .compose-attach-btn .btn-spinner { border-color: var(--border-color); border-top-color: var(--accent-cyan); }
+
+    .dm-header-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+
     @media (max-width: 900px) {
       .feedbacks-layout { flex-direction: column; height: auto; }
       .feedbacks-sidebar { width: auto; border-right: none; border-bottom: 1px solid var(--border-color); }
@@ -2852,6 +2931,14 @@
           </div>
           <div class="feedbacks-compose-bar" id="feedbacksComposeBar" hidden>
             <div class="mention-dropdown" id="mentionDropdown" hidden></div>
+            <input type="file" id="composeFileInput" hidden onchange="handleAttachmentPicked(this)" />
+            <button type="button" class="compose-attach-btn" id="composeAttachBtn" title="Attach an image or file (3 MB max)"
+              aria-label="Attach an image or file" onclick="document.getElementById('composeFileInput').click()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+              </svg>
+            </button>
             <textarea id="feedbacksComposeInput" class="feedbacks-compose-input"
               placeholder="Write a message..." onkeydown="handleFeedbacksComposeKeydown(event)" oninput="handleComposeInput(this)"></textarea>
             <button class="btn-submit-feedback" onclick="sendFeedbacksMessage()">
@@ -3206,6 +3293,8 @@
     let containerTopicsLoading = false; // topics-in-this-container middle panel
     let conversationLoading = false; // messages in the open topic
     let editingChatMessageId = null; // chat message currently showing its inline edit box, or null
+    let typingUsers = []; // [{id, name}] typing in the open topic, from the poll
+    let lastTypingSentAt = 0;
 
     // @mention autocomplete — groups and Organization only, never DMs (a 1:1
     // conversation has no one else to tag). Group mentions are scoped to
@@ -4031,8 +4120,9 @@
       }
     }
 
-    // Selecting a container (Organization / a group / an employee) shows its
-    // topic list first — the convo doesn't happen until a topic is opened.
+    // Selecting Organization or a group shows its topic list first — the
+    // convo doesn't happen until a topic is opened. A DM has no topics: it
+    // opens straight into its one continuous thread (openDirectMessage).
     async function openContainer(type, id, name) {
       stopTopicPolling();
       activeContainer = { type, id, name };
@@ -4041,11 +4131,50 @@
       containerTopicsLoading = true;
       topicSearchQuery = "";
       activeGroupMembers = [];
+      typingUsers = [];
+      if (type === "user") return openDirectMessage();
       renderFeedbacksTab();
       renderTopicList();
       const tasks = [refreshContainerTopics()];
       if (type === "group") tasks.push(refreshActiveGroupMembers());
       await Promise.all(tasks);
+    }
+
+    // The DM's thread is the pair's single 'user' topic. Until the first
+    // message it doesn't exist yet: activeTopic has id null, and
+    // ensureActiveTopicId() creates it on send.
+    async function openDirectMessage() {
+      const container = activeContainer;
+      containerTopicsLoading = false;
+      renderFeedbacksTab();
+      const known = dmTopicsByCounterpart().get(container.id)?.[0];
+      if (known) return openTopic(known);
+      activeTopic = { id: null, name: container.name };
+      conversationMessages = [];
+      conversationLoading = true;
+      renderConversationMessages();
+      await refreshContainerTopics();
+      if (activeContainer !== container) return;
+      if (containerTopics[0]) return openTopic(containerTopics[0]);
+      conversationLoading = false;
+      renderConversationMessages();
+    }
+
+    async function ensureActiveTopicId() {
+      if (activeTopic.id) return activeTopic.id;
+      const container = activeContainer;
+      const response = await fetch(`${API_BASE_URL}/topics`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetType: "user", targetId: container.id, name: "Direct message" })
+      });
+      if (!response.ok) throw new Error("Could not start the conversation.");
+      const topic = await response.json();
+      if (activeContainer === container && activeTopic && !activeTopic.id) {
+        activeTopic = topic;
+        startTopicPolling();
+      }
+      refreshMyTopics();
+      return topic.id;
     }
 
     // Only for @mention scoping in a group chat — the group-edit modal has
@@ -4151,6 +4280,7 @@
       activeTopic = topic;
       conversationMessages = [];
       conversationLoading = true;
+      typingUsers = [];
       renderTopicList();
       await refreshActiveTopicMessages();
       startTopicPolling();
@@ -4218,12 +4348,15 @@
     }
 
     async function pollActiveTopicMessages() {
-      if (!activeTopic || currentMainTab !== "feedbacks" || activeModalTargetId || document.visibilityState !== "visible") return;
+      if (!activeTopic?.id || currentMainTab !== "feedbacks" || activeModalTargetId || document.visibilityState !== "visible") return;
       const topicId = activeTopic.id;
       try {
         const response = await fetch(`${API_BASE_URL}/feedback?visibility=private&topicId=${encodeURIComponent(topicId)}`);
         if (!response.ok || activeTopic?.id !== topicId) return;
-        const fetched = (await response.json()).data || [];
+        const json = await response.json();
+        const fetched = json.data || [];
+        typingUsers = json.typing || [];
+        renderTypingIndicator();
         const priorRealCount = conversationMessages.filter(m => !m.pending).length;
         // Drop a locally-pending message once the same send has actually
         // landed (matched by sender+content) — otherwise a send still being
@@ -4236,10 +4369,10 @@
         // not just the confirmed rows — so a poll tick while a send is
         // merely slow (not yet confirmed) doesn't re-render every 3s with
         // nothing actually new; that redundant re-render was the "message
-        // flickers/disappears" bug.
-        const nextIds = [...fetched.map(m => m.id), ...pending.map(m => m.id)].join(",");
-        const currentIds = conversationMessages.map(m => m.id).join(",");
-        if (nextIds === currentIds) return;
+        // flickers/disappears" bug. Content is part of the signature so
+        // someone else's edit re-renders too, not just new/removed messages.
+        const signature = list => list.map(m => `${m.id}\u0000${m.content}`).join("\u0001");
+        if (signature([...fetched, ...pending]) === signature(conversationMessages)) return;
 
         conversationMessages = [...fetched, ...pending];
         renderConversationMessages();
@@ -4279,9 +4412,36 @@
       return out;
     }
 
+    function withinEditWindow(message) {
+      return Date.now() - new Date(message.timestamp).getTime() < CHAT_EDIT_WINDOW_MS;
+    }
+
+    function formatBytes(bytes) {
+      const n = Number(bytes) || 0;
+      return n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
+    }
+
+    // Must match INLINE_IMAGE_TYPES in server/rizurfApi.js — anything else is
+    // served as a download, so it's shown as a file chip, not an <img>.
+    const INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+
+    function chatAttachmentHtml(message) {
+      if (!message.attachmentId) return "";
+      const url = `${API_BASE_URL}/attachments/${encodeURIComponent(message.attachmentId)}`;
+      const name = escapeHtml(message.attachmentName || "file");
+      if (message.pending) return `<div class="chat-attachment-file">📎 <span>${name}</span></div>`;
+      if (INLINE_IMAGE_TYPES.has(message.attachmentType)) {
+        return `<a href="${url}" target="_blank" rel="noopener"><img class="chat-attachment-img" src="${url}" alt="${name}" loading="lazy" /></a>`;
+      }
+      return `<a class="chat-attachment-file" href="${url}" download>📎 <span>${name}</span><small>${formatBytes(message.attachmentSize)}</small></a>`;
+    }
+
     function chatMessageBubbleHtml(message) {
       const mine = message.senderId === CURRENT_USER.id;
-      const editable = mine && !message.pending && (Date.now() - new Date(message.timestamp).getTime()) < CHAT_EDIT_WINDOW_MS;
+      const editable = mine && !message.pending && withinEditWindow(message);
+      // A caption-less attachment's content is just the server's "📎 name"
+      // placeholder — the attachment itself already shows that.
+      const showText = !(message.attachmentId && message.content === `📎 ${message.attachmentName}`);
       const statusHtml = message.pending
         ? `<span class="chat-message-status">Sending…</span>`
         : `<span class="chat-message-time">${formatDisplayTime(message.timestamp)}${message.isEdited ? " · edited" : ""}</span>`;
@@ -4296,7 +4456,7 @@
                <button class="btn-save-inline" onclick="saveChatMessageEdit('${message.id}')">Save</button>
              </div>
            </div>`
-        : `<div class="chat-message-text">${message.targetType === "user" ? escapeHtml(message.content) : highlightMentionsHtml(message.content)}</div>`;
+        : `${chatAttachmentHtml(message)}${showText ? `<div class="chat-message-text">${message.targetType === "user" ? escapeHtml(message.content) : highlightMentionsHtml(message.content)}</div>` : ""}`;
       return `
         <div class="chat-message-row${mine ? " mine" : ""}${message.pending ? " pending" : ""}" id="chat-msg-${message.id}">
           <div class="chat-message-meta">
@@ -4309,7 +4469,19 @@
       `;
     }
 
+    // The edit button is only drawn while a message is under an hour old, but
+    // a chat left open can outlive that — check again at click time.
+    function editWindowExpired(messageId) {
+      const message = conversationMessages.find(m => m.id === messageId);
+      if (message && withinEditWindow(message)) return false;
+      editingChatMessageId = null;
+      renderConversationMessages();
+      showToast("Messages can only be edited within an hour of sending.");
+      return true;
+    }
+
     function startChatMessageEdit(messageId) {
+      if (editWindowExpired(messageId)) return;
       editingChatMessageId = messageId;
       renderConversationMessages();
       setTimeout(() => document.getElementById(`chat_edit_${messageId}`)?.focus(), 30);
@@ -4323,6 +4495,7 @@
       if (!textarea) return;
       const newContent = textarea.value.trim();
       if (!newContent) { showToast("Message can't be empty."); return; }
+      if (editWindowExpired(messageId)) return;
       try {
         const response = await fetch(`${API_BASE_URL}/feedback/${messageId}`, {
           method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: newContent })
@@ -4447,22 +4620,45 @@
         || (scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 80);
 
       header.hidden = false;
-      header.innerHTML = `
-        <div class="feedbacks-detail-title-group">
-          <button type="button" class="topic-back-btn" onclick="backToTopicList()" title="Back to topics">&larr;</button>
-          <div class="feedbacks-detail-title">${escapeHtml(activeTopic.name)}</div>
-        </div>
-      `;
+      // A DM is one thread with a person (no topics to go back to), so its
+      // header is just who you're talking to.
+      if (activeContainer?.type === "user") {
+        const person = EMPLOYEES.find(e => e.id === activeContainer.id);
+        header.innerHTML = `
+          <div class="feedbacks-detail-title-group">
+            <img class="dm-header-avatar" src="${escapeHtml(avatarSrc(person?.avatar))}" alt="" />
+            <div class="feedbacks-detail-title">${escapeHtml(activeContainer.name)}</div>
+          </div>
+        `;
+      } else {
+        header.innerHTML = `
+          <div class="feedbacks-detail-title-group">
+            <button type="button" class="topic-back-btn" onclick="backToTopicList()" title="Back to topics">&larr;</button>
+            <div class="feedbacks-detail-title">${escapeHtml(activeTopic.name)}</div>
+          </div>
+        `;
+      }
 
       composeBar.hidden = false;
       if (conversationLoading) {
         scroll.innerHTML = skeletonBubblesHtml();
         return;
       }
+      // A re-render (e.g. a poll picking up someone's new message) must not
+      // wipe an edit that's half-typed.
+      const editBox = editingChatMessageId ? document.getElementById(`chat_edit_${editingChatMessageId}`) : null;
+      const editDraft = editBox?.value;
+      const editHadFocus = editBox && document.activeElement === editBox;
       const sorted = [...conversationMessages].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-      scroll.innerHTML = sorted.length
+      scroll.innerHTML = (sorted.length
         ? sorted.map(chatMessageBubbleHtml).join("")
-        : `<div class="feedbacks-empty-state">No messages yet — say hello.</div>`;
+        : `<div class="feedbacks-empty-state">No messages yet — say hello.</div>`)
+        + `<div class="chat-typing" id="chatTypingIndicator" hidden></div>`;
+      renderTypingIndicator();
+      if (editDraft !== undefined) {
+        const restored = document.getElementById(`chat_edit_${editingChatMessageId}`);
+        if (restored) { restored.value = editDraft; if (editHadFocus) restored.focus(); }
+      }
 
       const unread = scrollToFirstUnread ? (myTopics.find(t => t.id === activeTopic.id)?.unreadCount || 0) : 0;
       const firstUnread = unread > 0 && unread < sorted.length ? sorted[sorted.length - unread] : null;
@@ -4477,7 +4673,32 @@
     // (start of text, or right after whitespace) with no space typed since —
     // that's an in-progress mention. No-ops entirely in a DM (activeContainer
     // is null there? no — it's "user" — either way, nothing to mention).
+    function renderTypingIndicator() {
+      const el = document.getElementById("chatTypingIndicator");
+      if (!el) return;
+      const scroll = document.getElementById("feedbacksMessagesScroll");
+      const wasAtBottom = scroll && scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 80;
+      el.hidden = !typingUsers.length;
+      // A DM only ever has one other person, so just the dots (like iMessage);
+      // groups/Organization say who.
+      const label = typingUsers.length && activeContainer?.type !== "user"
+        ? `${escapeHtml(typingUsers.map(u => u.name).join(", "))} ${typingUsers.length === 1 ? "is" : "are"} typing…` : "";
+      el.innerHTML = typingUsers.length
+        ? `<span class="chat-typing-dots" aria-label="typing"><span></span><span></span><span></span></span>${label ? `<span>${label}</span>` : ""}`
+        : "";
+      if (wasAtBottom) scroll.scrollTop = scroll.scrollHeight;
+    }
+
+    // Heartbeat at most every 2.5s while typing; the server shows it for 6s
+    // after the last one, and clears it the moment the message is sent.
+    function sendTypingHeartbeat(textarea) {
+      if (!activeTopic?.id || !textarea.value.trim() || Date.now() - lastTypingSentAt < 2500) return;
+      lastTypingSentAt = Date.now();
+      fetch(`${API_BASE_URL}/topics/${activeTopic.id}/typing`, { method: "POST" }).catch(() => {});
+    }
+
     function handleComposeInput(textarea) {
+      sendTypingHeartbeat(textarea);
       if (!activeContainer || activeContainer.type === "user") { closeMentionDropdown(); return; }
       const cursor = textarea.selectionStart;
       const beforeCursor = textarea.value.slice(0, cursor);
@@ -4568,13 +4789,19 @@
     // round trip to a remote database before the sender sees anything —
     // reconciled with the real row once the server responds, and rolled
     // back if the send actually failed.
-    async function sendFeedbacksMessage() {
+    // `attachment` ({id, name, type, size} from POST /api/attachments) is
+    // optional; whatever's typed in the box goes along as its caption.
+    async function sendFeedbacksMessage(attachment = null) {
       const input = document.getElementById("feedbacksComposeInput");
       if (!input || !activeTopic) return;
       const content = input.value.trim();
-      if (!content) return;
+      if (!content && !attachment) return;
       input.value = "";
       closeMentionDropdown();
+      lastTypingSentAt = 0;
+      const attachmentFields = attachment
+        ? { attachmentId: attachment.id, attachmentName: attachment.name, attachmentType: attachment.type, attachmentSize: attachment.size }
+        : {};
 
       // Capture which topic this send belongs to — activeTopic/conversationMessages/
       // the compose box are all single shared globals that can point at a
@@ -4583,18 +4810,24 @@
       // reconcile into the wrong topic's message list, overwrite the wrong
       // topic's sidebar preview, or paste a failed send's text into whatever
       // topic happens to be open when the error comes back.
-      const sentTopicId = activeTopic.id;
+      // (null for a DM's very first message — ensureActiveTopicId below
+      // creates the thread and fills it in.)
+      let sentTopicId = activeTopic.id;
       const pendingId = `pending_${Date.now()}`;
       conversationMessages.push({
         id: pendingId, senderId: CURRENT_USER.id, senderName: CURRENT_USER.name,
-        senderAvatar: CURRENT_USER.avatar, content, timestamp: new Date().toISOString(), pending: true
+        senderAvatar: CURRENT_USER.avatar, timestamp: new Date().toISOString(), pending: true,
+        // Same text the server stores for a caption-less attachment, so the
+        // poll's sender+content match still pairs this with the real row.
+        content: content || `📎 ${attachment.name}`, ...attachmentFields
       });
       renderConversationMessages(true);
 
       try {
+        sentTopicId = await ensureActiveTopicId();
         const response = await fetch(`${API_BASE_URL}/feedback`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ visibility: "private", topicId: sentTopicId, content })
+          body: JSON.stringify({ visibility: "private", topicId: sentTopicId, content, attachmentId: attachment?.id })
         });
         if (!response.ok) throw new Error("Send failed");
         const saved = await response.json();
@@ -4610,7 +4843,7 @@
             if (pendingIndex !== -1) {
               conversationMessages[pendingIndex] = {
                 id: saved.id, senderId: saved.sender_id, senderName: CURRENT_USER.name,
-                senderAvatar: CURRENT_USER.avatar, content: saved.content, timestamp: saved.created_at
+                senderAvatar: CURRENT_USER.avatar, content: saved.content, timestamp: saved.created_at, ...attachmentFields
               };
             }
           }
@@ -4635,6 +4868,38 @@
           input.value = content;
         }
         showToast("Could not send that message. Please try again.");
+      }
+    }
+
+    async function handleAttachmentPicked(fileInput) {
+      const file = fileInput.files[0];
+      fileInput.value = "";
+      if (!file || !activeTopic) return;
+      if (file.size > 3 * 1024 * 1024) { showToast("That file is too large (3 MB max)."); return; }
+      const btn = document.getElementById("composeAttachBtn");
+      if (btn.disabled) return;
+      setButtonBusy(btn, true, "");
+      try {
+        // Always octet-stream on the wire (the server's JSON parser must not
+        // touch it); the real type rides along in X-File-Type.
+        const response = await fetch(`${API_BASE_URL}/attachments`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "X-Filename": encodeURIComponent(file.name),
+            "X-File-Type": file.type || "application/octet-stream"
+          },
+          body: file
+        });
+        if (!response.ok) {
+          const err = await response.json().catch(() => null);
+          throw new Error(err?.error?.message || "Could not upload that file.");
+        }
+        await sendFeedbacksMessage(await response.json());
+      } catch (error) {
+        showToast(error.message || "Could not upload that file.");
+      } finally {
+        setButtonBusy(btn, false);
       }
     }
 
