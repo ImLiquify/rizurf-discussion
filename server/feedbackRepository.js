@@ -258,7 +258,7 @@ export async function listFeedback({ targetId, senderId, participantId, groupMem
   const [rows] = await pool.execute(
     `SELECT EXISTS(SELECT 1 FROM message_stars ms WHERE ms.feedback_id = f.id AND ms.user_id = ?) AS starred,
        f.reply_to_id AS replyToId, rf.content AS replyToContent, ru.name AS replyToSenderName,
-       f.pinned_at AS pinnedAt,
+       CASE WHEN f.pinned_until IS NULL OR f.pinned_until > NOW() THEN f.pinned_at END AS pinnedAt,
        f.id, f.sender_id AS senderId, u.name AS senderName, u.avatar AS senderAvatar, f.target_id AS targetId,
        f.target_type AS targetType, f.visibility, f.topic_id AS topicId, tp.name AS topicName, tp.created_by AS topicCreatedBy,
        CASE
@@ -751,10 +751,13 @@ export async function listMyTopics({ viewerId, viewerIsPrivileged }) {
   return rows;
 }
 
-export async function setPinned({ feedbackId, pinnedBy }) {
+// `seconds`: how long the pin lasts (ignored when unpinning, pinnedBy null).
+// Expiry is evaluated in MySQL's clock, see listFeedback's pinnedAt.
+export async function setPinned({ feedbackId, pinnedBy, seconds }) {
   await pool.execute(
-    'UPDATE feedback SET pinned_at = IF(? IS NULL, NULL, CURRENT_TIMESTAMP), pinned_by = ? WHERE id = ?',
-    [pinnedBy, pinnedBy, feedbackId]
+    `UPDATE feedback SET pinned_at = IF(? IS NULL, NULL, CURRENT_TIMESTAMP), pinned_by = ?,
+       pinned_until = IF(? IS NULL, NULL, CURRENT_TIMESTAMP + INTERVAL ? SECOND) WHERE id = ?`,
+    [pinnedBy, pinnedBy, pinnedBy, seconds || 0, feedbackId]
   );
 }
 

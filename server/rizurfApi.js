@@ -76,7 +76,7 @@ const openapi = {
       delete: operation('Delete a comment.', 'feedback:write', discovery('Delete Comment', 'Remove a comment or reply, and any replies nested under it; the author, an admin, or a manager only.', ['feedbackId', 'commentId'], []))
     },
     '/api/feedback/{feedbackId}/pin': {
-      post: operation('Pin or unpin a message.', 'feedback:write', discovery('Pin Message', 'Pin a private message to the top of its conversation for everyone in it, or unpin it.', ['feedbackId', 'pinned'], ['pinned']))
+      post: operation('Pin or unpin a message.', 'feedback:write', discovery('Pin Message', 'Pin a private message to the top of its conversation for everyone in it for a set time (duration: 1h, 1d, 7d or 30d), or unpin it.', ['feedbackId', 'pinned', 'duration'], ['pinned']))
     },
     '/api/feedback/{feedbackId}/hide': {
       post: operation('Hide a message for yourself.', 'feedback:write', discovery('Hide Message', 'Delete a chat message for yourself only ("delete for me"); everyone else still sees it.', ['feedbackId'], []))
@@ -630,16 +630,19 @@ app.delete('/api/feedback/:feedbackId/comments/:commentId', async (request, resp
     return response.status(204).end();
   } catch (error) { return next(error); }
 });
+const PIN_DURATIONS = { '1h': 3600, '1d': 86400, '7d': 7 * 86400, '30d': 30 * 86400 };
 // Pin: shared with everyone in the conversation, and anyone in it may pin
-// or unpin. Star: private to the caller. Both are chat-only (private rows).
+// or unpin; every pin lasts one of PIN_DURATIONS, then expires on its own. Star: private to the caller. Both are chat-only (private rows).
 app.post('/api/feedback/:feedbackId/pin', async (request, response, next) => {
   try {
     const meta = await loadAccessibleFeedback(request, response, request.params.feedbackId);
     if (!meta) return;
     if (meta.visibility !== 'private') return sendError(response, request, 422, 'VALIDATION_ERROR', 'Only chat messages can be pinned.');
-    const { viewerId } = await resolveViewerForRead(request.auth);
     const pinned = Boolean(request.body?.pinned);
-    await feedbacks.setPinned({ feedbackId: meta.id, pinnedBy: pinned ? viewerId : null });
+    const seconds = PIN_DURATIONS[request.body?.duration];
+    if (pinned && !seconds) return sendError(response, request, 422, 'VALIDATION_ERROR', 'duration must be one of 1h, 1d, 7d, 30d.', { fields: ['duration'] });
+    const { viewerId } = await resolveViewerForRead(request.auth);
+    await feedbacks.setPinned({ feedbackId: meta.id, pinnedBy: pinned ? viewerId : null, seconds });
     return sendJson(response, 200, { pinned });
   } catch (error) { return next(error); }
 });

@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS `feedback` (
   `reply_to_id`  varchar(60)  DEFAULT NULL,
   `pinned_at`    timestamp    NULL DEFAULT NULL,
   `pinned_by`    varchar(50)  DEFAULT NULL,
+  `pinned_until` timestamp    NULL DEFAULT NULL,
   `created_at`   timestamp    NOT NULL DEFAULT current_timestamp(),
   `updated_at`   timestamp    NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),

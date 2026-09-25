@@ -1653,6 +1653,7 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    .feedbacks-list-item-preview.is-new { color: var(--accent-cyan-hover); font-weight: 700; }
 
     .feedbacks-list-item-avatar {
       width: 100%;
@@ -2168,6 +2169,7 @@
     }
     .chat-message-menu button:hover { background: var(--bg-subtle); }
     .chat-message-menu button.danger { color: #DC2626; }
+    .chat-message-menu-heading { padding: 6px 10px 4px; font-size: 0.72rem; font-weight: 700; color: var(--text-subtle); text-transform: uppercase; letter-spacing: 0.04em; }
     /* Delete confirmation pop-up */
     .confirm-modal-card { max-width: 400px; }
     .confirm-modal-body { padding: 24px; display: flex; flex-direction: column; gap: 10px; }
@@ -3680,6 +3682,8 @@
     let showStarredOnly = false; // header ★ toggle: filter the open thread to my starred messages
     let openMessageMenuId = null; // message whose ⋯ menu is open
     let pendingDelete = null; // { id, forMe } awaiting the confirm pop-up
+    let pinChoiceOpen = false; // the ⋯ menu is showing "Pin for…" durations
+    const PIN_DURATION_CHOICES = [["1h", "1 hour"], ["1d", "1 day"], ["7d", "7 days"], ["30d", "30 days"]]; // mirrors PIN_DURATIONS in rizurfApi.js
     let pinnedMessages = []; // pinned messages of the open thread, newest pin first
     let pinnedTickerIndex = 0; // which one the header carousel is showing
     const pulsedMentionIds = new Set(); // mentions of me that already did their two pulses this session
@@ -4081,7 +4085,7 @@
       renderFeedbacksTab();
     }
 
-    function feedbacksListItemHtml({ type, id, name, icon, avatarUrl, preview, unread, active }) {
+    function feedbacksListItemHtml({ type, id, name, icon, avatarUrl, preview, previewIsNew, unread, active }) {
       const safeName = escapeHtml(name || "");
       const iconHtml = avatarUrl
         ? `<img src="${escapeHtml(avatarUrl)}" alt="${safeName}" class="feedbacks-list-item-avatar" />`
@@ -4092,7 +4096,7 @@
           <div class="feedbacks-list-item-icon">${iconHtml}</div>
           <div class="feedbacks-list-item-body">
             <div class="feedbacks-list-item-name">${safeName}</div>
-            <div class="feedbacks-list-item-preview">${escapeHtml(messagePreviewText(preview || ""))}</div>
+            <div class="feedbacks-list-item-preview${previewIsNew ? " is-new" : ""}">${escapeHtml(messagePreviewText(preview || ""))}</div>
           </div>
           ${unread ? `<span class="feedbacks-unread-dot">${unread}</span>` : ""}
         </button>
@@ -4190,7 +4194,7 @@
       const orgSummary = containerSummary(myOrgTopics());
       const orgHtml = feedbacksListItemHtml({
         type: "org", id: "organization", name: "Organization", icon: "🏢",
-        preview: orgSummary.preview || "Company-wide announcements & discussion", unread: orgSummary.unread,
+        preview: "Open chat with the whole Organization", unread: orgSummary.unread,
         active: activeContainer?.type === "org"
       });
 
@@ -4225,9 +4229,12 @@
       const dmsHtml = [...dmMap.entries()].map(([counterpartId, topics]) => {
         const emp = EMPLOYEES.find(e => e.id === counterpartId);
         const summary = containerSummary(topics);
+        // Unread: one new message shows itself; more shows a count, capped at 4+.
+        const newCount = summary.unread;
         return feedbacksListItemHtml({
           type: "user", id: counterpartId, name: emp?.name || "Unknown", avatarUrl: emp?.avatar, icon: "💬",
-          preview: summary.preview, unread: summary.unread,
+          preview: newCount > 1 ? `${newCount > 4 ? "4+" : newCount} New messages` : summary.preview,
+          previewIsNew: newCount > 0, unread: summary.unread,
           active: activeContainer?.type === "user" && activeContainer?.id === counterpartId
         });
       }).join("");
@@ -5430,6 +5437,7 @@
       if (menu) menu.hidden = true;
       document.querySelectorAll(".chat-message-row.menu-open").forEach(el => el.classList.remove("menu-open"));
       openMessageMenuId = null;
+      pinChoiceOpen = false;
     }
 
     function renderMessageMenu() {
@@ -5437,6 +5445,11 @@
       if (!message) { closeMessageMenu(); return; }
       const item = (action, icon, label, cls = "") =>
         `<button type="button" role="menuitem" class="${cls}" onclick="messageMenuAction('${action}')"><span class="menu-icon" aria-hidden="true">${icon}</span>${label}</button>`;
+      if (pinChoiceOpen) {
+        document.getElementById("chatMessageMenu").innerHTML = `<div class="chat-message-menu-heading">Pin for…</div>`
+          + PIN_DURATION_CHOICES.map(([value, label]) => item(`pin:${value}`, "📌", label)).join("");
+        return;
+      }
       document.getElementById("chatMessageMenu").innerHTML = [
         item("reply", "↩", "Reply"),
         item("star", message.starred ? "☆" : "★", message.starred ? "Unstar" : "Star"),
@@ -5451,10 +5464,14 @@
 
     function messageMenuAction(action) {
       const id = openMessageMenuId;
+      const message = conversationMessages.find(m => m.id === id);
+      // Pinning asks how long first (same menu, redrawn); unpinning is direct.
+      if (action === "pin" && message && !message.pinnedAt) { pinChoiceOpen = true; renderMessageMenu(); return; }
       closeMessageMenu();
       if (action === "reply") startReply(id);
       else if (action === "star") toggleMessageStar(id);
-      else if (action === "pin") toggleMessagePin(id);
+      else if (action === "pin") setMessagePin(id, null);
+      else if (action.startsWith("pin:")) setMessagePin(id, action.slice(4));
       else if (action === "copy") copyMessageText(id);
       else if (action === "edit") startChatMessageEdit(id);
       else if (action === "delete") openDeleteConfirm(id);
@@ -5526,19 +5543,21 @@
       }
     }
 
-    async function toggleMessagePin(id) {
+    // duration: "1h" | "1d" | "7d" | "30d" to pin, null to unpin.
+    async function setMessagePin(id, duration) {
       const message = conversationMessages.find(m => m.id === id);
       if (!message) return;
       const previous = message.pinnedAt;
-      const pinned = !previous;
+      const pinned = Boolean(duration);
       message.pinnedAt = pinned ? new Date().toISOString() : null;
       renderConversationMessages();
       try {
         const response = await fetch(`${API_BASE_URL}/feedback/${id}/pin`, {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pinned })
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pinned, duration })
         });
         if (!response.ok) throw new Error();
-        showToast(pinned ? "📌 Pinned for everyone in this chat." : "Unpinned.");
+        const label = PIN_DURATION_CHOICES.find(([value]) => value === duration)?.[1];
+        showToast(pinned ? `📌 Pinned for everyone for ${label}.` : "Unpinned.");
       } catch (error) {
         message.pinnedAt = previous;
         renderConversationMessages();
@@ -5667,8 +5686,8 @@
       const count = pinnedMessages.length;
       pinnedTickerIndex %= count;
       const m = pinnedMessages[pinnedTickerIndex];
-      // At most 4 dots; with more pins the dots window follows the active one.
-      const shown = Math.min(count, 4);
+      // At most 3 dots; with more pins the dots window follows the active one.
+      const shown = Math.min(count, 3);
       const first = Math.min(Math.max(0, pinnedTickerIndex - 1), count - shown);
       const dots = count > 1
         ? `<span class="chat-pinned-dots" aria-hidden="true">${Array.from({ length: shown }, (_, i) =>

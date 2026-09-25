@@ -128,7 +128,9 @@ export async function ensureSchemaCompatibility() {
     // pin shared by everyone in the conversation.
     ['reply_to_id', 'VARCHAR(60) NULL'],
     ['pinned_at', 'TIMESTAMP NULL'],
-    ['pinned_by', 'VARCHAR(50) NULL']
+    ['pinned_by', 'VARCHAR(50) NULL'],
+    // Pins expire: after this the message simply reads as unpinned.
+    ['pinned_until', 'TIMESTAMP NULL']
   ], columns.get('feedback'));
 
   // Project groups. Named `feedback_groups`, not `groups` — GROUPS is a
