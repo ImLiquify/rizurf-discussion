@@ -1949,6 +1949,20 @@
 
     .chat-message-row.mine .chat-message-meta { flex-direction: row-reverse; }
 
+    /* Others' messages sit beside a small photo; a run from the same person
+       shares one photo + name (first message only) and packs tighter. */
+    .chat-message-row:not(.mine) { margin-left: 38px; }
+    .chat-message-row.continued { margin-top: -6px; }
+    .chat-message-avatar {
+      position: absolute;
+      top: 0;
+      left: -38px;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
     .chat-message-sender { font-size: 0.76rem; font-weight: 700; color: var(--text-main); }
     .chat-message-time { font-size: 0.7rem; color: var(--text-subtle); }
     .chat-message-text { font-size: 0.9rem; color: var(--text-main); white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -2225,6 +2239,9 @@
     .confirm-modal-cancel:hover { background: var(--border-color); }
     .confirm-modal-danger { color: #fff; background: #DC2626; }
     .confirm-modal-danger:hover { background: #B91C1C; }
+    .confirm-modal-actions button { white-space: nowrap; }
+    .confirm-modal-danger.subtle { color: #DC2626; background: transparent; box-shadow: inset 0 0 0 1px #DC2626; }
+    .confirm-modal-danger.subtle:hover { color: #fff; background: #DC2626; }
     .chat-message-menu .menu-icon { width: 18px; text-align: center; }
 
     /* Quick reactions: the hover bar's emoji row + the chips under a bubble. */
@@ -2496,11 +2513,36 @@
     .group-header-actions { display: flex; align-items: center; gap: 10px; }
     .members-section-label {
       margin: 14px 0 6px;
-      font-size: 0.72rem;
-      font-weight: 800;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
+      font-size: 0.76rem;
+      font-weight: 700;
       color: var(--text-subtle);
+    }
+    .members-panel {
+      width: 240px;
+      flex-shrink: 0;
+      border-left: 1px solid var(--border-color);
+      padding: 16px 12px;
+      overflow-y: auto;
+      background: var(--bg-surface);
+    }
+    .members-panel[hidden] { display: none; }
+    .members-row.offline { opacity: 0.45; }
+    .members-panel .members-row-name { flex: 0 1 auto; }
+    .members-owner { font-size: 0.8rem; }
+    .members-manage-btn {
+      margin-top: 16px;
+      width: 100%;
+      padding: 8px;
+      border-radius: var(--radius-md);
+      border: 1px dashed var(--border-color);
+      color: var(--text-subtle);
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .members-manage-btn:hover { color: var(--text-main); background: var(--bg-subtle); }
+    .members-toggle-btn.active { color: var(--accent-cyan); }
+    @media (max-width: 1100px) {
+      .members-panel { width: 200px; }
     }
     .members-section-label:first-child { margin-top: 0; }
     .members-row { display: flex; align-items: center; gap: 10px; padding: 6px 4px; }
@@ -2568,6 +2610,7 @@
     @media (max-width: 900px) {
       .feedbacks-layout { flex-direction: column; height: auto; }
       .feedbacks-sidebar { width: auto; border-right: none; border-bottom: 1px solid var(--border-color); }
+      .members-panel { width: auto; border-left: none; border-top: 1px solid var(--border-color); }
     }
 
     /* Group modal (create / add members — a searchable employee picker) */
@@ -3073,6 +3116,31 @@
       background: rgba(255,255,255,0.25);
     }
 
+    /* Teams-style rail (desktop): icons only, widening over the page on
+       hover/focus so the labels slide into view. The page itself never
+       reflows — it keeps a 72px margin. Mobile keeps the full drawer. */
+    @media (min-width: 769px) {
+      .sidebar { width: 72px; min-width: 72px; transition: width 0.18s ease, box-shadow 0.18s ease; }
+      .sidebar:hover, .sidebar:has(:focus-visible) { width: 240px; box-shadow: 8px 0 28px rgba(0,0,0,0.28); }
+      html .main-panel { margin-left: 72px; } /* beats the later base rule */
+      .sidebar-nav { overflow-x: hidden; }
+      .sidebar-brand { padding: 16px 16px !important; overflow: hidden; }
+      .sidebar-brand img { max-width: none !important; height: 36px; transition: clip-path 0.18s ease; }
+      .sidebar:not(:hover):not(:has(:focus-visible)) .sidebar-brand img { clip-path: inset(0 calc(100% - 26px) 0 0); } /* just the mark */
+      .sidebar-nav-link { position: relative; padding: 10px 15px; white-space: nowrap; }
+      .sidebar-user-badge, .sidebar-nav-label { white-space: nowrap; }
+      .sidebar-nav-label, .sidebar-nav-link .nav-text, .sidebar-user-info { opacity: 0; transition: opacity 0.12s ease; }
+      .sidebar:is(:hover, :has(:focus-visible)) :is(.sidebar-nav-label, .nav-text, .sidebar-user-info) { opacity: 1; }
+      /* Collapsed, the unread count sits on the icon's corner. */
+      .sidebar:not(:hover):not(:has(:focus-visible)) .nav-badge {
+        position: absolute; top: 3px; left: 30px; padding: 0 5px; font-size: 0.62rem;
+        background: var(--status-danger, #E0533D);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .sidebar, .sidebar-nav-label, .nav-text, .sidebar-user-info { transition: none !important; }
+    }
+
     /* Flashes once when a new message pushes the unread total up, then
        fades back to normal on its own — no JS cleanup needed. */
     @keyframes ping-flash {
@@ -3319,15 +3387,17 @@
     <nav class="sidebar-nav">
       <span class="sidebar-nav-label">Main Menu</span>
 
-      <!-- Feedbacks (chat-style private inbox: DMs, project groups, Organization) -->
-      <a class="sidebar-nav-link active" id="sidebarBtnFeedbacks" onclick="switchMainTab('feedbacks')" href="#">
-        <span class="nav-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
-          </svg>
-        </span>
-        Discussion
-        <span class="nav-badge" id="feedbacksUnreadBadge" hidden>0</span>
+      <!-- Chat (DMs) and Groups (Organization + project groups) are two
+           sections of the same inbox pane — see showFeedbacksSection(). -->
+      <a class="sidebar-nav-link active" id="sidebarBtnChat" onclick="showFeedbacksSection('chat')" href="#" title="Chat">
+        <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span>
+        <span class="nav-text">Chat</span>
+        <span class="nav-badge" id="chatUnreadBadge" hidden>0</span>
+      </a>
+      <a class="sidebar-nav-link" id="sidebarBtnGroups" onclick="showFeedbacksSection('groups')" href="#" title="Groups">
+        <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>
+        <span class="nav-text">Groups</span>
+        <span class="nav-badge" id="groupsUnreadBadge" hidden>0</span>
       </a>
 
       <!-- Employee Wall: admins/managers only — hidden by default, revealed by JS once the signed-in role is confirmed privileged -->
@@ -3469,6 +3539,7 @@
           </div>
         </div>
 
+        <aside class="members-panel" id="membersPanel" hidden aria-label="Group members"></aside>
       </div>
     </section>
 
@@ -3643,23 +3714,6 @@
     <div class="media-lightbox-stage" id="lightboxStage" onclick="if (event.target === this) closeLightbox()"></div>
   </div>
 
-  <div class="modal-overlay" id="membersModalOverlay" onclick="if (event.target === this) closeMembersModal()">
-    <div class="modal-content-card group-modal-card" role="dialog" aria-modal="true" aria-labelledby="membersModalTitle">
-      <div class="modal-header">
-        <div class="modal-target-profile">
-          <h3 id="membersModalTitle">Members</h3>
-        </div>
-        <button class="btn-modal-close" onclick="closeMembersModal()" title="Close dialog" aria-label="Close">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
-      <div class="modal-scrollable-body" id="membersModalBody" style="gap:0;"></div>
-    </div>
-  </div>
-
   <div class="modal-overlay" id="confirmDeleteOverlay" onclick="if (event.target === this) closeDeleteConfirm()">
     <div class="modal-content-card confirm-modal-card" role="alertdialog" aria-modal="true"
       aria-labelledby="confirmDeleteTitle" aria-describedby="confirmDeleteNote confirmDeleteText">
@@ -3669,7 +3723,8 @@
         <blockquote class="confirm-modal-quote" id="confirmDeleteText"></blockquote>
         <div class="confirm-modal-actions">
           <button type="button" class="confirm-modal-cancel" id="confirmDeleteCancelBtn" onclick="closeDeleteConfirm()">Cancel</button>
-          <button type="button" class="confirm-modal-danger" id="confirmDeleteBtn" onclick="confirmDelete()">Delete</button>
+          <button type="button" class="confirm-modal-danger subtle" onclick="confirmDelete(true)">Delete for me</button>
+          <button type="button" class="confirm-modal-danger" id="confirmDeleteBtn" onclick="confirmDelete(false)">Delete for everyone</button>
         </div>
       </div>
     </div>
@@ -4165,7 +4220,7 @@
        works whether called from a click or programmatically, e.g. when a
        demoted role needs to be bounced off the Wall tab). */
     const MAIN_TABS = {
-      feedbacks: { pane: "feedbacksViewPane", link: "sidebarBtnFeedbacks", label: "Discussion" },
+      feedbacks: { pane: "feedbacksViewPane", link: "sidebarBtnChat", label: "Chat" },
       // wall: { pane: "wallViewPane", link: "sidebarBtnWall", label: "Employee Wall" }
     };
     function toggleMobileSidebar() {
@@ -4175,6 +4230,24 @@
     function closeMobileSidebar() {
       document.querySelector(".sidebar")?.classList.remove("mobile-open");
       document.getElementById("sidebarBackdrop")?.classList.remove("visible");
+    }
+
+    // The inbox pane has two sections: "chat" (DMs + employee search) and
+    // "groups" (Organization + project groups). Opening a conversation
+    // switches to its section, so the list always shows what's open.
+    let feedbacksSection = "chat";
+    function showFeedbacksSection(section) {
+      feedbacksSection = section;
+      switchMainTab("feedbacks");
+    }
+    function syncFeedbacksSectionNav() {
+      const groups = feedbacksSection === "groups";
+      document.getElementById("sidebarBtnChat")?.classList.toggle("active", !groups);
+      document.getElementById("sidebarBtnGroups")?.classList.toggle("active", groups);
+      const breadcrumb = document.getElementById("breadcrumbActive");
+      if (breadcrumb) breadcrumb.textContent = groups ? "Groups" : "Chat";
+      const search = document.querySelector(".feedbacks-sidebar .search-input-wrapper");
+      if (search) search.style.display = groups ? "none" : "";
     }
 
     function switchMainTab(tab) {
@@ -4190,6 +4263,7 @@
       if (link) link.classList.add("active");
       const breadcrumb = document.getElementById("breadcrumbActive");
       if (breadcrumb) breadcrumb.textContent = MAIN_TABS[tab].label;
+      if (tab === "feedbacks") syncFeedbacksSectionNav();
 
       if (tab === "feedbacks") {
         stopWallCountsPolling();
@@ -4239,21 +4313,27 @@
       else if (activeContainer) await refreshContainerTopics();
     }
 
-    let previousUnreadTotal = 0;
+    const previousUnreadTotals = {};
     function updateFeedbacksUnreadBadge() {
-      const badge = document.getElementById("feedbacksUnreadBadge");
-      if (!badge) return;
-      const total = myTopics.reduce((sum, t) => sum + (t.unreadCount || 0), 0);
-      if (total > previousUnreadTotal) {
-        // Restart the CSS animation even if it's already mid-flash from a
-        // previous ping (re-adding the same class is a no-op otherwise).
-        badge.classList.remove("ping-flash");
-        void badge.offsetWidth;
-        badge.classList.add("ping-flash");
+      const unread = topics => topics.reduce((sum, t) => sum + (t.unreadCount || 0), 0);
+      const totals = {
+        chatUnreadBadge: unread(myTopics.filter(t => t.targetType === "user")),
+        groupsUnreadBadge: unread(myTopics.filter(t => t.targetType !== "user"))
+      };
+      for (const [id, total] of Object.entries(totals)) {
+        const badge = document.getElementById(id);
+        if (!badge) continue;
+        if (total > (previousUnreadTotals[id] || 0)) {
+          // Restart the CSS animation even if it's already mid-flash from a
+          // previous ping (re-adding the same class is a no-op otherwise).
+          badge.classList.remove("ping-flash");
+          void badge.offsetWidth;
+          badge.classList.add("ping-flash");
+        }
+        previousUnreadTotals[id] = total;
+        badge.textContent = total;
+        badge.hidden = total === 0;
       }
-      previousUnreadTotal = total;
-      badge.textContent = total;
-      badge.hidden = total === 0;
     }
 
     // Refetches just myTopics — used right after creating a topic (so it
@@ -4419,14 +4499,10 @@
       if (!listEl) return;
 
       if (feedbacksListLoading) {
-        listEl.innerHTML = `
-          <div class="feedbacks-section-label">Organization</div>
-          ${skeletonListRowsHtml(1)}
-          <div class="feedbacks-section-label">Groups</div>
-          ${skeletonListRowsHtml(2)}
-          <div class="feedbacks-section-label">Direct messages</div>
-          ${skeletonListRowsHtml(3)}
-        `;
+        listEl.innerHTML = feedbacksSection === "groups"
+          ? `<div class="feedbacks-section-label">Organization</div>${skeletonListRowsHtml(1)}
+             <div class="feedbacks-section-label">Groups</div>${skeletonListRowsHtml(3)}`
+          : `<div class="feedbacks-section-label">Direct messages</div>${skeletonListRowsHtml(4)}`;
         return;
       }
 
@@ -4478,18 +4554,19 @@
       const dmsHtml = [...dmMap.entries()].map(([counterpartId, topics]) => {
         const emp = EMPLOYEES.find(e => e.id === counterpartId);
         const summary = containerSummary(topics);
-        // Unread: one new message shows itself; more shows a count, capped at 4+.
-        const newCount = summary.unread;
         return feedbacksListItemHtml({
           type: "user", id: counterpartId, name: emp?.name || "Unknown", avatarUrl: emp?.avatar, icon: "💬",
-          preview: newCount > 1 ? `${newCount > 4 ? "4+" : newCount} New messages` : summary.preview,
-          previewIsNew: newCount > 0, unread: summary.unread,
+          preview: summary.preview,
+          previewIsNew: summary.unread > 0, unread: summary.unread,
           active: activeContainer?.type === "user" && activeContainer?.id === counterpartId
         });
       }).join("");
 
-      listEl.innerHTML = `
+      listEl.innerHTML = feedbacksSection === "chat" ? `
         ${query ? `<div class="feedbacks-section-label">Search results</div>${searchResultsHtml || '<div class="feedbacks-section-empty">No employees match.</div>'}` : ""}
+        <div class="feedbacks-section-label">Direct messages</div>
+        ${dmsHtml || '<div class="feedbacks-section-empty">Search an employee above to start one.</div>'}
+      ` : `
         <div class="feedbacks-section-label">Organization</div>
         ${orgHtml}
         <div class="feedbacks-section-label">
@@ -4498,8 +4575,6 @@
         </div>
         ${groupBlocksHtml}${orphanSubgroupsHtml}
         ${!topLevelGroups.length && !orphanSubgroupsHtml ? '<div class="feedbacks-section-empty">No groups yet.</div>' : ""}
-        <div class="feedbacks-section-label">Direct messages</div>
-        ${dmsHtml || '<div class="feedbacks-section-empty">Search an employee above to start one.</div>'}
       `;
     }
 
@@ -4759,53 +4834,70 @@
       }
     }
 
-    // Members list (anyone in the group): Discord-style — the owner, then one
-    // section per role (each person under their top role, in role order),
-    // then everyone else. Online people get the green dot.
-    async function openMembersModal(groupId) {
-      const group = myGroup(groupId);
-      document.getElementById("membersModalTitle").textContent = `Members — ${group?.name || "Group"}`;
-      const body = document.getElementById("membersModalBody");
-      body.innerHTML = skeletonListRowsHtml(3);
-      document.getElementById("membersModalOverlay").classList.add("open");
-      document.body.style.overflow = "hidden";
+    // Shown beside a group's chat (topic list or thread) while toggled on,
+    // Discord-style: one section per role (online holders, by role order),
+    // then Online, then everyone Offline dimmed. The owner gets a crown.
+    let membersPanelOpen = true;
+    let membersPanel = null; // { groupId, members (null = loading), roles }
+    function membersToggleHtml() {
+      return `<button type="button" class="feedbacks-row-icon-btn members-toggle-btn${membersPanelOpen ? " active" : ""}" onclick="toggleMembersPanel()"
+        title="${membersPanelOpen ? "Hide" : "Show"} member list" aria-pressed="${membersPanelOpen}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></button>`;
+    }
+    function toggleMembersPanel() {
+      membersPanelOpen = !membersPanelOpen;
+      document.querySelectorAll(".members-toggle-btn").forEach(btn => {
+        btn.classList.toggle("active", membersPanelOpen);
+        btn.setAttribute("aria-pressed", String(membersPanelOpen));
+        btn.title = `${membersPanelOpen ? "Hide" : "Show"} member list`;
+      });
+      syncMembersPanel();
+    }
+    // Cheap enough to call on every render: only fetches when the group changes.
+    async function syncMembersPanel() {
+      const el = document.getElementById("membersPanel");
+      if (!el) return;
+      const groupId = activeContainer?.type === "group" ? activeContainer.id : null;
+      el.hidden = !groupId || !membersPanelOpen;
+      if (el.hidden || membersPanel?.groupId === groupId) return;
+      const panel = membersPanel = { groupId, members: null, roles: [] };
+      renderMembersPanel();
       try {
         const [members, roles] = await Promise.all([
           fetch(`${API_BASE_URL}/groups/${groupId}/members`).then(r => r.ok ? r.json() : { data: [] }),
           fetch(`${API_BASE_URL}/groups/${groupId}/roles`).then(r => r.ok ? r.json() : { data: [] })
         ]);
-        renderMembersModal(members.data || [], roles.data || []);
+        panel.members = members.data || [];
+        panel.roles = roles.data || [];
       } catch (error) {
-        body.innerHTML = `<div class="feedbacks-section-empty">Could not load the members.</div>`;
+        panel.members = [];
       }
+      if (membersPanel === panel) renderMembersPanel();
     }
-
-    function renderMembersModal(members, roles) {
-      const row = (member, role) => `
-        <div class="members-row">
-          <span class="presence-wrap"><img src="${avatarSrc(member.avatar)}" alt="" class="group-modal-member-avatar" />${presenceDotHtml(member.id)}</span>
-          <span class="members-row-name" ${role ? `style="color:${escapeHtml(role.color)}"` : ""}>${escapeHtml(member.name)}</span>
-        </div>`;
+    function renderMembersPanel() {
+      const el = document.getElementById("membersPanel");
+      if (!el || el.hidden || !membersPanel) return;
+      const { groupId, members, roles } = membersPanel;
+      if (!members) { el.innerHTML = skeletonListRowsHtml(4); return; }
       const topRole = member => roles.find(role => member.roleIds.includes(role.id));
-      const sections = [];
-      const owners = members.filter(m => m.isOwner);
-      if (owners.length) sections.push(["Owner", owners.map(m => row(m, null))]);
-      for (const role of roles) {
-        const holders = members.filter(m => !m.isOwner && topRole(m)?.id === role.id);
-        if (holders.length) sections.push([`${role.name} — ${holders.length}`, holders.map(m => row(m, role))]);
-      }
-      const rest = members.filter(m => !m.isOwner && !topRole(m));
-      if (rest.length) sections.push([`Members — ${rest.length}`, rest.map(m => row(m, null))]);
-      document.getElementById("membersModalBody").innerHTML = sections.length
-        ? sections.map(([label, rows]) => `<div class="members-section-label">${escapeHtml(label)}</div>${rows.join("")}`).join("")
-        : `<div class="feedbacks-section-empty">No members yet.</div>`;
-    }
-
-    function closeMembersModal() {
-      const overlay = document.getElementById("membersModalOverlay");
-      if (!overlay?.classList.contains("open")) return;
-      overlay.classList.remove("open");
-      document.body.style.overflow = "";
+      const row = member => {
+        const role = topRole(member);
+        return `
+          <div class="members-row${onlineUserIds.has(member.id) ? "" : " offline"}">
+            <span class="presence-wrap"><img src="${escapeHtml(avatarSrc(member.avatar))}" alt="" class="group-modal-member-avatar" />${presenceDotHtml(member.id)}</span>
+            <span class="members-row-name" ${role ? `style="color:${escapeHtml(role.color)}"` : ""}>${escapeHtml(member.name)}</span>
+            ${member.isOwner ? `<span class="members-owner" title="Group owner" aria-label="Group owner">👑</span>` : ""}
+          </div>`;
+      };
+      const online = members.filter(m => onlineUserIds.has(m.id));
+      const sections = [
+        ...roles.map(role => [role.name, online.filter(m => topRole(m)?.id === role.id)]),
+        ["Online", online.filter(m => !topRole(m))],
+        ["Offline", members.filter(m => !onlineUserIds.has(m.id))]
+      ].filter(([, list]) => list.length);
+      el.innerHTML = (sections.length
+          ? sections.map(([label, list]) => `<div class="members-section-label">${escapeHtml(label)} — ${list.length}</div>${list.map(row).join("")}`).join("")
+          : `<div class="feedbacks-section-empty">No members yet.</div>`)
+        + (isGroupOwner(groupId) ? `<button type="button" class="members-manage-btn" onclick="editGroupPrompt('${groupId}')">Manage roles and members</button>` : "");
     }
 
     // Presence: ping once a minute while the tab is visible; the answer is
@@ -4825,6 +4917,7 @@
         if (!response.ok) return;
         onlineUserIds = new Set((await response.json()).online || []);
         applyPresence();
+        renderMembersPanel();
       } catch (error) { /* next ping tries again */ }
     }
 
@@ -4861,6 +4954,8 @@
     }
 
     function closeGroupModal() {
+      // Members or roles may have changed — refetch the side panel.
+      if (membersPanel) { membersPanel = null; syncMembersPanel(); }
       document.getElementById("groupModalOverlay").classList.remove("open");
       document.body.style.overflow = "";
     }
@@ -4970,6 +5065,8 @@
     async function openContainer(type, id, name) {
       stopTopicPolling();
       activeContainer = { type, id, name };
+      feedbacksSection = type === "user" ? "chat" : "groups";
+      syncFeedbacksSectionNav();
       activeTopic = null;
       containerTopics = [];
       containerTopicsLoading = true;
@@ -5262,8 +5359,8 @@
 
     // A message that mentions me gets a full-width highlighted line around its
     // bubble; the two pulses play only the first time it's shown.
-    function chatMessageLineHtml(message) {
-      const bubble = chatMessageBubbleHtml(message);
+    function chatMessageLineHtml(message, index, list) {
+      const bubble = chatMessageBubbleHtml(message, index, list);
       if (!mentionsMe(message)) return bubble;
       return `<div class="chat-mention-line${pulsedMentionIds.has(message.id) ? "" : " pulse"}">${bubble}</div>`;
     }
@@ -5312,8 +5409,14 @@
       return `<a class="chat-attachment-file" href="${url}" download>📎 <span>${name}</span><small>${formatBytes(message.attachmentSize)}</small></a>`;
     }
 
-    function chatMessageBubbleHtml(message) {
+    // Called via .map(), so (index, list) tell it whether the previous message
+    // is by the same person — WhatsApp-style, only the first of a run shows
+    // the name and photo.
+    function chatMessageBubbleHtml(message, index, list) {
       const mine = message.senderId === CURRENT_USER.id;
+      const continued = Array.isArray(list) && index > 0 && list[index - 1].senderId === message.senderId;
+      const avatarHtml = mine || continued ? ""
+        : `<img class="chat-message-avatar" src="${escapeHtml(avatarSrc(message.senderAvatar))}" alt="" loading="lazy" />`;
       // A caption-less attachment's content is just the server's "📎 name"
       // placeholder — the attachment itself already shows that.
       const showText = !(message.attachmentId && message.content === `📎 ${message.attachmentName}`);
@@ -5353,10 +5456,10 @@
           }).join("")}</div>`
         : "";
       return `
-        <div class="chat-message-row${mine ? " mine" : ""}${message.pending ? " pending" : ""}${message.pinnedAt ? " pinned" : ""}${sticker ? " sticker-message" : ""}${openMessageMenuId === message.id ? " menu-open" : ""}" id="chat-msg-${message.id}">
-          ${actionsHtml}
+        <div class="chat-message-row${mine ? " mine" : ""}${message.pending ? " pending" : ""}${message.pinnedAt ? " pinned" : ""}${sticker ? " sticker-message" : ""}${continued ? " continued" : ""}${openMessageMenuId === message.id ? " menu-open" : ""}" id="chat-msg-${message.id}">
+          ${avatarHtml}${actionsHtml}
           <div class="chat-message-meta">
-            <span class="chat-message-sender" style="color:${senderColorFor(message.senderId)}">${escapeHtml(message.senderName)}</span>
+            ${continued ? "" : `<span class="chat-message-sender" style="color:${senderColorFor(message.senderId)}">${escapeHtml(message.senderName)}</span>`}
             ${statusHtml}
           </div>
           ${bodyHtml}
@@ -5458,6 +5561,7 @@
       const scroll = document.getElementById("feedbacksMessagesScroll");
       const composeBar = document.getElementById("feedbacksComposeBar");
       if (!header || !scroll || !composeBar) return;
+      syncMembersPanel();
 
       if (!activeContainer) {
         header.hidden = true;
@@ -5480,7 +5584,7 @@
       const canManageGroup = isGroup && (isGroupOwner(activeContainer.id) || groupCan(activeContainer.id, "manage_group") || groupCan(activeContainer.id, "manage_members"));
       const groupActionsHtml = isGroup
         ? `<div class="group-header-actions">
-             <button type="button" class="feedbacks-new-group-btn" onclick="openMembersModal('${activeContainer.id}')" title="See who's in this group">👥 Members</button>
+             ${membersToggleHtml()}
              ${canManageGroup ? `<button type="button" class="feedbacks-row-icon-btn" onclick="editGroupPrompt('${activeContainer.id}')" title="Group settings — members, roles, name, photo">${SETTINGS_GEAR_SVG}</button>` : ""}
            </div>`
         : "";
@@ -5537,6 +5641,7 @@
       const scroll = document.getElementById("feedbacksMessagesScroll");
       const composeBar = document.getElementById("feedbacksComposeBar");
       if (!header || !scroll || !composeBar || !activeTopic) return;
+      syncMembersPanel();
 
       const shouldStickToBottom = forceScrollBottom
         || (scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 80);
@@ -5568,9 +5673,9 @@
         `;
       }
       renderPinnedTicker();
-      header.insertAdjacentHTML("beforeend", `
+      header.insertAdjacentHTML("beforeend", `<div class="group-header-actions">${activeContainer?.type === "group" ? membersToggleHtml() : ""}
         <button type="button" class="feedbacks-row-icon-btn${showStarredOnly ? " active" : ""}" onclick="toggleStarredFilter()"
-          title="${showStarredOnly ? "Show all messages" : "Show only my starred messages"}" aria-pressed="${showStarredOnly}">★</button>`);
+          title="${showStarredOnly ? "Show all messages" : "Show only my starred messages"}" aria-pressed="${showStarredOnly}">★</button></div>`);
 
       composeBar.hidden = false;
       renderReplyBar();
@@ -5896,15 +6001,7 @@
         item("pin", "📌", message.pinnedAt ? "Unpin" : "Pin"),
         item("copy", "⧉", "Copy text"),
         message.senderId === CURRENT_USER.id && withinEditWindow(message) ? item("edit", "✎", "Edit") : "",
-        // Your own message: delete for everyone. Anyone else's: hide it for
-        // you only — plus "for everyone" if you can manage messages in this
-        // group (mirrors DELETE vs POST .../hide in rizurfApi.js).
-        ...(message.senderId === CURRENT_USER.id
-          ? [item("delete-all", "🗑", "Delete", "danger")]
-          : [
-              activeContainer?.type === "group" && groupCan(activeContainer.id, "manage_messages") ? item("delete-all", "🗑", "Delete for everyone", "danger") : "",
-              item("delete-me", "🗑", "Delete for me", "danger")
-            ])
+        item("delete", "🗑", "Delete", "danger")
       ].join("");
     }
 
@@ -5920,19 +6017,22 @@
       else if (action.startsWith("pin:")) setMessagePin(id, action.slice(4));
       else if (action === "copy") copyMessageText(id);
       else if (action === "edit") startChatMessageEdit(id);
-      else if (action === "delete-all") openDeleteConfirm(id, false);
-      else if (action === "delete-me") openDeleteConfirm(id, true);
+      else if (action === "delete") openDeleteConfirm(id);
     }
 
-    function openDeleteConfirm(id, forMe) {
+    // Anyone can delete for themselves; "for everyone" is the author's, or in
+    // a group anyone with manage_messages (mirrors DELETE vs POST .../hide).
+    function openDeleteConfirm(id) {
       const message = conversationMessages.find(m => m.id === id);
       if (!message) return;
-      pendingDelete = { id, forMe };
-      document.getElementById("confirmDeleteNote").textContent = forMe
-        ? "It will be removed for you only. Everyone else in the chat will still see it."
-        : "It will be deleted for everyone in the chat.";
+      const canAll = message.senderId === CURRENT_USER.id
+        || (activeContainer?.type === "group" && groupCan(activeContainer.id, "manage_messages"));
+      pendingDelete = { id };
+      document.getElementById("confirmDeleteNote").textContent = canAll
+        ? "Delete it for everyone in the chat, or just remove it for you."
+        : "It will be removed for you only. Everyone else in the chat will still see it.";
       document.getElementById("confirmDeleteText").textContent = messagePreviewText(message.content);
-      document.getElementById("confirmDeleteBtn").textContent = forMe ? "Delete for me" : "Delete for everyone";
+      document.getElementById("confirmDeleteBtn").hidden = !canAll;
       document.getElementById("confirmDeleteOverlay").classList.add("open");
       document.getElementById("confirmDeleteCancelBtn").focus({ preventScroll: true });
     }
@@ -5942,9 +6042,9 @@
       pendingDelete = null;
     }
 
-    function confirmDelete() {
+    function confirmDelete(forMe) {
       if (!pendingDelete) return;
-      const { id, forMe } = pendingDelete;
+      const { id } = pendingDelete;
       closeDeleteConfirm();
       if (forMe) hideChatMessage(id);
       else deleteChatMessage(id);
@@ -6333,7 +6433,7 @@
     });
     document.addEventListener("keydown", event => {
       const lightboxOpen = !document.getElementById("mediaLightbox").hidden;
-      if (event.key === "Escape") { closeLightbox(); closeMessageMenu(); toggleStickerPicker(false); closeDeleteConfirm(); closeMembersModal(); }
+      if (event.key === "Escape") { closeLightbox(); closeMessageMenu(); toggleStickerPicker(false); closeDeleteConfirm(); }
       else if (lightboxOpen && (event.key === "+" || event.key === "=")) zoomLightbox(0.25);
       else if (lightboxOpen && event.key === "-") zoomLightbox(-0.25);
     });
