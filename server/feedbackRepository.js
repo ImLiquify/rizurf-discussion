@@ -926,6 +926,11 @@ export async function topicAudienceIds(topicId) {
   return rows.map(row => row.id);
 }
 
+export async function activeUserIds() {
+  const [rows] = await pool.execute('SELECT id FROM users WHERE removed_at IS NULL');
+  return rows.map(row => row.id);
+}
+
 // Total unread per person across every topic they can see — the same unread
 // rule as listMyTopics (non-privileged), as { email, count } for the gateway.
 export async function unreadBadges(userIds) {

@@ -5,9 +5,12 @@ import { unreadBadges } from './feedbackRepository.js';
 // person's total unread chat messages, pushed whenever it changes. Uses the
 // same CLIENT_ID/CLIENT_SECRET as the directory sync; the gateway admin must
 // grant that client `gateway:badges` for this service. Never throws — a badge
-// must never break the action that changed the count.
+// must never break the action that changed the count. Awaited by callers
+// (not run after the response): on Vercel, work after the response can be
+// frozen before it runs. Returns a summary for the /cron/badges report.
 export async function publishUnreadBadges(userIds) {
-  if (!config.clientId || !config.clientSecret || !userIds.length) return;
+  const summary = { people: userIds.length, updated: 0, unknown: [], errors: [] };
+  if (!config.clientId || !config.clientSecret) { summary.errors.push('CLIENT_ID / CLIENT_SECRET not set'); return summary; }
   const auth = `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString('base64')}`;
   try {
     for (let i = 0; i < userIds.length; i += 500) {
@@ -19,17 +22,15 @@ export async function publishUnreadBadges(userIds) {
         body: JSON.stringify({ service: config.serviceId, badges }),
         signal: AbortSignal.timeout(5000)
       });
-      if (!response.ok) console.error('[badges]', response.status, await response.text());
+      const text = await response.text();
+      if (!response.ok) { console.error('[badges]', response.status, text); summary.errors.push(`${response.status} ${text}`); continue; }
+      const result = JSON.parse(text || '{}');
+      summary.updated += result.updated || 0;
+      summary.unknown.push(...(result.unknown || []));
     }
   } catch (error) {
     console.error('[badges] could not publish:', error);
+    summary.errors.push(String(error.message || error));
   }
-}
-
-// Runs the publish after the response is sent. On Vercel the function is
-// kept alive for it via the runtime's waitUntil (what @vercel/functions
-// wraps); locally the process just keeps running.
-export function publishUnreadBadgesLater(userIdsPromise) {
-  const task = Promise.resolve(userIdsPromise).then(publishUnreadBadges).catch(error => console.error('[badges]', error));
-  globalThis[Symbol.for('@vercel/request-context')]?.get?.()?.waitUntil?.(task);
+  return summary;
 }

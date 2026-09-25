@@ -8,7 +8,7 @@ import { config } from './config.js';
 import { databaseIsHealthy, ensureSchemaCompatibility } from './database.js';
 import { fetchAllInterns } from './internApi.js';
 import * as feedbacks from './feedbackRepository.js';
-import { publishUnreadBadgesLater } from './gatewayBadges.js';
+import { publishUnreadBadges } from './gatewayBadges.js';
 import { clearSession, exchangeAuthorizationCode, gatewayAuthorizeUrl, gatewaySessionStatus, noStoreHeaders, readSession, renewSessionIfConfirmed, setSession, verifyGatewayToken } from './sessionAuth.js';
 
 const app = express();
@@ -337,6 +337,18 @@ app.get('/health', async (request, response) => {
   try { await databaseIsHealthy(); return sendJson(response, 200, { status: 'ok', service: config.serviceId, version: openapi.info.version, uptime_seconds: Math.floor((Date.now() - startedAt) / 1000), checks: { database: true } }); }
   catch { return sendJson(response, 200, { status: 'degraded', service: config.serviceId, version: openapi.info.version, uptime_seconds: Math.floor((Date.now() - startedAt) / 1000), checks: { database: false } }); }
 });
+// Full badge refresh for everyone: nightly via Vercel Cron (vercel.json,
+// which sends "Authorization: Bearer $CRON_SECRET"), or once by hand with
+// the same header. Reports what the gateway said, so it doubles as the
+// badge health check. Not in the OpenAPI doc: internal, not a service API.
+app.get('/cron/badges', async (request, response) => {
+  if (!process.env.CRON_SECRET || request.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+    return sendError(response, request, 401, 'UNAUTHORIZED', 'Needs the cron secret.');
+  }
+  try {
+    return sendJson(response, 200, await publishUnreadBadges(await feedbacks.activeUserIds()));
+  } catch (error) { return sendError(response, request, 500, 'INTERNAL_ERROR', String(error.message || error)); }
+});
 const OPENAPI_JSON = JSON.stringify(openapi);
 app.get('/openapi.json', (_request, response) => {
   response.set('cache-control', 'public, max-age=60').type('application/json').send(OPENAPI_JSON);
@@ -493,7 +505,7 @@ app.delete('/api/feedback/:feedbackId', async (request, response, next) => {
         : 'Only the author or someone who moderates this conversation can delete this.');
     }
     await feedbacks.deleteFeedback(request.params.feedbackId);
-    if (meta.topicId) publishUnreadBadgesLater(feedbacks.topicAudienceIds(meta.topicId));
+    if (meta.topicId) await publishUnreadBadges(await feedbacks.topicAudienceIds(meta.topicId));
     return response.status(204).end();
   } catch (error) { return next(error); }
 });
@@ -576,7 +588,7 @@ async function createPrivateFeedback(request, response, next) {
       feedbacks.markTopicRead({ topicId, userId: senderId }),
       feedbacks.clearTyping({ topicId, userId: senderId })
     ]);
-    publishUnreadBadgesLater(feedbacks.topicAudienceIds(topicId));
+    await publishUnreadBadges(await feedbacks.topicAudienceIds(topicId));
     return sendJson(response, 201, created);
   } catch (error) { return next(error); }
 }
@@ -988,7 +1000,7 @@ app.post('/api/topics/:topicId/read', async (request, response, next) => {
       return sendError(response, request, 403, 'FORBIDDEN', 'You do not have access to this topic.');
     }
     await feedbacks.markTopicRead({ topicId: request.params.topicId, userId: viewerId });
-    publishUnreadBadgesLater([viewerId]);
+    await publishUnreadBadges([viewerId]);
     return response.status(204).end();
   } catch (error) { return next(error); }
 });
@@ -1090,7 +1102,7 @@ app.delete('/api/topics/:topicId', async (request, response, next) => {
     }
     const audience = await feedbacks.topicAudienceIds(request.params.topicId);
     await feedbacks.deleteTopic(request.params.topicId);
-    publishUnreadBadgesLater(audience);
+    await publishUnreadBadges(audience);
     return response.status(204).end();
   } catch (error) { return next(error); }
 });
