@@ -2065,6 +2065,44 @@
     }
     .compose-attach-btn:hover:not(:disabled) { color: var(--accent-cyan-hover); border-color: var(--accent-cyan); }
     .compose-attach-btn:disabled { cursor: progress; }
+
+    .compose-input-wrap { flex: 1; position: relative; display: flex; min-width: 0; }
+    .compose-input-wrap .feedbacks-compose-input { padding-right: 44px; }
+    .compose-sticker-btn {
+      position: absolute;
+      right: 8px;
+      bottom: 8px;
+      width: 28px; height: 28px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: var(--radius-full);
+      color: var(--text-subtle);
+    }
+    .compose-sticker-btn:hover, .compose-sticker-btn[aria-expanded="true"] { color: var(--accent-cyan-hover); background: var(--bg-subtle); }
+    .sticker-picker {
+      position: absolute;
+      bottom: 100%;
+      right: 20px;
+      z-index: 20;
+      width: min(320px, calc(100% - 40px));
+      max-height: 300px;
+      overflow-y: auto;
+      margin-bottom: 6px;
+      padding: 10px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-lg);
+    }
+    .sticker-picker[hidden] { display: none; }
+    .sticker-picker button { padding: 4px; border-radius: var(--radius-md); }
+    .sticker-picker button:hover { background: var(--bg-subtle); }
+    .sticker-picker img { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; }
+    .sticker-picker-empty { grid-column: 1 / -1; padding: 18px 8px; text-align: center; font-size: 0.84rem; color: var(--text-subtle); }
+    .chat-sticker { display: block; width: 140px; height: 140px; object-fit: contain; margin: 2px 0; }
+    .chat-message-row.sticker-message { background: transparent; padding-left: 0; padding-right: 0; }
     .compose-attach-btn .btn-spinner { border-color: var(--border-color); border-top-color: var(--accent-cyan); }
 
     .dm-header-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
@@ -2132,6 +2170,20 @@
     .chat-message-menu button.danger.armed { background: rgba(220, 38, 38, 0.1); font-weight: 700; }
     .chat-message-menu .menu-icon { width: 18px; text-align: center; }
 
+    .chat-mention-line {
+      align-self: stretch;
+      display: flex;
+      flex-direction: column;
+      margin: 0 -12px;
+      padding: 8px 12px;
+      border-left: 3px solid #F59E0B;
+      border-radius: 6px;
+      background: rgba(245, 158, 11, 0.12);
+    }
+    .chat-mention-line.pulse { animation: mention-pulse 0.7s ease-in-out 2; }
+    @keyframes mention-pulse { 50% { background: rgba(245, 158, 11, 0.38); } }
+    @media (prefers-reduced-motion: reduce) { .chat-mention-line.pulse { animation: none; } }
+
     /* ---- Replies ---- */
     .chat-reply-quote {
       display: block;
@@ -2169,32 +2221,28 @@
     .compose-reply-bar button { color: var(--text-subtle); font-size: 1.1rem; line-height: 1; padding: 2px 6px; }
 
     /* ---- Pinned messages bar (sticks to the top of the thread) ---- */
-    .chat-pinned-bar {
-      position: sticky;
-      top: -1px;
-      z-index: 5;
-      align-self: stretch;
-      max-height: 110px;
-      overflow-y: auto;
-      padding: 6px 10px;
-      background: var(--bg-surface);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-    }
-    .chat-pinned-bar button {
-      display: block;
-      width: 100%;
-      padding: 3px 4px;
+    .feedbacks-detail-title-stack { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+    /* One pinned message at a time under the chat's name, rotating through
+       all of them (see rotatePinnedTicker); tap to jump to it. */
+    .chat-pinned-ticker {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 420px;
+      padding: 2px 8px 2px 4px;
+      border-radius: var(--radius-sm, 6px);
+      font-size: 0.78rem;
+      color: var(--text-muted);
       text-align: left;
-      font-size: 0.8rem;
-      color: var(--text-main);
       overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-      border-radius: 4px;
     }
-    .chat-pinned-bar button:hover { background: var(--bg-subtle); }
+    .chat-pinned-ticker:hover { background: var(--bg-subtle); color: var(--text-main); }
+    .chat-pinned-ticker svg { flex-shrink: 0; color: var(--accent-cyan); }
+    .chat-pinned-ticker-text { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .chat-pinned-ticker-text.slide-in { animation: pinned-slide-in 0.35s ease; }
+    .chat-pinned-ticker-count { flex-shrink: 0; font-size: 0.7rem; color: var(--text-subtle); font-variant-numeric: tabular-nums; }
+    @keyframes pinned-slide-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { .chat-pinned-ticker-text.slide-in { animation: none; } }
     .feedbacks-row-icon-btn.active { color: #D97706; background: rgba(217, 119, 6, 0.1); }
 
     /* ---- Media in bubbles + lightbox ---- */
@@ -3189,8 +3237,21 @@
                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
               </svg>
             </button>
-            <textarea id="feedbacksComposeInput" class="feedbacks-compose-input"
-              placeholder="Write a message..." onkeydown="handleFeedbacksComposeKeydown(event)" oninput="handleComposeInput(this)"></textarea>
+            <div class="sticker-picker" id="stickerPicker" role="dialog" aria-label="Stickers" hidden></div>
+            <div class="compose-input-wrap">
+              <textarea id="feedbacksComposeInput" class="feedbacks-compose-input"
+                placeholder="Write a message..." onkeydown="handleFeedbacksComposeKeydown(event)" oninput="handleComposeInput(this)"></textarea>
+              <button type="button" class="compose-sticker-btn" id="composeStickerBtn" onclick="toggleStickerPicker()"
+                title="Stickers" aria-label="Stickers" aria-haspopup="dialog">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+                  <line x1="9" y1="9" x2="9.01" y2="9"></line>
+                  <line x1="15" y1="9" x2="15.01" y2="9"></line>
+                </svg>
+              </button>
+            </div>
             <button class="btn-submit-feedback" onclick="sendFeedbacksMessage()">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                 stroke-linecap="round" stroke-linejoin="round">
@@ -3566,6 +3627,9 @@
     let showStarredOnly = false; // header ★ toggle: filter the open thread to my starred messages
     let openMessageMenuId = null; // message whose ⋯ menu is open
     let deleteArmed = false; // first click on "Delete" in that menu arms it, the second deletes
+    let pinnedMessages = []; // pinned messages of the open thread, newest pin first
+    let pinnedTickerIndex = 0; // which one the header carousel is showing
+    const pulsedMentionIds = new Set(); // mentions of me that already did their two pulses this session
     let lastTypingSentAt = 0;
 
     // @mention autocomplete — groups and Organization only, never DMs (a 1:1
@@ -3975,7 +4039,7 @@
           <div class="feedbacks-list-item-icon">${iconHtml}</div>
           <div class="feedbacks-list-item-body">
             <div class="feedbacks-list-item-name">${safeName}</div>
-            <div class="feedbacks-list-item-preview">${escapeHtml(preview || "")}</div>
+            <div class="feedbacks-list-item-preview">${escapeHtml(messagePreviewText(preview || ""))}</div>
           </div>
           ${unread ? `<span class="feedbacks-unread-dot">${unread}</span>` : ""}
         </button>
@@ -4132,10 +4196,6 @@
 
     function createNewGroupPrompt() { openGroupModal({ mode: "create" }); }
     function createSubgroupPrompt(parentGroupId) { openGroupModal({ mode: "create", parentGroupId }); }
-    function addMemberToActiveGroup() {
-      if (!activeContainer || activeContainer.type !== "group") return;
-      openGroupModal({ mode: "addMember", targetGroupId: activeContainer.id });
-    }
     function editGroupPrompt(groupId) {
       const group = myGroups.find(g => g.id === groupId) || allGroupsDirectory.find(g => g.id === groupId);
       openGroupModal({ mode: "edit", targetGroupId: groupId, initialName: group?.name || "", initialAvatar: group?.avatar || "" });
@@ -4144,12 +4204,12 @@
     // ---- Group modal: create a group/sub-group, add members to one, or
     // edit one (rename + manage members) — a real searchable employee
     // picker instead of window.prompt(). ----
-    let groupModalMode = null; // "create" | "addMember" | "edit"
+    let groupModalMode = null; // "create" | "edit"
     let groupModalParentId = null;
     let groupModalTargetGroupId = null;
     let groupModalSearch = "";
     let groupModalSelectedIds = new Set();
-    let groupModalCurrentMembers = []; // fetched for "addMember"/"edit" so existing members aren't offered as candidates
+    let groupModalCurrentMembers = []; // fetched for "edit" so existing members aren't offered as candidates
 
     async function openGroupModal({ mode, parentGroupId = null, targetGroupId = null, initialName = "", initialAvatar = "" }) {
       groupModalMode = mode;
@@ -4160,8 +4220,7 @@
       groupModalCurrentMembers = [];
 
       document.getElementById("groupModalTitle").textContent =
-        mode === "edit" ? "Edit group" : mode === "addMember" ? "Add members" : parentGroupId ? "Create sub-group" : "Create group";
-      document.getElementById("groupModalNameField").hidden = mode === "addMember";
+        mode === "edit" ? "Edit group" : parentGroupId ? "Create sub-group" : "Create group";
       document.getElementById("groupModalNameInput").value = mode === "edit" ? initialName : "";
       document.getElementById("groupModalRenameBtn").hidden = mode !== "edit";
       document.getElementById("groupModalAvatarField").hidden = mode !== "edit";
@@ -4176,11 +4235,9 @@
       document.getElementById("groupModalOverlay").classList.add("open");
       document.body.style.overflow = "hidden";
 
-      if (mode === "addMember" || mode === "edit") {
-        if (mode === "edit") {
-          const listEl = document.getElementById("groupModalCurrentMembersList");
-          if (listEl) listEl.innerHTML = skeletonListRowsHtml(2);
-        }
+      if (mode === "edit") {
+        const listEl = document.getElementById("groupModalCurrentMembersList");
+        if (listEl) listEl.innerHTML = skeletonListRowsHtml(2);
         await refreshGroupModalCurrentMembers();
       }
     }
@@ -4401,7 +4458,7 @@
         } finally {
           setButtonBusy(btn, false);
         }
-      } else if (groupModalMode === "addMember" || groupModalMode === "edit") {
+      } else if (groupModalMode === "edit") {
         if (!groupModalSelectedIds.size) { showToast("Select at least one employee."); return; }
         setButtonBusy(btn, true, "Adding…");
         try {
@@ -4414,11 +4471,7 @@
           groupModalSelectedIds = new Set();
           showToast(`Added ${count} member${count === 1 ? "" : "s"}.`);
           await loadFeedbacksData();
-          if (groupModalMode === "edit") {
-            await refreshGroupModalCurrentMembers();
-          } else {
-            closeGroupModal();
-          }
+          await refreshGroupModalCurrentMembers();
         } catch (error) {
           showToast("Could not add members. Please try again.");
         } finally {
@@ -4707,12 +4760,33 @@
     // found in the text — matched against live names, not stored as an id.
     // Never called for a DM message (see chatMessageBubbleHtml) — there's
     // no one to mention in a 1:1 besides the two people already talking.
-    function highlightMentionsHtml(content) {
+    function mentionRegex() {
       const names = [...new Set([...EMPLOYEES, CURRENT_USER].map(e => e.name).filter(Boolean))]
         .sort((a, b) => b.length - a.length); // longest first, so "Bob Test" wins over a shorter "Bob"
-      if (!names.length) return escapeHtml(content);
+      if (!names.length) return null;
       const pattern = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
-      const mentionRe = new RegExp(`@(${pattern})\\b`, "g");
+      return new RegExp(`@(${pattern})\\b`, "g");
+    }
+
+    // Someone else @mentioned me by my exact name (not just a longer name that
+    // starts with mine). Never in a DM — mentions are off there.
+    function mentionsMe(message) {
+      if (message.senderId === CURRENT_USER.id || message.targetType === "user" || !CURRENT_USER.name) return false;
+      const re = mentionRegex();
+      return Boolean(re) && [...message.content.matchAll(re)].some(match => match[1] === CURRENT_USER.name);
+    }
+
+    // A message that mentions me gets a full-width highlighted line around its
+    // bubble; the two pulses play only the first time it's shown.
+    function chatMessageLineHtml(message) {
+      const bubble = chatMessageBubbleHtml(message);
+      if (!mentionsMe(message)) return bubble;
+      return `<div class="chat-mention-line${pulsedMentionIds.has(message.id) ? "" : " pulse"}">${bubble}</div>`;
+    }
+
+    function highlightMentionsHtml(content) {
+      const mentionRe = mentionRegex();
+      if (!mentionRe) return escapeHtml(content);
       let out = "";
       let lastIndex = 0;
       let match;
@@ -4759,6 +4833,7 @@
       // A caption-less attachment's content is just the server's "📎 name"
       // placeholder — the attachment itself already shows that.
       const showText = !(message.attachmentId && message.content === `📎 ${message.attachmentName}`);
+      const sticker = stickerFor(message.content);
       const flags = `${message.pinnedAt ? " 📌" : ""}${message.starred ? " ★" : ""}`;
       const statusHtml = message.pending
         ? `<span class="chat-message-status">Sending…</span>`
@@ -4770,7 +4845,7 @@
           <button type="button" class="chat-message-action-btn" onclick="openMessageMenu(event, '${message.id}')" title="More" aria-label="More actions" aria-haspopup="menu">⋯</button>
         </div>`;
       const replyHtml = message.replyToId
-        ? `<button type="button" class="chat-reply-quote" onclick="jumpToMessage('${message.replyToId}')" title="Go to the original message">${message.replyToSenderName ? `<strong>${escapeHtml(message.replyToSenderName)}</strong>` : ""}${escapeHtml(message.replyToContent ?? "Original message was deleted")}</button>`
+        ? `<button type="button" class="chat-reply-quote" onclick="jumpToMessage('${message.replyToId}')" title="Go to the original message">${message.replyToSenderName ? `<strong>${escapeHtml(message.replyToSenderName)}</strong>` : ""}${escapeHtml(message.replyToContent == null ? "Original message was deleted" : messagePreviewText(message.replyToContent))}</button>`
         : "";
       const bodyHtml = editing
         ? `<div class="inline-edit-box" style="margin-top:4px;">
@@ -4780,9 +4855,11 @@
                <button class="btn-save-inline" onclick="saveChatMessageEdit('${message.id}')">Save</button>
              </div>
            </div>`
+        : sticker
+        ? `${replyHtml}<img class="chat-sticker" src="/assets/stickers/${encodeURIComponent(sticker.file)}" alt="${escapeHtml(sticker.label)} sticker" loading="lazy" />`
         : `${replyHtml}${chatAttachmentHtml(message)}${showText ? `<div class="chat-message-text">${message.targetType === "user" ? escapeHtml(message.content) : highlightMentionsHtml(message.content)}</div>` : ""}`;
       return `
-        <div class="chat-message-row${mine ? " mine" : ""}${message.pending ? " pending" : ""}${message.pinnedAt ? " pinned" : ""}${openMessageMenuId === message.id ? " menu-open" : ""}" id="chat-msg-${message.id}">
+        <div class="chat-message-row${mine ? " mine" : ""}${message.pending ? " pending" : ""}${message.pinnedAt ? " pinned" : ""}${sticker ? " sticker-message" : ""}${openMessageMenuId === message.id ? " menu-open" : ""}" id="chat-msg-${message.id}">
           ${actionsHtml}
           <div class="chat-message-meta">
             <span class="chat-message-sender" style="color:${senderColorFor(message.senderId)}">${escapeHtml(message.senderName)}</span>
@@ -4851,7 +4928,7 @@
             <div class="feedbacks-list-item-icon"><span>💬</span></div>
             <div class="feedbacks-list-item-body">
               <div class="feedbacks-list-item-name">${escapeHtml(topic.name)}</div>
-              <div class="feedbacks-list-item-preview">${escapeHtml(topic.lastMessagePreview || "No messages yet")}</div>
+              <div class="feedbacks-list-item-preview">${escapeHtml(topic.lastMessagePreview ? messagePreviewText(topic.lastMessagePreview) : "No messages yet")}</div>
             </div>
             ${topic.unreadCount ? `<span class="feedbacks-unread-dot">${topic.unreadCount}</span>` : ""}
           </button>
@@ -4906,10 +4983,7 @@
 
       const canManageGroup = activeContainer.type === "group" && isGroupManager(activeContainer.id);
       const groupActionsHtml = canManageGroup
-        ? `<div style="display:flex; align-items:center; gap:10px;">
-             <button type="button" class="feedbacks-new-group-btn" onclick="addMemberToActiveGroup()">+ Add member</button>
-             <button type="button" class="feedbacks-row-icon-btn" onclick="editGroupPrompt('${activeContainer.id}')" title="Group settings">${SETTINGS_GEAR_SVG}</button>
-           </div>`
+        ? `<button type="button" class="feedbacks-row-icon-btn" onclick="editGroupPrompt('${activeContainer.id}')" title="Group settings — members, name, photo">${SETTINGS_GEAR_SVG}</button>`
         : "";
       header.innerHTML = `<div class="feedbacks-detail-title">${escapeHtml(activeContainer.name)}</div>${groupActionsHtml}`;
 
@@ -4969,6 +5043,13 @@
         || (scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 80);
 
       header.hidden = false;
+      const sorted = [...conversationMessages].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      pinnedMessages = sorted.filter(m => m.pinnedAt).sort((a, b) => new Date(b.pinnedAt) - new Date(a.pinnedAt));
+      const titleHtml = title => `
+        <div class="feedbacks-detail-title-stack">
+          <div class="feedbacks-detail-title">${escapeHtml(title)}</div>
+          ${pinnedMessages.length ? `<button type="button" class="chat-pinned-ticker" id="pinnedTicker" onclick="jumpToPinned()"></button>` : ""}
+        </div>`;
       // A DM is one thread with a person (no topics to go back to), so its
       // header is just who you're talking to.
       if (activeContainer?.type === "user") {
@@ -4976,17 +5057,18 @@
         header.innerHTML = `
           <div class="feedbacks-detail-title-group">
             <img class="dm-header-avatar" src="${escapeHtml(avatarSrc(person?.avatar))}" alt="" />
-            <div class="feedbacks-detail-title">${escapeHtml(activeContainer.name)}</div>
+            ${titleHtml(activeContainer.name)}
           </div>
         `;
       } else {
         header.innerHTML = `
           <div class="feedbacks-detail-title-group">
             <button type="button" class="topic-back-btn" onclick="backToTopicList()" title="Back to topics">&larr;</button>
-            <div class="feedbacks-detail-title">${escapeHtml(activeTopic.name)}</div>
+            ${titleHtml(activeTopic.name)}
           </div>
         `;
       }
+      renderPinnedTicker(false);
       header.insertAdjacentHTML("beforeend", `
         <button type="button" class="feedbacks-row-icon-btn${showStarredOnly ? " active" : ""}" onclick="toggleStarredFilter()"
           title="${showStarredOnly ? "Show all messages" : "Show only my starred messages"}" aria-pressed="${showStarredOnly}">★</button>`);
@@ -5002,18 +5084,12 @@
       const editBox = editingChatMessageId ? document.getElementById(`chat_edit_${editingChatMessageId}`) : null;
       const editDraft = editBox?.value;
       const editHadFocus = editBox && document.activeElement === editBox;
-      const sorted = [...conversationMessages].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-      const pinned = sorted.filter(m => m.pinnedAt).sort((a, b) => new Date(b.pinnedAt) - new Date(a.pinnedAt));
-      const pinnedHtml = pinned.length
-        ? `<div class="chat-pinned-bar" aria-label="Pinned messages">${pinned.map(m =>
-            `<button type="button" onclick="jumpToMessage('${m.id}')">📌 <strong>${escapeHtml(m.senderName)}:</strong> ${escapeHtml(m.content)}</button>`).join("")}</div>`
-        : "";
       const visible = showStarredOnly ? sorted.filter(m => m.starred) : sorted;
-      scroll.innerHTML = pinnedHtml
-        + (visible.length
-          ? visible.map(chatMessageBubbleHtml).join("")
+      scroll.innerHTML = (visible.length
+          ? visible.map(chatMessageLineHtml).join("")
           : `<div class="feedbacks-empty-state">${showStarredOnly ? "You haven't starred anything here yet." : "No messages yet — say hello."}</div>`)
         + `<div class="chat-typing" id="chatTypingIndicator" hidden></div>`;
+      visible.forEach(m => { if (mentionsMe(m)) pulsedMentionIds.add(m.id); });
       renderTypingIndicator();
       if (editDraft !== undefined) {
         const restored = document.getElementById(`chat_edit_${editingChatMessageId}`);
@@ -5159,12 +5235,14 @@
     // back if the send actually failed.
     // `attachment` ({id, name, type, size} from POST /api/attachments) is
     // optional; whatever's typed in the box goes along as its caption.
-    async function sendFeedbacksMessage(attachment = null) {
+    // `fixedContent` sends that text instead of (and without touching) what's
+    // typed in the box — used for stickers.
+    async function sendFeedbacksMessage(attachment = null, fixedContent = null) {
       const input = document.getElementById("feedbacksComposeInput");
       if (!input || !activeTopic) return;
-      const content = input.value.trim();
+      const content = fixedContent ?? input.value.trim();
       if (!content && !attachment) return;
-      input.value = "";
+      if (fixedContent === null) input.value = "";
       closeMentionDropdown();
       lastTypingSentAt = 0;
       const attachmentFields = attachment
@@ -5239,7 +5317,7 @@
           conversationMessages = conversationMessages.filter(m => m.id !== pendingId);
           replyingTo = replyTo;
           renderConversationMessages();
-          input.value = content;
+          if (fixedContent === null) input.value = content;
         }
         showToast("Could not send that message. Please try again.");
       }
@@ -5426,7 +5504,7 @@
       if (!bar) return;
       bar.hidden = !replyingTo;
       bar.innerHTML = replyingTo
-        ? `<span>Replying to <strong>${escapeHtml(replyingTo.senderName)}</strong>: ${escapeHtml(replyingTo.content)}</span>
+        ? `<span>Replying to <strong>${escapeHtml(replyingTo.senderName)}</strong>: ${escapeHtml(messagePreviewText(replyingTo.content))}</span>
            <button type="button" onclick="cancelReply()" title="Cancel reply" aria-label="Cancel reply">✕</button>`
         : "";
     }
@@ -5442,11 +5520,73 @@
       }
       if (!el) { showToast("That message isn't available anymore."); return; }
       const scroll = document.getElementById("feedbacksMessagesScroll");
-      const pinnedBar = scroll.querySelector(".chat-pinned-bar");
-      scroll.scrollTop += el.getBoundingClientRect().top - scroll.getBoundingClientRect().top - (pinnedBar ? pinnedBar.offsetHeight + 12 : 12);
+      scroll.scrollTop += el.getBoundingClientRect().top - scroll.getBoundingClientRect().top - 12;
       el.classList.remove("flash");
       void el.offsetWidth; // restart the animation
       el.classList.add("flash");
+    }
+
+    // Stickers are static images in /assets/stickers/ (dist/assets/stickers/),
+    // sent as the plain message text "[sticker:<id>]" — no schema change, and
+    // previews/replies/pins just need messagePreviewText(). Add entries here.
+    const STICKERS = []; // { id: "thumbs-up", file: "thumbs-up.png", label: "Thumbs up" }
+    const STICKER_TOKEN_RE = /^\[sticker:([a-z0-9_-]+)\]$/;
+
+    function stickerFor(content) {
+      const id = STICKER_TOKEN_RE.exec(content || "")?.[1];
+      return id ? STICKERS.find(s => s.id === id) || null : null;
+    }
+
+    function messagePreviewText(content) {
+      return STICKER_TOKEN_RE.test(content || "") ? "Sticker" : content;
+    }
+
+    function toggleStickerPicker(forceOpen) {
+      const picker = document.getElementById("stickerPicker");
+      const open = forceOpen ?? picker.hidden;
+      picker.hidden = !open;
+      document.getElementById("composeStickerBtn").setAttribute("aria-expanded", String(open));
+      if (!open) return;
+      picker.innerHTML = STICKERS.length
+        ? STICKERS.map(s => `<button type="button" onclick="sendSticker('${s.id}')" title="${escapeHtml(s.label)}"><img src="/assets/stickers/${encodeURIComponent(s.file)}" alt="${escapeHtml(s.label)}" loading="lazy" /></button>`).join("")
+        : `<div class="sticker-picker-empty">Stickers are on the way.</div>`;
+    }
+
+    function sendSticker(id) {
+      toggleStickerPicker(false);
+      sendFeedbacksMessage(null, `[sticker:${id}]`);
+    }
+
+    document.addEventListener("click", event => {
+      const inPicker = event.composedPath().some(el => el.id === "stickerPicker" || el.id === "composeStickerBtn");
+      if (!inPicker && !document.getElementById("stickerPicker").hidden) toggleStickerPicker(false);
+    });
+
+    const PIN_ICON_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>`;
+
+    // Fills #pinnedTicker with pinnedMessages[pinnedTickerIndex]; `animate`
+    // only on an actual rotation, not on every re-render of the header.
+    function renderPinnedTicker(animate) {
+      const ticker = document.getElementById("pinnedTicker");
+      if (!ticker || !pinnedMessages.length) return;
+      pinnedTickerIndex %= pinnedMessages.length;
+      const m = pinnedMessages[pinnedTickerIndex];
+      ticker.title = "Go to this pinned message";
+      ticker.innerHTML = `${PIN_ICON_SVG}
+        <span class="chat-pinned-ticker-text${animate ? " slide-in" : ""}"><strong>${escapeHtml(m.senderName)}:</strong> ${escapeHtml(messagePreviewText(m.content))}</span>
+        ${pinnedMessages.length > 1 ? `<span class="chat-pinned-ticker-count">${pinnedTickerIndex + 1}/${pinnedMessages.length}</span>` : ""}`;
+    }
+
+    function rotatePinnedTicker() {
+      if (pinnedMessages.length < 2 || !document.getElementById("pinnedTicker")) return;
+      pinnedTickerIndex = (pinnedTickerIndex + 1) % pinnedMessages.length;
+      renderPinnedTicker(true);
+    }
+    window.setInterval(rotatePinnedTicker, 3500);
+
+    function jumpToPinned() {
+      const m = pinnedMessages[pinnedTickerIndex % pinnedMessages.length];
+      if (m) jumpToMessage(m.id);
     }
 
     function toggleStarredFilter() {
@@ -5533,11 +5673,14 @@
     })();
 
     document.addEventListener("click", event => {
-      if (!event.target.closest("#chatMessageMenu")) closeMessageMenu();
+      // composedPath() is captured at dispatch, so it still includes the menu
+      // even when the clicked item was replaced mid-click (arming "Delete"
+      // re-renders the menu) — target.closest() would miss it and close it.
+      if (!event.composedPath().some(el => el.id === "chatMessageMenu")) closeMessageMenu();
     });
     document.addEventListener("keydown", event => {
       const lightboxOpen = !document.getElementById("mediaLightbox").hidden;
-      if (event.key === "Escape") { closeLightbox(); closeMessageMenu(); }
+      if (event.key === "Escape") { closeLightbox(); closeMessageMenu(); toggleStickerPicker(false); }
       else if (lightboxOpen && (event.key === "+" || event.key === "=")) zoomLightbox(0.25);
       else if (lightboxOpen && event.key === "-") zoomLightbox(-0.25);
     });
