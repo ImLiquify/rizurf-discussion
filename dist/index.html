@@ -10,9 +10,9 @@
   <title>Rizurf Discussion</title>
   <!-- Apply the saved theme before first paint (no light flash). -->
   <script>try { if (localStorage.getItem("rizurf-theme") === "dark") document.documentElement.dataset.theme = "dark"; } catch (e) {}</script>
-  <!-- Swapped at load for the Rizurf mark cropped out of the brand logo (setBrandFavicon). -->
-  <script src="https://web-omega-two-47.vercel.app/widget/gateway-button.js" defer></script>
-  <link rel="icon" id="appFavicon" href="/assets/logo-0Yo0gl14.png" />
+  <!-- Gateway button (SS-28). Lifted 88px so it clears the chat compose bar. -->
+  <script src="https://web-omega-two-47.vercel.app/widget/gateway-button.js" data-offset="88" defer></script>
+  <link rel="icon" href="https://web-omega-two-47.vercel.app/logo-icon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -2759,17 +2759,6 @@
     .profile-modal-body { text-align: center; }
     .profile-modal-note { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 18px; }
 
-    .btn-logout {
-      width: 100%;
-      padding: 12px;
-      border-radius: var(--radius-md);
-      background: var(--status-danger, #E0533D);
-      color: #FFFFFF;
-      font-weight: 700;
-      font-size: 0.9rem;
-    }
-
-    .btn-logout:hover { opacity: 0.9; }
 
     /* Admin/manager oversight section inside the Wall modal: private
        conversations, filtered by a Given/Received tab, drilling down from a
@@ -3929,7 +3918,6 @@
           <input type="checkbox" id="darkModeToggle" class="theme-toggle-switch" role="switch" onchange="setDarkMode(this.checked)" />
         </label>
         <p class="profile-modal-note">A full profile page is coming soon.</p>
-        <button type="button" class="btn-logout" onclick="handleGoToAllApps()">Go back to all apps</button>
       </div>
     </div>
   </div>
@@ -6531,33 +6519,9 @@
       else if (lightboxOpen && event.key === "-") zoomLightbox(-0.25);
     });
 
-    // The tab icon is the Rizurf mark: the square at the left end of the wide
-    // brand logo, cropped out at load (no separate icon file exists).
-    (function setBrandFavicon() {
-      const img = new Image();
-      img.onload = () => {
-        const side = img.naturalHeight;
-        const canvas = document.createElement("canvas");
-        canvas.width = canvas.height = 64;
-        const ctx = canvas.getContext("2d");
-        // On the sidebar colour, like the app shell — the mark has white
-        // strokes that vanish on a light browser tab otherwise.
-        ctx.fillStyle = "#0B1727";
-        ctx.beginPath();
-        ctx.roundRect(0, 0, 64, 64, 14);
-        ctx.fill();
-        ctx.drawImage(img, 0, 0, side, side, 8, 8, 48, 48);
-        document.getElementById("appFavicon").href = canvas.toDataURL("image/png");
-      };
-      img.src = "/assets/logo-0Yo0gl14.png";
-    })();
 
-    function handleGoToAllApps() {
-      window.location.href = "https://web-omega-two-47.vercel.app/apps";
-    }
-
-    // Placeholder profile modal — just identity + sign out, until a real
-    // profile page exists to link this to.
+    // Placeholder profile modal — identity + dark mode, until a real profile
+    // page exists. Getting back to the gateway is the gateway button's job.
     function openProfileModal() {
       document.getElementById("profileModalAvatar").src = avatarSrc(CURRENT_USER.avatar);
       document.getElementById("profileModalAvatar").alt = CURRENT_USER.name || "User";
