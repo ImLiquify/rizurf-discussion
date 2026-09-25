@@ -255,7 +255,10 @@ export async function listFeedback({ targetId, senderId, participantId, groupMem
   parameters.push(limit, offset);
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const [rows] = await pool.execute(
-    `SELECT f.id, f.sender_id AS senderId, u.name AS senderName, u.avatar AS senderAvatar, f.target_id AS targetId,
+    `SELECT EXISTS(SELECT 1 FROM message_stars ms WHERE ms.feedback_id = f.id AND ms.user_id = ?) AS starred,
+       f.reply_to_id AS replyToId, rf.content AS replyToContent, ru.name AS replyToSenderName,
+       f.pinned_at AS pinnedAt,
+       f.id, f.sender_id AS senderId, u.name AS senderName, u.avatar AS senderAvatar, f.target_id AS targetId,
        f.target_type AS targetType, f.visibility, f.topic_id AS topicId, tp.name AS topicName, tp.created_by AS topicCreatedBy,
        CASE
          WHEN f.target_id = 'company' THEN f.target_name
@@ -269,9 +272,11 @@ export async function listFeedback({ targetId, senderId, participantId, groupMem
      LEFT JOIN attachments att ON att.id = f.attachment_id
      LEFT JOIN users target_user ON target_user.id = f.target_id
      LEFT JOIN topics tp ON tp.id = f.topic_id
+     LEFT JOIN feedback rf ON rf.id = f.reply_to_id
+     LEFT JOIN users ru ON ru.id = rf.sender_id
      ${where}
      ORDER BY f.created_at DESC LIMIT ? OFFSET ?`,
-    parameters
+    [viewerId || '', ...parameters]
   );
   return rows;
 }
@@ -320,10 +325,10 @@ export async function getFeedbackCounts() {
   return counts;
 }
 
-export async function createFeedback({ id, senderId, targetId, targetName, content, isAnonymous, visibility = 'public', targetType = 'user', topicId = null, attachmentId = null }) {
+export async function createFeedback({ id, senderId, targetId, targetName, content, isAnonymous, visibility = 'public', targetType = 'user', topicId = null, attachmentId = null, replyToId = null }) {
   await pool.execute(
-    'INSERT INTO feedback (id, sender_id, target_id, target_name, content, is_anonymous, visibility, target_type, topic_id, attachment_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [id, senderId, targetId, targetName, content, isAnonymous, visibility, targetType, topicId, attachmentId]
+    'INSERT INTO feedback (id, sender_id, target_id, target_name, content, is_anonymous, visibility, target_type, topic_id, attachment_id, reply_to_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [id, senderId, targetId, targetName, content, isAnonymous, visibility, targetType, topicId, attachmentId, replyToId]
   );
   const [rows] = await pool.execute('SELECT * FROM feedback WHERE id = ?', [id]);
   return rows[0];
@@ -350,7 +355,7 @@ export async function deleteFeedback(id) {
 // comment and reaction routes, in one query.
 export async function getFeedbackMeta(id) {
   const [rows] = await pool.execute(
-    `SELECT id, visibility, target_type AS targetType, target_id AS targetId, sender_id AS senderId, created_at AS createdAt,
+    `SELECT id, visibility, target_type AS targetType, target_id AS targetId, sender_id AS senderId, created_at AS createdAt, topic_id AS topicId,
        TIMESTAMPDIFF(SECOND, created_at, NOW()) AS ageSeconds
      FROM feedback WHERE id = ? LIMIT 1`,
     [id]
@@ -524,6 +529,22 @@ export async function getGroupById(id) {
   return rows[0] || null;
 }
 
+// 'owner' (the creator), 'admin' (a sub-admin), 'member', or null (not in
+// the group / no such group). Owner and sub-admins manage the group.
+export async function getGroupRole(groupId, userId) {
+  const [rows] = await pool.execute(
+    `SELECT CASE WHEN g.created_by = ? THEN 'owner' ELSE gm.role END AS role
+     FROM feedback_groups g LEFT JOIN group_members gm ON gm.group_id = g.id AND gm.user_id = ?
+     WHERE g.id = ? LIMIT 1`, [userId, userId, groupId]
+  );
+  return rows[0]?.role || null;
+}
+
+export async function setGroupMemberRole({ groupId, userId, role }) {
+  const [result] = await pool.execute('UPDATE group_members SET role = ? WHERE group_id = ? AND user_id = ?', [role, groupId, userId]);
+  return result.affectedRows > 0;
+}
+
 export async function isGroupMember(groupId, userId) {
   const [rows] = await pool.execute(
     'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ? LIMIT 1', [groupId, userId]
@@ -590,6 +611,7 @@ export async function listGroups({ mine, parentId, limit, offset }) {
   parameters.push(limit, offset);
   const [rows] = await pool.execute(
     `SELECT g.id, g.name, g.created_by AS createdBy, g.parent_group_id AS parentGroupId, g.avatar, g.created_at AS createdAt,
+       ${mine ? "CASE WHEN g.created_by = gm.user_id THEN 'owner' ELSE gm.role END AS myRole," : ''}
        (SELECT COUNT(*) FROM group_members WHERE group_id = g.id) AS memberCount,
        (SELECT COUNT(*) FROM feedback_groups WHERE parent_group_id = g.id) AS subgroupCount
      FROM feedback_groups g ${join} ${where}
@@ -601,8 +623,11 @@ export async function listGroups({ mine, parentId, limit, offset }) {
 
 export async function listGroupMembers(groupId) {
   const [rows] = await pool.execute(
-    `SELECT u.id, u.name, u.avatar FROM group_members gm
-     JOIN users u ON u.id = gm.user_id WHERE gm.group_id = ? ORDER BY u.name`,
+    `SELECT u.id, u.name, u.avatar, CASE WHEN g.created_by = u.id THEN 'owner' ELSE gm.role END AS role
+     FROM group_members gm
+     JOIN users u ON u.id = gm.user_id
+     JOIN feedback_groups g ON g.id = gm.group_id
+     WHERE gm.group_id = ? ORDER BY (g.created_by = u.id) DESC, (gm.role = 'admin') DESC, u.name`,
     [groupId]
   );
   return rows;
@@ -723,6 +748,20 @@ export async function listMyTopics({ viewerId, viewerIsPrivileged }) {
     [viewerId || '', viewerId || '', ...accessParams(viewerIsPrivileged, viewerId)]
   );
   return rows;
+}
+
+export async function setPinned({ feedbackId, pinnedBy }) {
+  await pool.execute(
+    'UPDATE feedback SET pinned_at = IF(? IS NULL, NULL, CURRENT_TIMESTAMP), pinned_by = ? WHERE id = ?',
+    [pinnedBy, pinnedBy, feedbackId]
+  );
+}
+
+export async function setStarred({ userId, feedbackId, starred }) {
+  await pool.execute(
+    starred ? 'INSERT IGNORE INTO message_stars (user_id, feedback_id) VALUES (?, ?)' : 'DELETE FROM message_stars WHERE user_id = ? AND feedback_id = ?',
+    [userId, feedbackId]
+  );
 }
 
 export async function createAttachment({ id, uploaderId, filename, mimeType, data }) {

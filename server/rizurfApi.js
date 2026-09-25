@@ -75,6 +75,12 @@ const openapi = {
       patch: operation('Edit a comment.', 'feedback:write', discovery('Edit Comment', 'Update the text of a comment or reply; the author, an admin, or a manager only.', ['feedbackId', 'commentId', 'text'], ['id'], ['GET /api/feedback/{feedbackId}/comments'])),
       delete: operation('Delete a comment.', 'feedback:write', discovery('Delete Comment', 'Remove a comment or reply, and any replies nested under it; the author, an admin, or a manager only.', ['feedbackId', 'commentId'], []))
     },
+    '/api/feedback/{feedbackId}/pin': {
+      post: operation('Pin or unpin a message.', 'feedback:write', discovery('Pin Message', 'Pin a private message to the top of its conversation for everyone in it, or unpin it.', ['feedbackId', 'pinned'], ['pinned']))
+    },
+    '/api/feedback/{feedbackId}/star': {
+      post: operation('Star or unstar a message.', 'feedback:write', discovery('Star Message', 'Star a private message for yourself only, or unstar it.', ['feedbackId', 'starred'], ['starred']))
+    },
     '/api/feedback/{feedbackId}/reactions': {
       post: operation('Toggle an emoji reaction.', 'feedback:write', discovery('Toggle Reaction', 'Add or remove one emoji reaction on a feedback item or a comment.', ['feedbackId', 'reaction', 'commentId'], ['reacted'], ['GET /api/feedback']))
     },
@@ -91,6 +97,7 @@ const openapi = {
       post: operation('Add a member to a group.', 'feedback:write', discovery('Add Group Member', 'Add any employee to a project group; the group\'s leader (creator), an admin, or a manager only.', ['groupId', 'userId'], [], ['GET /api/groups/{groupId}/members']))
     },
     '/api/groups/{groupId}/members/{userId}': {
+      patch: operation('Set a member\'s group role.', 'feedback:write', discovery('Set Group Role', 'Make a member a sub-admin or a regular member; the group owner only.', ['groupId', 'userId', 'role'], [])),
       delete: operation('Remove a group member.', 'feedback:write', discovery('Remove Group Member', 'Remove an employee from a project group.', ['groupId', 'userId'], [], ['GET /api/groups/{groupId}/members']))
     },
     '/api/topics': {
@@ -120,6 +127,8 @@ function routeKey(pathname) {
   if (/^\/api\/feedback\/[^/]+\/comments\/[^/]+$/.test(pathname)) return '/api/feedback/{feedbackId}/comments/{commentId}';
   if (/^\/api\/feedback\/[^/]+\/comments$/.test(pathname)) return '/api/feedback/{feedbackId}/comments';
   if (/^\/api\/feedback\/[^/]+\/reactions$/.test(pathname)) return '/api/feedback/{feedbackId}/reactions';
+  if (/^\/api\/feedback\/[^/]+\/pin$/.test(pathname)) return '/api/feedback/{feedbackId}/pin';
+  if (/^\/api\/feedback\/[^/]+\/star$/.test(pathname)) return '/api/feedback/{feedbackId}/star';
   if (/^\/api\/feedback\/[^/]+$/.test(pathname)) return '/api/feedback/{feedbackId}';
   if (/^\/api\/groups\/[^/]+\/members\/[^/]+$/.test(pathname)) return '/api/groups/{groupId}/members/{userId}';
   if (/^\/api\/groups\/[^/]+\/members$/.test(pathname)) return '/api/groups/{groupId}/members';
@@ -422,10 +431,8 @@ app.patch('/api/feedback/:feedbackId', async (request, response, next) => {
     const meta = await loadAccessibleFeedback(request, response, request.params.feedbackId);
     if (!meta) return;
     const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
-    const callerUser = await feedbacks.getUserById(callerId);
-    const isPrivileged = isPrivilegedRole(callerUser?.permissionRole);
-    if (meta.senderId !== callerId && !isPrivileged) {
-      return sendError(response, request, 403, 'FORBIDDEN', 'Only the author, an admin, or a manager can edit this.');
+    if (!await canModerateMessage(meta, callerId)) {
+      return sendError(response, request, 403, 'FORBIDDEN', 'Only the author or someone who moderates this conversation can edit this.');
     }
     // Chat messages (private) are editable for one hour after sending, by
     // anyone — no admin/manager bypass. Age is measured in MySQL's clock
@@ -443,14 +450,26 @@ app.delete('/api/feedback/:feedbackId', async (request, response, next) => {
     const meta = await loadAccessibleFeedback(request, response, request.params.feedbackId);
     if (!meta) return;
     const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
-    const callerUser = await feedbacks.getUserById(callerId);
-    if (meta.senderId !== callerId && !isPrivilegedRole(callerUser?.permissionRole)) {
-      return sendError(response, request, 403, 'FORBIDDEN', 'Only the author, an admin, or a manager can delete this.');
+    if (!await canModerateMessage(meta, callerId)) {
+      return sendError(response, request, 403, 'FORBIDDEN', 'Only the author or someone who moderates this conversation can delete this.');
     }
     await feedbacks.deleteFeedback(request.params.feedbackId);
     return response.status(204).end();
   } catch (error) { return next(error); }
 });
+
+// Who besides the author may edit/delete a message: in a group, only its
+// owner and sub-admins (company admins/managers get no bypass there — groups
+// are run by their own admins); everywhere else, admins/managers.
+async function canModerateMessage(meta, callerId) {
+  if (meta.senderId === callerId) return true;
+  if (meta.visibility === 'private' && meta.targetType === 'group') return isGroupManager(meta.targetId, callerId);
+  return isPrivilegedRole((await feedbacks.getUserById(callerId))?.permissionRole);
+}
+
+async function isGroupManager(groupId, userId) {
+  return ['owner', 'admin'].includes(await feedbacks.getGroupRole(groupId, userId));
+}
 
 // Private feedback (DM / group / Organization) — always sent into a topic.
 // Unlike the public path above, the sender identity and anonymity are never
@@ -465,7 +484,7 @@ app.delete('/api/feedback/:feedbackId', async (request, response, next) => {
 async function createPrivateFeedback(request, response, next) {
   const auth = request.auth || {};
   if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
-  const { topicId, content, attachmentId } = request.body || {};
+  const { topicId, content, attachmentId, replyToId } = request.body || {};
   if (!validText(topicId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'topicId is required.', { fields: ['topicId'] });
   if (!validText(content) && !validText(attachmentId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'content or attachmentId is required.', { fields: ['content', 'attachmentId'] });
   try {
@@ -477,6 +496,9 @@ async function createPrivateFeedback(request, response, next) {
       // A caption-less attachment still gets text, so sidebar previews and
       // anything else that reads `content` show something meaningful.
       if (!text) text = `📎 ${attachment.filename}`;
+    }
+    if (validText(replyToId) && (await feedbacks.getFeedbackMeta(replyToId))?.topicId !== topicId) {
+      return sendError(response, request, 422, 'VALIDATION_ERROR', 'replyToId must be a message in the same topic.', { fields: ['replyToId'] });
     }
     const topic = await feedbacks.getTopicById(topicId);
     if (!topic) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No topic with that id.');
@@ -500,7 +522,8 @@ async function createPrivateFeedback(request, response, next) {
     const created = await feedbacks.createFeedback({
       id: `fb_${crypto.randomUUID()}`, senderId, targetId, targetName,
       content: text, isAnonymous: false, visibility: 'private', targetType, topicId,
-      attachmentId: validText(attachmentId) ? attachmentId : null
+      attachmentId: validText(attachmentId) ? attachmentId : null,
+      replyToId: validText(replyToId) ? replyToId : null
     });
     await Promise.all([
       feedbacks.markTopicRead({ topicId, userId: senderId }),
@@ -598,6 +621,30 @@ app.delete('/api/feedback/:feedbackId/comments/:commentId', async (request, resp
     return response.status(204).end();
   } catch (error) { return next(error); }
 });
+// Pin: shared with everyone in the conversation, and anyone in it may pin
+// or unpin. Star: private to the caller. Both are chat-only (private rows).
+app.post('/api/feedback/:feedbackId/pin', async (request, response, next) => {
+  try {
+    const meta = await loadAccessibleFeedback(request, response, request.params.feedbackId);
+    if (!meta) return;
+    if (meta.visibility !== 'private') return sendError(response, request, 422, 'VALIDATION_ERROR', 'Only chat messages can be pinned.');
+    const { viewerId } = await resolveViewerForRead(request.auth);
+    const pinned = Boolean(request.body?.pinned);
+    await feedbacks.setPinned({ feedbackId: meta.id, pinnedBy: pinned ? viewerId : null });
+    return sendJson(response, 200, { pinned });
+  } catch (error) { return next(error); }
+});
+app.post('/api/feedback/:feedbackId/star', async (request, response, next) => {
+  try {
+    const meta = await loadAccessibleFeedback(request, response, request.params.feedbackId);
+    if (!meta) return;
+    if (meta.visibility !== 'private') return sendError(response, request, 422, 'VALIDATION_ERROR', 'Only chat messages can be starred.');
+    const { viewerId } = await resolveViewerForRead(request.auth);
+    const starred = Boolean(request.body?.starred);
+    await feedbacks.setStarred({ userId: viewerId, feedbackId: meta.id, starred });
+    return sendJson(response, 200, { starred });
+  } catch (error) { return next(error); }
+});
 const ALLOWED_REACTIONS = new Set(['❤️', '👏', '💡', '🙌']);
 app.post('/api/feedback/:feedbackId/reactions', async (request, response, next) => {
   const { reaction, commentId = '' } = request.body || {};
@@ -626,6 +673,8 @@ app.get('/api/groups', async (request, response, next) => {
     return sendJson(response, 200, { data: await feedbacks.listGroups({ mine, parentId: request.query.parentId, ...page }), ...page });
   } catch (error) { return next(error); }
 });
+// Groups are run by their own owner (creator) and the sub-admins the owner
+// appoints — see isGroupManager. Company admins/managers get no bypass here.
 app.post('/api/groups', async (request, response, next) => {
   const auth = request.auth || {};
   if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
@@ -639,10 +688,8 @@ app.post('/api/groups', async (request, response, next) => {
       if (!parent) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No parent group with that id.');
       // One level of nesting only — a sub-group can't itself have sub-groups.
       if (parent.parentGroupId) return sendError(response, request, 422, 'VALIDATION_ERROR', 'A sub-group cannot itself have sub-groups.', { fields: ['parentGroupId'] });
-      const creatorUser = await feedbacks.getUserById(createdBy);
-      const creatorIsPrivileged = isPrivilegedRole(creatorUser?.permissionRole);
-      if (!creatorIsPrivileged && !await feedbacks.isGroupMember(parentGroupId, createdBy)) {
-        return sendError(response, request, 403, 'FORBIDDEN', 'You must be a member of the parent group to create a sub-group.');
+      if (!await isGroupManager(parentGroupId, createdBy)) {
+        return sendError(response, request, 403, 'FORBIDDEN', 'Only the group\'s owner or a sub-admin can create a sub-group.');
       }
       resolvedParentId = parentGroupId;
     }
@@ -655,76 +702,80 @@ app.get('/api/groups/:groupId/members', async (request, response, next) => {
     return sendJson(response, 200, { data: await feedbacks.listGroupMembers(request.params.groupId) });
   } catch (error) { return next(error); }
 });
-app.post('/api/groups/:groupId/members', async (request, response, next) => {
-  // Discord-style leadership: whoever created the group is its leader and
-  // manages membership alongside admins/managers — regular members can
-  // participate but can't add or remove people or edit the group.
+
+// Resolves the caller and their role in :groupId, sending the error itself
+// (and returning null) when the group is missing or the role isn't allowed.
+async function requireGroupRole(request, response, allowed) {
   const auth = request.auth || {};
-  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+  if (!auth.sub) { sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.'); return null; }
+  const group = await feedbacks.getGroupById(request.params.groupId);
+  if (!group) { sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.'); return null; }
+  const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
+  const role = await feedbacks.getGroupRole(group.id, callerId);
+  if (!allowed.includes(role)) {
+    sendError(response, request, 403, 'FORBIDDEN', allowed.includes('admin')
+      ? 'Only the group\'s owner or a sub-admin can do this.' : 'Only the group\'s owner can do this.');
+    return null;
+  }
+  return { group, callerId, role };
+}
+
+app.post('/api/groups/:groupId/members', async (request, response, next) => {
   const { userId } = request.body || {};
   if (!validText(userId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'userId is required.', { fields: ['userId'] });
   try {
-    const group = await feedbacks.getGroupById(request.params.groupId);
-    if (!group) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
+    const ctx = await requireGroupRole(request, response, ['owner', 'admin']);
+    if (!ctx) return;
     if (!await feedbacks.getUserById(userId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No user with that id.');
-    const addedBy = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
-    const callerUser = await feedbacks.getUserById(addedBy);
-    if (!isPrivilegedRole(callerUser?.permissionRole) && group.createdBy !== addedBy) {
-      return sendError(response, request, 403, 'FORBIDDEN', 'Only the group\'s leader, an admin, or a manager can add members.');
+    await feedbacks.addGroupMember({ groupId: ctx.group.id, userId, addedBy: ctx.callerId });
+    return response.status(204).end();
+  } catch (error) { return next(error); }
+});
+// Owner only: make a member a sub-admin ('admin') or back to 'member'.
+app.patch('/api/groups/:groupId/members/:userId', async (request, response, next) => {
+  const { role } = request.body || {};
+  if (!['admin', 'member'].includes(role)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'role must be admin or member.', { fields: ['role'] });
+  try {
+    const ctx = await requireGroupRole(request, response, ['owner']);
+    if (!ctx) return;
+    if (request.params.userId === ctx.group.createdBy) return sendError(response, request, 422, 'VALIDATION_ERROR', 'The owner\'s role can\'t be changed.');
+    if (!await feedbacks.setGroupMemberRole({ groupId: ctx.group.id, userId: request.params.userId, role })) {
+      return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'That person is not in this group.');
     }
-    await feedbacks.addGroupMember({ groupId: request.params.groupId, userId, addedBy });
     return response.status(204).end();
   } catch (error) { return next(error); }
 });
 app.delete('/api/groups/:groupId/members/:userId', async (request, response, next) => {
-  const auth = request.auth || {};
-  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
   try {
-    const group = await feedbacks.getGroupById(request.params.groupId);
-    if (!group) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
-    const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
-    const callerUser = await feedbacks.getUserById(callerId);
-    if (!isPrivilegedRole(callerUser?.permissionRole) && group.createdBy !== callerId) {
-      return sendError(response, request, 403, 'FORBIDDEN', 'Only the group\'s leader, an admin, or a manager can remove members.');
-    }
-    await feedbacks.removeGroupMember({ groupId: request.params.groupId, userId: request.params.userId });
+    const ctx = await requireGroupRole(request, response, ['owner', 'admin']);
+    if (!ctx) return;
+    const targetRole = await feedbacks.getGroupRole(ctx.group.id, request.params.userId);
+    if (targetRole === 'owner') return sendError(response, request, 422, 'VALIDATION_ERROR', 'The owner can\'t be removed from their own group.');
+    // Sub-admins manage members, not each other.
+    if (targetRole === 'admin' && ctx.role !== 'owner') return sendError(response, request, 403, 'FORBIDDEN', 'Only the group\'s owner can remove a sub-admin.');
+    await feedbacks.removeGroupMember({ groupId: ctx.group.id, userId: request.params.userId });
     return response.status(204).end();
   } catch (error) { return next(error); }
 });
 app.patch('/api/groups/:groupId', async (request, response, next) => {
-  const auth = request.auth || {};
-  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
   const { name, avatar } = request.body || {};
   if (name !== undefined && !validText(name)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'name cannot be blank.', { fields: ['name'] });
   if (name === undefined && avatar === undefined) return sendError(response, request, 422, 'VALIDATION_ERROR', 'name or avatar is required.', { fields: ['name', 'avatar'] });
   try {
-    const group = await feedbacks.getGroupById(request.params.groupId);
-    if (!group) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
-    const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
-    const callerUser = await feedbacks.getUserById(callerId);
-    if (!isPrivilegedRole(callerUser?.permissionRole) && group.createdBy !== callerId) {
-      return sendError(response, request, 403, 'FORBIDDEN', 'Only the group\'s leader, an admin, or a manager can edit it.');
-    }
+    const ctx = await requireGroupRole(request, response, ['owner', 'admin']);
+    if (!ctx) return;
     return sendJson(response, 200, await feedbacks.updateGroup({
-      groupId: request.params.groupId,
+      groupId: ctx.group.id,
       name: name !== undefined ? name.trim() : undefined,
       avatar: avatar !== undefined ? (validText(avatar) ? avatar.trim() : null) : undefined
     }));
   } catch (error) { return next(error); }
 });
 app.delete('/api/groups/:groupId', async (request, response, next) => {
-  const auth = request.auth || {};
-  if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
   try {
-    const group = await feedbacks.getGroupById(request.params.groupId);
-    if (!group) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
-    const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
-    const callerUser = await feedbacks.getUserById(callerId);
-    const callerIsPrivileged = isPrivilegedRole(callerUser?.permissionRole);
-    if (!callerIsPrivileged && group.createdBy !== callerId) {
-      return sendError(response, request, 403, 'FORBIDDEN', 'Only the group\'s creator, an admin, or a manager can delete it.');
-    }
-    await feedbacks.deleteGroup(request.params.groupId);
+    const ctx = await requireGroupRole(request, response, ['owner']);
+    if (!ctx) return;
+    await feedbacks.deleteGroup(ctx.group.id);
     return response.status(204).end();
   } catch (error) { return next(error); }
 });
@@ -819,7 +870,7 @@ app.post('/api/topics/:topicId/typing', async (request, response, next) => {
 const ATTACHMENT_MAX_BYTES = 3 * 1024 * 1024;
 // Only these render inline; everything else (including SVG and HTML, which
 // can carry script) is served as a download, never interpreted by the browser.
-const INLINE_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+const INLINE_MEDIA_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'video/mp4', 'video/webm', 'video/ogg']);
 
 // Raw body, not JSON/base64 — the client always sends application/octet-stream
 // (so the global express.json never touches it) with the real name/type in
@@ -852,16 +903,30 @@ app.get('/api/attachments/:attachmentId', async (request, response, next) => {
       const { viewerId } = await resolveViewerForRead(request.auth);
       if (viewerId !== attachment.uploaderId) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No attachment with that id.');
     }
-    const inline = INLINE_IMAGE_TYPES.has(attachment.mimeType);
+    const inline = INLINE_MEDIA_TYPES.has(attachment.mimeType);
     afterLiveCheck(response, () => {
       response.set({
         'content-type': inline ? attachment.mimeType : 'application/octet-stream',
         'content-disposition': `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(attachment.filename)}`,
         'x-content-type-options': 'nosniff',
         'content-security-policy': "default-src 'none'; sandbox",
-        'cache-control': 'private, max-age=86400'
+        'cache-control': 'private, max-age=86400',
+        'accept-ranges': 'bytes'
       });
-      response.send(attachment.data);
+      // Byte ranges, so a video can be seeked (browsers won't otherwise).
+      const data = attachment.data;
+      const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.range || '');
+      if (range && (range[1] || range[2])) {
+        const start = range[1] ? Number(range[1]) : Math.max(0, data.length - Number(range[2]));
+        const end = range[1] && range[2] ? Math.min(Number(range[2]), data.length - 1) : data.length - 1;
+        if (start >= data.length || start > end) {
+          response.status(416).set('content-range', `bytes */${data.length}`).end();
+          return;
+        }
+        response.status(206).set('content-range', `bytes ${start}-${end}/${data.length}`).send(data.subarray(start, end + 1));
+        return;
+      }
+      response.send(data);
     });
   } catch (error) { return next(error); }
 });
@@ -874,13 +939,16 @@ app.delete('/api/topics/:topicId', async (request, response, next) => {
     if (!viewerId) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
     const topic = await feedbacks.getTopicById(request.params.topicId);
     if (!topic) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No topic with that id.');
-    if (!isPrivileged) {
+    // A group's own owner/sub-admins delete any of its topics (company
+    // admins/managers don't manage groups); elsewhere admins/managers do.
+    const canDeleteAny = topic.targetType === 'group' ? await isGroupManager(topic.targetId, viewerId) : isPrivileged;
+    if (!canDeleteAny) {
       if (!await feedbacks.canViewTopic({ topicId: request.params.topicId, viewerId, viewerIsPrivileged: false })) {
         return sendError(response, request, 403, 'FORBIDDEN', 'You do not have access to this topic.');
       }
       // Admins/managers can delete any topic; everyone else only an empty one.
       if (await feedbacks.countTopicMessages(request.params.topicId) > 0) {
-        return sendError(response, request, 403, 'FORBIDDEN', 'Only an empty topic can be deleted. Ask an admin or manager to remove one with messages.');
+        return sendError(response, request, 403, 'FORBIDDEN', 'Only an empty topic can be deleted. Ask an admin to remove one with messages.');
       }
     }
     await feedbacks.deleteTopic(request.params.topicId);

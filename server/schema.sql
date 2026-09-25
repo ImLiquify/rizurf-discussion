@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS `feedback` (
   `target_type`  varchar(10)  NOT NULL DEFAULT 'user',
   `topic_id`     varchar(60)  DEFAULT NULL,
   `attachment_id` varchar(60) DEFAULT NULL,
+  `reply_to_id`  varchar(60)  DEFAULT NULL,
+  `pinned_at`    timestamp    NULL DEFAULT NULL,
+  `pinned_by`    varchar(50)  DEFAULT NULL,
   `created_at`   timestamp    NOT NULL DEFAULT current_timestamp(),
   `updated_at`   timestamp    NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
@@ -110,6 +113,7 @@ CREATE TABLE IF NOT EXISTS `group_members` (
   `group_id`   varchar(50) NOT NULL,
   `user_id`    varchar(50) NOT NULL,
   `added_by`   varchar(50) DEFAULT NULL,
+  `role`       varchar(10) NOT NULL DEFAULT 'member',
   `created_at` timestamp   NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`group_id`, `user_id`),
   KEY `idx_group_members_user` (`user_id`),
@@ -166,4 +170,12 @@ CREATE TABLE IF NOT EXISTS `topic_typing` (
   `user_id`    varchar(50) NOT NULL,
   `updated_at` timestamp   NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`topic_id`, `user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+-- Per-person starred chat messages.
+CREATE TABLE IF NOT EXISTS `message_stars` (
+  `user_id`     varchar(50) NOT NULL,
+  `feedback_id` varchar(60) NOT NULL,
+  `created_at`  timestamp   NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`user_id`, `feedback_id`),
+  KEY `idx_message_stars_feedback` (`feedback_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

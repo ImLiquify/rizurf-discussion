@@ -81,7 +81,7 @@ export async function ensureSchemaCompatibility() {
   // schema.sql. `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` is MariaDB / MySQL
   // 8.0.29+ only — the VPS runs MySQL 5.7 — so check information_schema and
   // add just the missing columns.
-  const columns = await columnsOfTables(['users', 'reactions', 'feedback', 'feedback_groups']);
+  const columns = await columnsOfTables(['users', 'reactions', 'feedback', 'feedback_groups', 'group_members']);
 
   await addMissingColumns('users', [
     ['external_id', 'VARCHAR(120) NULL UNIQUE'],
@@ -123,7 +123,12 @@ export async function ensureSchemaCompatibility() {
     ['visibility', "VARCHAR(10) NOT NULL DEFAULT 'public'"],
     ['target_type', "VARCHAR(10) NOT NULL DEFAULT 'user'"],
     ['topic_id', 'VARCHAR(60) NULL'],
-    ['attachment_id', 'VARCHAR(60) NULL']
+    ['attachment_id', 'VARCHAR(60) NULL'],
+    // Chat actions: the message this one replies to (same topic), and a
+    // pin shared by everyone in the conversation.
+    ['reply_to_id', 'VARCHAR(60) NULL'],
+    ['pinned_at', 'TIMESTAMP NULL'],
+    ['pinned_by', 'VARCHAR(50) NULL']
   ], columns.get('feedback'));
 
   // Project groups. Named `feedback_groups`, not `groups` — GROUPS is a
@@ -149,6 +154,13 @@ export async function ensureSchemaCompatibility() {
     CONSTRAINT fk_group_members_group FOREIGN KEY (group_id) REFERENCES feedback_groups (id) ON DELETE CASCADE,
     CONSTRAINT fk_group_members_user FOREIGN KEY (user_id) REFERENCES users (id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
+
+  // 'admin' = a sub-admin appointed by the group's owner (its created_by,
+  // which is never stored here — see getGroupRole). Owner + sub-admins are
+  // the only people who can change a group.
+  await addMissingColumns('group_members', [
+    ['role', "VARCHAR(10) NOT NULL DEFAULT 'member'"]
+  ], columns.get('group_members'));
 
   // One level of sub-groups (e.g. "ERP System" -> "Frontend"/"Backend").
   // NULL means a top-level group. A sub-group is a fully independent,
@@ -271,5 +283,14 @@ export async function ensureSchemaCompatibility() {
     user_id varchar(50) NOT NULL,
     updated_at timestamp NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (topic_id, user_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
+
+  // Per-person starred messages (private to whoever starred them).
+  await pool.query(`CREATE TABLE IF NOT EXISTS message_stars (
+    user_id varchar(50) NOT NULL,
+    feedback_id varchar(60) NOT NULL,
+    created_at timestamp NOT NULL DEFAULT current_timestamp(),
+    PRIMARY KEY (user_id, feedback_id),
+    KEY idx_message_stars_feedback (feedback_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
 }

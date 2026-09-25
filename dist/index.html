@@ -7,7 +7,9 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <title>PulseFeedback — Enterprise Feedback & Workplace Improvement Hub</title>
+  <title>Rizurf Discussion</title>
+  <!-- Swapped at load for the Rizurf mark cropped out of the brand logo (setBrandFavicon). -->
+  <link rel="icon" id="appFavicon" href="/assets/logo-0Yo0gl14.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -1923,6 +1925,7 @@
 
     .feedbacks-compose-bar {
       display: flex;
+      flex-wrap: wrap;
       gap: 10px;
       align-items: flex-end;
       padding: 14px 20px;
@@ -2066,6 +2069,248 @@
 
     .dm-header-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 
+    /* ---- Per-message actions: hover toolbar (reply + "more"), the "more" menu. ---- */
+    .chat-message-row { position: relative; }
+    .chat-message-actions {
+      position: absolute;
+      top: -14px;
+      right: 8px;
+      display: flex;
+      gap: 2px;
+      padding: 2px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-full);
+      box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.08));
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.12s ease;
+    }
+    .chat-message-row.mine .chat-message-actions { right: auto; left: 8px; }
+    .chat-message-row:hover .chat-message-actions,
+    .chat-message-row:focus-within .chat-message-actions,
+    .chat-message-row.menu-open .chat-message-actions { opacity: 1; pointer-events: auto; }
+    @media (hover: none) {
+      .chat-message-actions { opacity: 1; pointer-events: auto; }
+    }
+    .chat-message-action-btn {
+      width: 26px; height: 26px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: var(--radius-full);
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      line-height: 1;
+    }
+    .chat-message-action-btn:hover { background: var(--bg-subtle); color: var(--text-main); }
+    .chat-message-flags { font-size: 0.72rem; color: var(--text-subtle); }
+    .chat-message-row.pinned { box-shadow: inset 3px 0 0 var(--accent-cyan); }
+    .chat-message-row.flash { animation: chat-flash 1.4s ease; }
+    @keyframes chat-flash { 0%, 40% { background: var(--accent-cyan-light); box-shadow: 0 0 0 2px var(--accent-cyan); } }
+
+    .chat-message-menu {
+      position: fixed;
+      z-index: 1200;
+      min-width: 170px;
+      padding: 6px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-lg);
+    }
+    .chat-message-menu[hidden] { display: none; }
+    .chat-message-menu button {
+      display: flex; align-items: center; gap: 10px;
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: var(--radius-sm, 6px);
+      font-size: 0.86rem;
+      color: var(--text-main);
+      text-align: left;
+    }
+    .chat-message-menu button:hover { background: var(--bg-subtle); }
+    .chat-message-menu button.danger { color: #DC2626; }
+    .chat-message-menu button.danger.armed { background: rgba(220, 38, 38, 0.1); font-weight: 700; }
+    .chat-message-menu .menu-icon { width: 18px; text-align: center; }
+
+    /* ---- Replies ---- */
+    .chat-reply-quote {
+      display: block;
+      width: 100%;
+      margin: 2px 0 4px;
+      padding: 5px 10px;
+      border-left: 3px solid var(--accent-cyan);
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.04);
+      text-align: left;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .chat-reply-quote strong { color: var(--text-main); margin-right: 6px; }
+    .compose-reply-bar {
+      flex-basis: 100%;
+      order: -1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-left: 3px solid var(--accent-cyan);
+      border-radius: 6px;
+      background: var(--bg-subtle);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      min-width: 0;
+    }
+    .compose-reply-bar[hidden] { display: none; }
+    .compose-reply-bar span { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .compose-reply-bar strong { color: var(--text-main); }
+    .compose-reply-bar button { color: var(--text-subtle); font-size: 1.1rem; line-height: 1; padding: 2px 6px; }
+
+    /* ---- Pinned messages bar (sticks to the top of the thread) ---- */
+    .chat-pinned-bar {
+      position: sticky;
+      top: -1px;
+      z-index: 5;
+      align-self: stretch;
+      max-height: 110px;
+      overflow-y: auto;
+      padding: 6px 10px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    }
+    .chat-pinned-bar button {
+      display: block;
+      width: 100%;
+      padding: 3px 4px;
+      text-align: left;
+      font-size: 0.8rem;
+      color: var(--text-main);
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      border-radius: 4px;
+    }
+    .chat-pinned-bar button:hover { background: var(--bg-subtle); }
+    .feedbacks-row-icon-btn.active { color: #D97706; background: rgba(217, 119, 6, 0.1); }
+
+    /* ---- Media in bubbles + lightbox ---- */
+    .chat-attachment-media {
+      position: relative;
+      display: block;
+      padding: 0;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      cursor: zoom-in;
+    }
+    .chat-attachment-media video { display: block; height: 200px; max-width: 100%; background: #000; }
+    .chat-video-play {
+      position: absolute;
+      inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff;
+      font-size: 2.2rem;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+      pointer-events: none;
+    }
+    .media-lightbox {
+      position: fixed;
+      inset: 0;
+      z-index: 1300;
+      display: flex;
+      flex-direction: column;
+      background: rgba(10, 12, 16, 0.92);
+    }
+    .media-lightbox[hidden] { display: none; }
+    .media-lightbox-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      color: #fff;
+    }
+    .media-lightbox-toolbar .lightbox-name { flex: 1; font-size: 0.88rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .media-lightbox-toolbar button, .media-lightbox-toolbar a {
+      min-width: 36px; height: 36px;
+      padding: 0 10px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      font-size: 0.9rem;
+      text-decoration: none;
+    }
+    .media-lightbox-toolbar button:hover, .media-lightbox-toolbar a:hover { background: rgba(255, 255, 255, 0.22); }
+    .lightbox-zoom-label { min-width: 48px; text-align: center; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+    .media-lightbox-stage {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      touch-action: none;
+    }
+    .media-lightbox-stage img, .media-lightbox-stage video {
+      max-width: 92vw;
+      max-height: calc(100vh - 90px);
+      transform-origin: center center;
+      user-select: none;
+    }
+    .media-lightbox-stage img { cursor: grab; }
+    .media-lightbox-stage img.dragging { cursor: grabbing; }
+
+    /* ---- Empty topic list: centred "create the first topic" graphic ---- */
+    .topic-empty-hero {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 40px 20px;
+      text-align: center;
+    }
+    .topic-empty-plus {
+      width: 88px; height: 88px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 50%;
+      border: 2px dashed var(--accent-cyan);
+      background: var(--accent-cyan-light);
+      color: var(--accent-cyan-hover);
+      font-size: 2.6rem;
+      font-weight: 300;
+      line-height: 1;
+      transition: transform 0.15s ease, background 0.15s ease;
+    }
+    .topic-empty-plus:hover { transform: scale(1.06); background: var(--bg-surface); }
+    .topic-empty-title { font-size: 1rem; font-weight: 700; color: var(--text-main); }
+    .topic-empty-sub { font-size: 0.85rem; color: var(--text-muted); }
+
+    /* ---- Group roles ---- */
+    .group-role-badge {
+      flex-shrink: 0;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+      font-size: 0.7rem;
+      font-weight: 700;
+      background: var(--bg-subtle);
+      color: var(--text-muted);
+    }
+    .group-role-badge.owner { background: rgba(217, 119, 6, 0.12); color: #B45309; }
+    .group-role-badge.admin { background: var(--accent-cyan-light); color: var(--accent-cyan-hover); }
+    .group-role-toggle {
+      flex-shrink: 0;
+      font-size: 0.74rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      padding: 2px 6px;
+    }
+    .group-role-toggle:hover { text-decoration: underline; }
+    .group-modal-hint { padding: 12px; font-size: 0.82rem; color: var(--text-subtle); text-align: center; }
+
     @media (max-width: 900px) {
       .feedbacks-layout { flex-direction: column; height: auto; }
       .feedbacks-sidebar { width: auto; border-right: none; border-bottom: 1px solid var(--border-color); }
@@ -2097,6 +2342,7 @@
     .group-modal-name-input:focus { outline: none; border-color: var(--accent-cyan); }
 
     .group-modal-member-list {
+      flex-shrink: 0;
       margin-top: 10px;
       max-height: 260px;
       overflow-y: auto;
@@ -2826,12 +3072,12 @@
             <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
           </svg>
         </span>
-        Feedbacks
+        Discussion
         <span class="nav-badge" id="feedbacksUnreadBadge" hidden>0</span>
       </a>
 
       <!-- Employee Wall: admins/managers only — hidden by default, revealed by JS once the signed-in role is confirmed privileged -->
-      <a class="sidebar-nav-link" id="sidebarBtnWall" style="display:none" onclick="switchMainTab('wall')" href="#">
+      <!-- <a class="sidebar-nav-link" id="sidebarBtnWall" style="display:none" onclick="switchMainTab('wall')" href="#">
         <span class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect>
@@ -2839,7 +3085,7 @@
           </svg>
         </span>
         Employee Wall
-      </a>
+      </a> -->
 
     </nav>
 
@@ -2873,9 +3119,9 @@
           </svg>
         </button>
         <nav class="breadcrumb">
-          <span>Feedback</span>
+          <span>Discussion</span>
           <span class="breadcrumb-sep">/</span>
-          <span class="breadcrumb-active" id="breadcrumbActive">Feedbacks</span>
+          <span class="breadcrumb-active" id="breadcrumbActive">Discussion</span>
         </nav>
       </div>
       <div class="top-header-right">
@@ -2934,6 +3180,7 @@
           </div>
           <div class="feedbacks-compose-bar" id="feedbacksComposeBar" hidden>
             <div class="mention-dropdown" id="mentionDropdown" hidden></div>
+            <div class="compose-reply-bar" id="composeReplyBar" hidden></div>
             <input type="file" id="composeFileInput" hidden onchange="handleAttachmentPicked(this)" />
             <button type="button" class="compose-attach-btn" id="composeAttachBtn" title="Attach an image or file (3 MB max)"
               aria-label="Attach an image or file" onclick="document.getElementById('composeFileInput').click()">
@@ -3111,6 +3358,24 @@
 
   <!-- Group modal: create a group/sub-group, or add members — a real
        searchable employee picker instead of window.prompt(). -->
+  <!-- One shared "more" menu for chat messages, positioned next to whichever
+       message's ⋯ button opened it (see openMessageMenu). -->
+  <div class="chat-message-menu" id="chatMessageMenu" role="menu" hidden></div>
+
+  <!-- Full-screen viewer for chat images/videos: zoom + pan, native seek for video. -->
+  <div class="media-lightbox" id="mediaLightbox" hidden role="dialog" aria-modal="true" aria-label="Media viewer">
+    <div class="media-lightbox-toolbar">
+      <span class="lightbox-name" id="lightboxName"></span>
+      <button type="button" onclick="zoomLightbox(-0.25)" title="Zoom out" aria-label="Zoom out">−</button>
+      <span class="lightbox-zoom-label" id="lightboxZoomLabel">100%</span>
+      <button type="button" onclick="zoomLightbox(0.25)" title="Zoom in" aria-label="Zoom in">+</button>
+      <button type="button" onclick="resetLightboxZoom()" title="Reset zoom">Reset</button>
+      <a id="lightboxDownload" href="#" download title="Download">Download</a>
+      <button type="button" onclick="closeLightbox()" title="Close" aria-label="Close viewer">✕</button>
+    </div>
+    <div class="media-lightbox-stage" id="lightboxStage" onclick="if (event.target === this) closeLightbox()"></div>
+  </div>
+
   <div class="modal-overlay" id="groupModalOverlay" onclick="handleGroupModalBackdropClick(event)">
     <div class="modal-content-card group-modal-card" onclick="event.stopPropagation()">
       <div class="modal-header">
@@ -3297,6 +3562,10 @@
     let conversationLoading = false; // messages in the open topic
     let editingChatMessageId = null; // chat message currently showing its inline edit box, or null
     let typingUsers = []; // [{id, name}] typing in the open topic, from the poll
+    let replyingTo = null; // {id, senderName, content} of the message the compose box is replying to
+    let showStarredOnly = false; // header ★ toggle: filter the open thread to my starred messages
+    let openMessageMenuId = null; // message whose ⋯ menu is open
+    let deleteArmed = false; // first click on "Delete" in that menu arms it, the second deletes
     let lastTypingSentAt = 0;
 
     // @mention autocomplete — groups and Organization only, never DMs (a 1:1
@@ -3310,14 +3579,12 @@
 
     function isPrivilegedViewer() { return currentRoleView === "admin" || currentRoleView === "manager"; }
 
-    // Discord-style leadership: whoever created a group manages it (members,
-    // name, photo, delete) alongside admins/managers — everyone else can
-    // just participate. Mirrors the gating in rizurfApi.js.
-    function isGroupLeaderOrPrivileged(groupId) {
-      if (isPrivilegedViewer()) return true;
-      const group = myGroups.find(g => g.id === groupId) || allGroupsDirectory.find(g => g.id === groupId);
-      return Boolean(group && group.createdBy === CURRENT_USER.id);
-    }
+    // A group is run by its owner (creator) and the sub-admins the owner
+    // appoints — company admins/managers get no bypass. myRole comes from
+    // GET /api/groups?mine=1. Mirrors requireGroupRole in rizurfApi.js.
+    function myGroupRole(groupId) { return myGroups.find(g => g.id === groupId)?.myRole || null; }
+    function isGroupManager(groupId) { return ["owner", "admin"].includes(myGroupRole(groupId)); }
+    function isGroupOwner(groupId) { return myGroupRole(groupId) === "owner"; }
 
     function updateCurrentUserProfile() {
       const sidebarName = document.getElementById("sidebarUserName");
@@ -3532,8 +3799,8 @@
        works whether called from a click or programmatically, e.g. when a
        demoted role needs to be bounced off the Wall tab). */
     const MAIN_TABS = {
-      feedbacks: { pane: "feedbacksViewPane", link: "sidebarBtnFeedbacks", label: "Feedbacks" },
-      wall: { pane: "wallViewPane", link: "sidebarBtnWall", label: "Employee Wall" }
+      feedbacks: { pane: "feedbacksViewPane", link: "sidebarBtnFeedbacks", label: "Discussion" },
+      // wall: { pane: "wallViewPane", link: "sidebarBtnWall", label: "Employee Wall" }
     };
     function toggleMobileSidebar() {
       document.querySelector(".sidebar")?.classList.toggle("mobile-open");
@@ -3753,7 +4020,6 @@
 
     const SETTINGS_GEAR_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`;
     const TRASH_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
-    const EDIT_PENCIL_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
 
     // Sub-groups render as plain clickable text, no icon box — just a row
     // you can press, nested under their expanded parent. Editing (rename,
@@ -3829,7 +4095,7 @@
         return `<div class="feedbacks-group-block">
           <div class="feedbacks-group-block-row">${expandToggle}${row}</div>
           ${subgroupsHtml}
-          <button type="button" class="feedbacks-subgroup-add-btn" onclick="createSubgroupPrompt('${group.id}')">+ Sub-group</button>
+          ${isGroupManager(group.id) ? `<button type="button" class="feedbacks-subgroup-add-btn" onclick="createSubgroupPrompt('${group.id}')">+ Sub-group</button>` : ""}
         </div>`;
       }).join("");
 
@@ -3902,7 +4168,7 @@
       document.getElementById("groupModalAvatarInput").value = initialAvatar || "";
       document.getElementById("groupModalAvatarPreview").src = avatarSrc(initialAvatar);
       document.getElementById("groupModalCurrentMembersField").hidden = mode !== "edit";
-      document.getElementById("groupModalDeleteBtn").hidden = mode !== "edit";
+      document.getElementById("groupModalDeleteBtn").hidden = mode !== "edit" || !isGroupOwner(targetGroupId);
       document.getElementById("groupModalAddLabel").textContent = mode === "create" ? "Members" : "Add members";
       document.getElementById("groupModalMemberSearch").value = "";
       document.getElementById("groupModalSubmitBtn").textContent = mode === "create" ? "Create" : "Add";
@@ -3979,16 +4245,46 @@
       renderGroupModalMemberList();
     }
 
+    // Owner: can promote/demote sub-admins and remove anyone but themselves.
+    // Sub-admin: can remove regular members only. Mirrors rizurfApi.js.
     function renderGroupModalCurrentMembers() {
       const listEl = document.getElementById("groupModalCurrentMembersList");
       if (!listEl) return;
-      listEl.innerHTML = groupModalCurrentMembers.length ? groupModalCurrentMembers.map(m => `
-        <div class="group-modal-member-row">
-          <img src="${avatarSrc(m.avatar)}" alt="${escapeHtml(m.name)}" class="group-modal-member-avatar" />
-          <span class="group-modal-member-name">${escapeHtml(m.name)}</span>
-          <button type="button" class="group-modal-member-remove" onclick="removeGroupModalMember('${m.id}')" title="Remove from group">&times;</button>
-        </div>
-      `).join("") : `<div class="feedbacks-section-empty">No members yet.</div>`;
+      const iAmOwner = isGroupOwner(groupModalTargetGroupId);
+      listEl.innerHTML = groupModalCurrentMembers.length ? groupModalCurrentMembers.map(m => {
+        const badge = m.role === "owner" ? `<span class="group-role-badge owner">Owner</span>`
+          : m.role === "admin" ? `<span class="group-role-badge admin">Sub-admin</span>` : "";
+        const roleToggle = iAmOwner && m.role !== "owner"
+          ? `<button type="button" class="group-role-toggle" onclick="setGroupModalMemberRole('${m.id}', '${m.role === "admin" ? "member" : "admin"}')">${m.role === "admin" ? "Remove sub-admin" : "Make sub-admin"}</button>`
+          : "";
+        const canRemove = m.role !== "owner" && (iAmOwner || m.role !== "admin");
+        const removeBtn = canRemove
+          ? `<button type="button" class="group-modal-member-remove" onclick="removeGroupModalMember('${m.id}')" title="Remove from group">&times;</button>`
+          : "";
+        return `
+          <div class="group-modal-member-row">
+            <img src="${avatarSrc(m.avatar)}" alt="${escapeHtml(m.name)}" class="group-modal-member-avatar" />
+            <span class="group-modal-member-name">${escapeHtml(m.name)}</span>
+            ${badge}${roleToggle}${removeBtn}
+          </div>`;
+      }).join("") : `<div class="feedbacks-section-empty">No members yet.</div>`;
+    }
+
+    async function setGroupModalMemberRole(userId, role) {
+      if (!groupModalTargetGroupId) return;
+      try {
+        const response = await fetch(`${API_BASE_URL}/groups/${groupModalTargetGroupId}/members/${userId}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role })
+        });
+        if (!response.ok) {
+          const err = await response.json().catch(() => null);
+          throw new Error(err?.error?.message || "Could not change that member's role.");
+        }
+        showToast(role === "admin" ? "Made sub-admin." : "Sub-admin removed.");
+        await refreshGroupModalCurrentMembers();
+      } catch (error) {
+        showToast(error.message || "Could not change that member's role.");
+      }
     }
 
     async function removeGroupModalMember(userId) {
@@ -4048,7 +4344,15 @@
       if (!listEl) return;
       const query = groupModalSearch.toLowerCase().trim();
       const existingIds = new Set(groupModalCurrentMembers.map(m => m.id));
-      const candidates = EMPLOYEES.filter(e => e.id !== CURRENT_USER.id && !existingIds.has(e.id) && (!query || e.name.toLowerCase().includes(query)));
+      // With the search box empty, show who's been picked so far (so clearing
+      // the search doesn't hide your selections); typing searches everyone.
+      const candidates = query
+        ? EMPLOYEES.filter(e => e.id !== CURRENT_USER.id && !existingIds.has(e.id) && e.name.toLowerCase().includes(query))
+        : EMPLOYEES.filter(e => groupModalSelectedIds.has(e.id));
+      if (!query && !candidates.length) {
+        listEl.innerHTML = `<div class="group-modal-hint">Search for people above to add them.</div>`;
+        return;
+      }
       listEl.innerHTML = candidates.length ? candidates.map(e => {
         const selected = groupModalSelectedIds.has(e.id);
         const avatarHtml = e.avatar
@@ -4135,6 +4439,8 @@
       topicSearchQuery = "";
       activeGroupMembers = [];
       typingUsers = [];
+      replyingTo = null;
+      showStarredOnly = false;
       if (type === "user") return openDirectMessage();
       renderFeedbacksTab();
       renderTopicList();
@@ -4214,7 +4520,7 @@
 
     function handleTopicSearch(value) {
       topicSearchQuery = value;
-      renderTopicList();
+      renderTopicRows();
     }
 
     function openTopicModal() {
@@ -4284,6 +4590,8 @@
       conversationMessages = [];
       conversationLoading = true;
       typingUsers = [];
+      replyingTo = null;
+      showStarredOnly = false;
       renderTopicList();
       await refreshActiveTopicMessages();
       startTopicPolling();
@@ -4310,6 +4618,8 @@
       stopTopicPolling();
       activeTopic = null;
       conversationMessages = [];
+      replyingTo = null;
+      topicSearchQuery = "";
       renderTopicList();
     }
 
@@ -4374,7 +4684,7 @@
         // nothing actually new; that redundant re-render was the "message
         // flickers/disappears" bug. Content is part of the signature so
         // someone else's edit re-renders too, not just new/removed messages.
-        const signature = list => list.map(m => `${m.id}\u0000${m.content}`).join("\u0001");
+        const signature = list => list.map(m => `${m.id}\u0000${m.content}\u0000${m.pinnedAt || ""}`).join("\u0001");
         if (signature([...fetched, ...pending]) === signature(conversationMessages)) return;
 
         conversationMessages = [...fetched, ...pending];
@@ -4427,6 +4737,7 @@
     // Must match INLINE_IMAGE_TYPES in server/rizurfApi.js — anything else is
     // served as a download, so it's shown as a file chip, not an <img>.
     const INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+    const INLINE_VIDEO_TYPES = new Set(["video/mp4", "video/webm", "video/ogg"]);
 
     function chatAttachmentHtml(message) {
       if (!message.attachmentId) return "";
@@ -4434,24 +4745,34 @@
       const name = escapeHtml(message.attachmentName || "file");
       if (message.pending) return `<div class="chat-attachment-file">📎 <span>${name}</span></div>`;
       if (INLINE_IMAGE_TYPES.has(message.attachmentType)) {
-        return `<a href="${url}" target="_blank" rel="noopener"><img class="chat-attachment-img" src="${url}" alt="${name}" loading="lazy" /></a>`;
+        return `<button type="button" class="chat-attachment-media" onclick="openLightboxForMessage('${message.id}')" title="Open image"><img class="chat-attachment-img" src="${url}" alt="${name}" loading="lazy" /></button>`;
+      }
+      if (INLINE_VIDEO_TYPES.has(message.attachmentType)) {
+        // #t=0.1 makes the browser paint a first frame as the thumbnail.
+        return `<button type="button" class="chat-attachment-media" onclick="openLightboxForMessage('${message.id}')" title="Play video"><video src="${url}#t=0.1" preload="metadata" muted playsinline></video><span class="chat-video-play" aria-hidden="true">▶</span></button>`;
       }
       return `<a class="chat-attachment-file" href="${url}" download>📎 <span>${name}</span><small>${formatBytes(message.attachmentSize)}</small></a>`;
     }
 
     function chatMessageBubbleHtml(message) {
       const mine = message.senderId === CURRENT_USER.id;
-      const editable = mine && !message.pending && withinEditWindow(message);
       // A caption-less attachment's content is just the server's "📎 name"
       // placeholder — the attachment itself already shows that.
       const showText = !(message.attachmentId && message.content === `📎 ${message.attachmentName}`);
+      const flags = `${message.pinnedAt ? " 📌" : ""}${message.starred ? " ★" : ""}`;
       const statusHtml = message.pending
         ? `<span class="chat-message-status">Sending…</span>`
-        : `<span class="chat-message-time">${formatDisplayTime(message.timestamp)}${message.isEdited ? " · edited" : ""}</span>`;
-      const editBtn = editable && editingChatMessageId !== message.id
-        ? `<button type="button" class="btn-action-icon-mini" onclick="startChatMessageEdit('${message.id}')" title="Edit message">${EDIT_PENCIL_SVG}</button>`
+        : `<span class="chat-message-time">${formatDisplayTime(message.timestamp)}${message.isEdited ? " · edited" : ""}</span>${flags ? `<span class="chat-message-flags">${flags}</span>` : ""}`;
+      const editing = editingChatMessageId === message.id;
+      const actionsHtml = message.pending || editing ? "" : `
+        <div class="chat-message-actions">
+          <button type="button" class="chat-message-action-btn" onclick="startReply('${message.id}')" title="Reply" aria-label="Reply">↩</button>
+          <button type="button" class="chat-message-action-btn" onclick="openMessageMenu(event, '${message.id}')" title="More" aria-label="More actions" aria-haspopup="menu">⋯</button>
+        </div>`;
+      const replyHtml = message.replyToId
+        ? `<button type="button" class="chat-reply-quote" onclick="jumpToMessage('${message.replyToId}')" title="Go to the original message">${message.replyToSenderName ? `<strong>${escapeHtml(message.replyToSenderName)}</strong>` : ""}${escapeHtml(message.replyToContent ?? "Original message was deleted")}</button>`
         : "";
-      const bodyHtml = editingChatMessageId === message.id
+      const bodyHtml = editing
         ? `<div class="inline-edit-box" style="margin-top:4px;">
              <textarea id="chat_edit_${message.id}" class="inline-edit-textarea" style="min-height:60px;">${escapeHtml(message.content)}</textarea>
              <div class="inline-edit-controls">
@@ -4459,13 +4780,13 @@
                <button class="btn-save-inline" onclick="saveChatMessageEdit('${message.id}')">Save</button>
              </div>
            </div>`
-        : `${chatAttachmentHtml(message)}${showText ? `<div class="chat-message-text">${message.targetType === "user" ? escapeHtml(message.content) : highlightMentionsHtml(message.content)}</div>` : ""}`;
+        : `${replyHtml}${chatAttachmentHtml(message)}${showText ? `<div class="chat-message-text">${message.targetType === "user" ? escapeHtml(message.content) : highlightMentionsHtml(message.content)}</div>` : ""}`;
       return `
-        <div class="chat-message-row${mine ? " mine" : ""}${message.pending ? " pending" : ""}" id="chat-msg-${message.id}">
+        <div class="chat-message-row${mine ? " mine" : ""}${message.pending ? " pending" : ""}${message.pinnedAt ? " pinned" : ""}${openMessageMenuId === message.id ? " menu-open" : ""}" id="chat-msg-${message.id}">
+          ${actionsHtml}
           <div class="chat-message-meta">
             <span class="chat-message-sender" style="color:${senderColorFor(message.senderId)}">${escapeHtml(message.senderName)}</span>
             ${statusHtml}
-            ${editBtn}
           </div>
           ${bodyHtml}
         </div>
@@ -4517,8 +4838,10 @@
     }
 
     function topicListItemHtml(topic) {
-      // Anyone can delete an empty topic; admins/managers can delete any.
-      const canDelete = isPrivilegedViewer() || !topic.lastMessageAt;
+      // Anyone can delete an empty topic. Any topic: a group's owner/sub-admins
+      // in their group, admins/managers everywhere else.
+      const canDelete = !topic.lastMessageAt
+        || (activeContainer?.type === "group" ? isGroupManager(activeContainer.id) : isPrivilegedViewer());
       const deleteBtn = canDelete
         ? `<button type="button" class="feedbacks-row-icon-btn danger" onclick="event.stopPropagation(); deleteTopicPrompt('${topic.id}', this)" title="Delete topic">${TRASH_SVG}</button>`
         : "";
@@ -4581,7 +4904,7 @@
         return;
       }
 
-      const canManageGroup = activeContainer.type === "group" && isGroupLeaderOrPrivileged(activeContainer.id);
+      const canManageGroup = activeContainer.type === "group" && isGroupManager(activeContainer.id);
       const groupActionsHtml = canManageGroup
         ? `<div style="display:flex; align-items:center; gap:10px;">
              <button type="button" class="feedbacks-new-group-btn" onclick="addMemberToActiveGroup()">+ Add member</button>
@@ -4591,15 +4914,38 @@
       header.innerHTML = `<div class="feedbacks-detail-title">${escapeHtml(activeContainer.name)}</div>${groupActionsHtml}`;
 
       composeBar.hidden = true;
+      if (!containerTopics.length) {
+        scroll.innerHTML = `
+          <div class="topic-empty-hero">
+            <button type="button" class="topic-empty-plus" onclick="openTopicModal()" aria-label="Create a new topic" title="Create a new topic">+</button>
+            <div class="topic-empty-title">No topics yet</div>
+            <div class="topic-empty-sub">Create the first topic in ${escapeHtml(activeContainer.name)}.</div>
+          </div>`;
+        return;
+      }
+      // Only (re)build the toolbar when it isn't already on screen — typing
+      // in the search box re-renders just the rows (renderTopicRows), so the
+      // input keeps focus instead of being replaced after every keystroke.
+      if (!document.getElementById("topicSearchInput")) {
+        scroll.innerHTML = `
+          <div class="topic-list-toolbar">
+            <input type="text" id="topicSearchInput" class="topic-search-input" placeholder="Search topics..." value="${escapeHtml(topicSearchQuery)}" oninput="handleTopicSearch(this.value)" />
+            <button type="button" class="feedbacks-new-group-btn" onclick="openTopicModal()">+ New topic</button>
+          </div>
+          <div id="topicListRows"></div>
+        `;
+      }
+      renderTopicRows();
+    }
+
+    function renderTopicRows() {
+      const rows = document.getElementById("topicListRows");
+      if (!rows) return;
       const query = topicSearchQuery.toLowerCase().trim();
       const filtered = query ? containerTopics.filter(t => t.name.toLowerCase().includes(query)) : containerTopics;
-      scroll.innerHTML = `
-        <div class="topic-list-toolbar">
-          <input type="text" class="topic-search-input" placeholder="Search topics..." value="${escapeHtml(topicSearchQuery)}" oninput="handleTopicSearch(this.value)" />
-          <button type="button" class="feedbacks-new-group-btn" onclick="openTopicModal()">+ New topic</button>
-        </div>
-        ${filtered.length ? filtered.map(topicListItemHtml).join("") : '<div class="feedbacks-empty-state">No topics yet — start one.</div>'}
-      `;
+      rows.innerHTML = filtered.length
+        ? filtered.map(topicListItemHtml).join("")
+        : `<div class="feedbacks-empty-state">No topics match "${escapeHtml(topicSearchQuery.trim())}".</div>`;
     }
 
     // forceScrollBottom: true for a fresh topic open or the user's own
@@ -4641,8 +4987,12 @@
           </div>
         `;
       }
+      header.insertAdjacentHTML("beforeend", `
+        <button type="button" class="feedbacks-row-icon-btn${showStarredOnly ? " active" : ""}" onclick="toggleStarredFilter()"
+          title="${showStarredOnly ? "Show all messages" : "Show only my starred messages"}" aria-pressed="${showStarredOnly}">★</button>`);
 
       composeBar.hidden = false;
+      renderReplyBar();
       if (conversationLoading) {
         scroll.innerHTML = skeletonBubblesHtml();
         return;
@@ -4653,9 +5003,16 @@
       const editDraft = editBox?.value;
       const editHadFocus = editBox && document.activeElement === editBox;
       const sorted = [...conversationMessages].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-      scroll.innerHTML = (sorted.length
-        ? sorted.map(chatMessageBubbleHtml).join("")
-        : `<div class="feedbacks-empty-state">No messages yet — say hello.</div>`)
+      const pinned = sorted.filter(m => m.pinnedAt).sort((a, b) => new Date(b.pinnedAt) - new Date(a.pinnedAt));
+      const pinnedHtml = pinned.length
+        ? `<div class="chat-pinned-bar" aria-label="Pinned messages">${pinned.map(m =>
+            `<button type="button" onclick="jumpToMessage('${m.id}')">📌 <strong>${escapeHtml(m.senderName)}:</strong> ${escapeHtml(m.content)}</button>`).join("")}</div>`
+        : "";
+      const visible = showStarredOnly ? sorted.filter(m => m.starred) : sorted;
+      scroll.innerHTML = pinnedHtml
+        + (visible.length
+          ? visible.map(chatMessageBubbleHtml).join("")
+          : `<div class="feedbacks-empty-state">${showStarredOnly ? "You haven't starred anything here yet." : "No messages yet — say hello."}</div>`)
         + `<div class="chat-typing" id="chatTypingIndicator" hidden></div>`;
       renderTypingIndicator();
       if (editDraft !== undefined) {
@@ -4785,6 +5142,11 @@
           return;
         }
       }
+      if (event.key === "Escape" && replyingTo) {
+        event.preventDefault();
+        cancelReply();
+        return;
+      }
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
         sendFeedbacksMessage();
@@ -4808,6 +5170,11 @@
       const attachmentFields = attachment
         ? { attachmentId: attachment.id, attachmentName: attachment.name, attachmentType: attachment.type, attachmentSize: attachment.size }
         : {};
+      const replyTo = replyingTo;
+      const replyFields = replyTo
+        ? { replyToId: replyTo.id, replyToContent: replyTo.content, replyToSenderName: replyTo.senderName }
+        : {};
+      cancelReply();
 
       // Capture which topic this send belongs to — activeTopic/conversationMessages/
       // the compose box are all single shared globals that can point at a
@@ -4825,7 +5192,7 @@
         senderAvatar: CURRENT_USER.avatar, timestamp: new Date().toISOString(), pending: true,
         // Same text the server stores for a caption-less attachment, so the
         // poll's sender+content match still pairs this with the real row.
-        content: content || `📎 ${attachment.name}`, ...attachmentFields
+        content: content || `📎 ${attachment.name}`, ...attachmentFields, ...replyFields
       });
       renderConversationMessages(true);
 
@@ -4833,7 +5200,7 @@
         sentTopicId = await ensureActiveTopicId();
         const response = await fetch(`${API_BASE_URL}/feedback`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ visibility: "private", topicId: sentTopicId, content, attachmentId: attachment?.id })
+          body: JSON.stringify({ visibility: "private", topicId: sentTopicId, content, attachmentId: attachment?.id, replyToId: replyTo?.id })
         });
         if (!response.ok) throw new Error("Send failed");
         const saved = await response.json();
@@ -4849,7 +5216,7 @@
             if (pendingIndex !== -1) {
               conversationMessages[pendingIndex] = {
                 id: saved.id, senderId: saved.sender_id, senderName: CURRENT_USER.name,
-                senderAvatar: CURRENT_USER.avatar, content: saved.content, timestamp: saved.created_at, ...attachmentFields
+                senderAvatar: CURRENT_USER.avatar, content: saved.content, timestamp: saved.created_at, ...attachmentFields, ...replyFields
               };
             }
           }
@@ -4870,6 +5237,7 @@
       } catch (error) {
         if (activeTopic?.id === sentTopicId) {
           conversationMessages = conversationMessages.filter(m => m.id !== pendingId);
+          replyingTo = replyTo;
           renderConversationMessages();
           input.value = content;
         }
@@ -4908,6 +5276,292 @@
         setButtonBusy(btn, false);
       }
     }
+
+    // ---- Per-message actions: reply, star (just for me), pin (for everyone
+    // in the chat), copy, edit, delete. One shared ⋯ menu element. ----
+    function openMessageMenu(event, messageId) {
+      event.stopPropagation();
+      const menu = document.getElementById("chatMessageMenu");
+      if (openMessageMenuId === messageId && !menu.hidden) { closeMessageMenu(); return; }
+      closeMessageMenu();
+      openMessageMenuId = messageId;
+      renderMessageMenu();
+      menu.hidden = false;
+      const rect = event.currentTarget.getBoundingClientRect();
+      menu.style.top = `${Math.max(8, Math.min(rect.bottom + 4, innerHeight - menu.offsetHeight - 8))}px`;
+      menu.style.left = `${Math.max(8, Math.min(rect.right - menu.offsetWidth, innerWidth - menu.offsetWidth - 8))}px`;
+      document.getElementById(`chat-msg-${messageId}`)?.classList.add("menu-open");
+      menu.querySelector("button")?.focus({ preventScroll: true });
+    }
+
+    function closeMessageMenu() {
+      const menu = document.getElementById("chatMessageMenu");
+      if (menu) menu.hidden = true;
+      document.querySelectorAll(".chat-message-row.menu-open").forEach(el => el.classList.remove("menu-open"));
+      openMessageMenuId = null;
+      deleteArmed = false;
+    }
+
+    // Mirrors canModerateMessage in rizurfApi.js.
+    function canDeleteChatMessage(message) {
+      if (message.senderId === CURRENT_USER.id) return true;
+      return activeContainer?.type === "group" ? isGroupManager(activeContainer.id) : isPrivilegedViewer();
+    }
+
+    function renderMessageMenu() {
+      const message = conversationMessages.find(m => m.id === openMessageMenuId);
+      if (!message) { closeMessageMenu(); return; }
+      const item = (action, icon, label, cls = "") =>
+        `<button type="button" role="menuitem" class="${cls}" onclick="messageMenuAction('${action}')"><span class="menu-icon" aria-hidden="true">${icon}</span>${label}</button>`;
+      document.getElementById("chatMessageMenu").innerHTML = [
+        item("reply", "↩", "Reply"),
+        item("star", message.starred ? "☆" : "★", message.starred ? "Unstar" : "Star"),
+        item("pin", "📌", message.pinnedAt ? "Unpin" : "Pin"),
+        item("copy", "⧉", "Copy text"),
+        message.senderId === CURRENT_USER.id && withinEditWindow(message) ? item("edit", "✎", "Edit") : "",
+        canDeleteChatMessage(message)
+          ? item("delete", "🗑", deleteArmed ? "Click again to delete" : "Delete", `danger${deleteArmed ? " armed" : ""}`) : ""
+      ].join("");
+    }
+
+    function messageMenuAction(action) {
+      const id = openMessageMenuId;
+      // Delete takes a second click on the same item — no blocking confirm().
+      if (action === "delete" && !deleteArmed) { deleteArmed = true; renderMessageMenu(); return; }
+      closeMessageMenu();
+      if (action === "reply") startReply(id);
+      else if (action === "star") toggleMessageStar(id);
+      else if (action === "pin") toggleMessagePin(id);
+      else if (action === "copy") copyMessageText(id);
+      else if (action === "edit") startChatMessageEdit(id);
+      else if (action === "delete") deleteChatMessage(id);
+    }
+
+    async function toggleMessageStar(id) {
+      const message = conversationMessages.find(m => m.id === id);
+      if (!message) return;
+      const starred = !message.starred;
+      message.starred = starred;
+      renderConversationMessages();
+      try {
+        const response = await fetch(`${API_BASE_URL}/feedback/${id}/star`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ starred })
+        });
+        if (!response.ok) throw new Error();
+        showToast(starred ? "⭐ Starred — only you can see this." : "Star removed.");
+      } catch (error) {
+        message.starred = !starred;
+        renderConversationMessages();
+        showToast("Could not update the star. Please try again.");
+      }
+    }
+
+    async function toggleMessagePin(id) {
+      const message = conversationMessages.find(m => m.id === id);
+      if (!message) return;
+      const previous = message.pinnedAt;
+      const pinned = !previous;
+      message.pinnedAt = pinned ? new Date().toISOString() : null;
+      renderConversationMessages();
+      try {
+        const response = await fetch(`${API_BASE_URL}/feedback/${id}/pin`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pinned })
+        });
+        if (!response.ok) throw new Error();
+        showToast(pinned ? "📌 Pinned for everyone in this chat." : "Unpinned.");
+      } catch (error) {
+        message.pinnedAt = previous;
+        renderConversationMessages();
+        showToast("Could not update the pin. Please try again.");
+      }
+    }
+
+    function copyMessageText(id) {
+      const message = conversationMessages.find(m => m.id === id);
+      if (!message) return;
+      navigator.clipboard.writeText(message.content)
+        .then(() => showToast("Copied."))
+        .catch(() => showToast("Could not copy that message."));
+    }
+
+    async function deleteChatMessage(id) {
+      const index = conversationMessages.findIndex(m => m.id === id);
+      if (index < 0) return;
+      const topicId = activeTopic?.id;
+      const [removed] = conversationMessages.splice(index, 1);
+      if (replyingTo?.id === id) cancelReply();
+      renderConversationMessages();
+      try {
+        const response = await fetch(`${API_BASE_URL}/feedback/${id}`, { method: "DELETE" });
+        if (!response.ok) {
+          const err = await response.json().catch(() => null);
+          throw new Error(err?.error?.message || "Could not delete that message.");
+        }
+        showToast("🗑️ Message deleted.");
+        refreshMyTopics();
+      } catch (error) {
+        if (activeTopic?.id === topicId && !conversationMessages.some(m => m.id === id)) {
+          conversationMessages.push(removed);
+          renderConversationMessages();
+        }
+        showToast(error.message || "Could not delete that message.");
+      }
+    }
+
+    function startReply(id) {
+      const message = conversationMessages.find(m => m.id === id);
+      if (!message) return;
+      replyingTo = { id, senderName: message.senderName, content: message.content };
+      renderReplyBar();
+      document.getElementById("feedbacksComposeInput")?.focus({ preventScroll: true });
+    }
+
+    function cancelReply() {
+      replyingTo = null;
+      renderReplyBar();
+    }
+
+    function renderReplyBar() {
+      const bar = document.getElementById("composeReplyBar");
+      if (!bar) return;
+      bar.hidden = !replyingTo;
+      bar.innerHTML = replyingTo
+        ? `<span>Replying to <strong>${escapeHtml(replyingTo.senderName)}</strong>: ${escapeHtml(replyingTo.content)}</span>
+           <button type="button" onclick="cancelReply()" title="Cancel reply" aria-label="Cancel reply">✕</button>`
+        : "";
+    }
+
+    // Scrolls the thread (only the thread — see renderConversationMessages)
+    // to a message and flashes it; used by reply quotes and pinned items.
+    function jumpToMessage(id) {
+      let el = document.getElementById(`chat-msg-${id}`);
+      if (!el && showStarredOnly) {
+        showStarredOnly = false;
+        renderConversationMessages();
+        el = document.getElementById(`chat-msg-${id}`);
+      }
+      if (!el) { showToast("That message isn't available anymore."); return; }
+      const scroll = document.getElementById("feedbacksMessagesScroll");
+      const pinnedBar = scroll.querySelector(".chat-pinned-bar");
+      scroll.scrollTop += el.getBoundingClientRect().top - scroll.getBoundingClientRect().top - (pinnedBar ? pinnedBar.offsetHeight + 12 : 12);
+      el.classList.remove("flash");
+      void el.offsetWidth; // restart the animation
+      el.classList.add("flash");
+    }
+
+    function toggleStarredFilter() {
+      showStarredOnly = !showStarredOnly;
+      renderConversationMessages(true);
+    }
+
+    // ---- Media viewer: zoom (buttons, wheel, double-click) and drag-to-pan
+    // for images; videos get the same zoom plus their native seek controls. ----
+    let lightboxZoom = 1;
+    let lightboxPan = { x: 0, y: 0 };
+    let lightboxDrag = null;
+
+    function attachmentUrl(message) {
+      return `${API_BASE_URL}/attachments/${encodeURIComponent(message.attachmentId)}`;
+    }
+
+    function openLightboxForMessage(id) {
+      const message = conversationMessages.find(m => m.id === id);
+      if (!message?.attachmentId) return;
+      const url = attachmentUrl(message);
+      const name = escapeHtml(message.attachmentName || "");
+      document.getElementById("lightboxStage").innerHTML = INLINE_VIDEO_TYPES.has(message.attachmentType)
+        ? `<video id="lightboxMedia" src="${url}" controls autoplay playsinline></video>`
+        : `<img id="lightboxMedia" src="${url}" alt="${name}" draggable="false" ondblclick="lightboxZoom > 1 ? resetLightboxZoom() : zoomLightbox(1)" />`;
+      document.getElementById("lightboxName").textContent = message.attachmentName || "";
+      const download = document.getElementById("lightboxDownload");
+      download.href = url;
+      download.setAttribute("download", message.attachmentName || "");
+      resetLightboxZoom();
+      document.getElementById("mediaLightbox").hidden = false;
+      document.body.style.overflow = "hidden";
+    }
+
+    function closeLightbox() {
+      const lightbox = document.getElementById("mediaLightbox");
+      if (!lightbox || lightbox.hidden) return;
+      lightbox.hidden = true;
+      document.getElementById("lightboxStage").innerHTML = ""; // stops a playing video
+      document.body.style.overflow = "";
+    }
+
+    function applyLightboxTransform() {
+      const media = document.getElementById("lightboxMedia");
+      if (media) media.style.transform = `translate(${lightboxPan.x}px, ${lightboxPan.y}px) scale(${lightboxZoom})`;
+      document.getElementById("lightboxZoomLabel").textContent = `${Math.round(lightboxZoom * 100)}%`;
+    }
+
+    function zoomLightbox(delta) {
+      lightboxZoom = Math.min(5, Math.max(0.5, Math.round((lightboxZoom + delta) * 100) / 100));
+      if (lightboxZoom <= 1) lightboxPan = { x: 0, y: 0 };
+      applyLightboxTransform();
+    }
+
+    function resetLightboxZoom() {
+      lightboxZoom = 1;
+      lightboxPan = { x: 0, y: 0 };
+      applyLightboxTransform();
+    }
+
+    (function wireLightbox() {
+      const stage = document.getElementById("lightboxStage");
+      stage.addEventListener("wheel", event => {
+        event.preventDefault();
+        zoomLightbox(event.deltaY < 0 ? 0.2 : -0.2);
+      }, { passive: false });
+      stage.addEventListener("pointerdown", event => {
+        if (event.target.tagName !== "IMG" || lightboxZoom <= 1) return;
+        lightboxDrag = { x: event.clientX - lightboxPan.x, y: event.clientY - lightboxPan.y };
+        event.target.setPointerCapture(event.pointerId);
+        event.target.classList.add("dragging");
+      });
+      stage.addEventListener("pointermove", event => {
+        if (!lightboxDrag) return;
+        lightboxPan = { x: event.clientX - lightboxDrag.x, y: event.clientY - lightboxDrag.y };
+        applyLightboxTransform();
+      });
+      const endDrag = event => {
+        lightboxDrag = null;
+        event.target.classList?.remove("dragging");
+      };
+      stage.addEventListener("pointerup", endDrag);
+      stage.addEventListener("pointercancel", endDrag);
+    })();
+
+    document.addEventListener("click", event => {
+      if (!event.target.closest("#chatMessageMenu")) closeMessageMenu();
+    });
+    document.addEventListener("keydown", event => {
+      const lightboxOpen = !document.getElementById("mediaLightbox").hidden;
+      if (event.key === "Escape") { closeLightbox(); closeMessageMenu(); }
+      else if (lightboxOpen && (event.key === "+" || event.key === "=")) zoomLightbox(0.25);
+      else if (lightboxOpen && event.key === "-") zoomLightbox(-0.25);
+    });
+
+    // The tab icon is the Rizurf mark: the square at the left end of the wide
+    // brand logo, cropped out at load (no separate icon file exists).
+    (function setBrandFavicon() {
+      const img = new Image();
+      img.onload = () => {
+        const side = img.naturalHeight;
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 64;
+        const ctx = canvas.getContext("2d");
+        // On the sidebar colour, like the app shell — the mark has white
+        // strokes that vanish on a light browser tab otherwise.
+        ctx.fillStyle = "#0B1727";
+        ctx.beginPath();
+        ctx.roundRect(0, 0, 64, 64, 14);
+        ctx.fill();
+        ctx.drawImage(img, 0, 0, side, side, 8, 8, 48, 48);
+        document.getElementById("appFavicon").href = canvas.toDataURL("image/png");
+      };
+      img.src = "/assets/logo-0Yo0gl14.png";
+    })();
 
     function handleGoToAllApps() {
       window.location.href = "https://web-omega-two-47.vercel.app/apps";
