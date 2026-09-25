@@ -10,8 +10,9 @@
   <title>Rizurf Discussion</title>
   <!-- Apply the saved theme before first paint (no light flash). -->
   <script>try { if (localStorage.getItem("rizurf-theme") === "dark") document.documentElement.dataset.theme = "dark"; } catch (e) {}</script>
-  <!-- Gateway button (SS-28). Lifted 88px so it clears the chat compose bar. -->
-  <script src="https://web-omega-two-47.vercel.app/widget/gateway-button.js" data-offset="88" defer></script>
+  <!-- Gateway button (SS-28). The layout reserves its bottom-right corner
+       (see "gateway button space" in the CSS), so it never covers the chat. -->
+  <script src="https://web-omega-two-47.vercel.app/widget/gateway-button.js" defer></script>
   <link rel="icon" href="https://web-omega-two-47.vercel.app/logo-icon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -3410,6 +3411,23 @@
     .sidebar-user-avatar .status-dot { border-color: var(--bg-surface); }
 
     .modal-overlay { background: rgba(2, 23, 50, 0.5); }
+
+    /* Gateway button space: the gateway's floating button sits 20px from the
+       bottom-right (44px tall, ~140px wide; a 48px circle on phones). Keep
+       that corner empty: beside Send in a chat, under the member list in a
+       group, and at the end of a topic list. */
+    .feedbacks-layout:has(#membersPanel[hidden]) .feedbacks-compose-bar { padding-right: 180px; }
+    .members-panel { padding-bottom: 88px; }
+    .feedbacks-detail:has(#feedbacksComposeBar[hidden]) .feedbacks-messages-scroll { padding-bottom: 88px; }
+    @media (max-width: 900px) {
+      .members-panel { padding-bottom: 16px; }
+      .feedbacks-compose-bar,
+      .feedbacks-layout:has(#membersPanel[hidden]) .feedbacks-compose-bar { padding-right: 180px; }
+    }
+    @media (max-width: 560px) {
+      .feedbacks-compose-bar,
+      .feedbacks-layout:has(#membersPanel[hidden]) .feedbacks-compose-bar { padding-right: 80px; }
+    }
 
     .toast-card {
       background: var(--brand-navy);

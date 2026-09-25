@@ -8,7 +8,6 @@ import { config } from './config.js';
 import { databaseIsHealthy, ensureSchemaCompatibility } from './database.js';
 import { fetchAllInterns } from './internApi.js';
 import * as feedbacks from './feedbackRepository.js';
-import { publishUnreadBadges } from './gatewayBadges.js';
 import { clearSession, exchangeAuthorizationCode, gatewayAuthorizeUrl, gatewaySessionStatus, noStoreHeaders, readSession, renewSessionIfConfirmed, setSession, verifyGatewayToken } from './sessionAuth.js';
 
 const app = express();
@@ -337,17 +336,24 @@ app.get('/health', async (request, response) => {
   try { await databaseIsHealthy(); return sendJson(response, 200, { status: 'ok', service: config.serviceId, version: openapi.info.version, uptime_seconds: Math.floor((Date.now() - startedAt) / 1000), checks: { database: true } }); }
   catch { return sendJson(response, 200, { status: 'degraded', service: config.serviceId, version: openapi.info.version, uptime_seconds: Math.floor((Date.now() - startedAt) / 1000), checks: { database: false } }); }
 });
-// Full badge refresh for everyone: nightly via Vercel Cron (vercel.json,
-// which sends "Authorization: Bearer $CRON_SECRET"), or once by hand with
-// the same header. Reports what the gateway said, so it doubles as the
-// badge health check. Not in the OpenAPI doc: internal, not a service API.
-app.get('/cron/badges', async (request, response) => {
-  if (!process.env.CRON_SECRET || request.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
-    return sendError(response, request, 401, 'UNAUTHORIZED', 'Needs the cron secret.');
+// App-icon badge (MICROAPP_BADGES.md): the gateway reads this about once a
+// minute with an access token it signed for this service — the token is the
+// credential, so it sits outside the session check (not in the OpenAPI doc,
+// so the scope middleware lets it through to here).
+app.get('/gateway/badges', async (request, response) => {
+  const token = /^Bearer\s+(\S+)$/i.exec(request.headers.authorization || '')?.[1];
+  try {
+    // verifyGatewayToken checks signature (JWKS), iss, aud = our service id,
+    // token_use = access and expiry.
+    const claims = await verifyGatewayToken(token || '', 'access');
+    if (!String(claims.scope || '').split(/\s+/).includes('gateway:badges:read')) throw new Error('scope');
+  } catch {
+    return sendError(response, request, 401, 'UNAUTHENTICATED', 'Gateway token required.');
   }
   try {
-    return sendJson(response, 200, await publishUnreadBadges(await feedbacks.activeUserIds()));
-  } catch (error) { return sendError(response, request, 500, 'INTERNAL_ERROR', String(error.message || error)); }
+    response.set('cache-control', 'no-store');
+    return sendJson(response, 200, { badges: await feedbacks.unreadBadges() });
+  } catch (error) { return sendError(response, request, 500, 'INTERNAL_ERROR', 'Could not count unread messages.'); }
 });
 const OPENAPI_JSON = JSON.stringify(openapi);
 app.get('/openapi.json', (_request, response) => {
@@ -505,7 +511,6 @@ app.delete('/api/feedback/:feedbackId', async (request, response, next) => {
         : 'Only the author or someone who moderates this conversation can delete this.');
     }
     await feedbacks.deleteFeedback(request.params.feedbackId);
-    if (meta.topicId) await publishUnreadBadges(await feedbacks.topicAudienceIds(meta.topicId));
     return response.status(204).end();
   } catch (error) { return next(error); }
 });
@@ -588,7 +593,6 @@ async function createPrivateFeedback(request, response, next) {
       feedbacks.markTopicRead({ topicId, userId: senderId }),
       feedbacks.clearTyping({ topicId, userId: senderId })
     ]);
-    await publishUnreadBadges(await feedbacks.topicAudienceIds(topicId));
     return sendJson(response, 201, created);
   } catch (error) { return next(error); }
 }
@@ -1000,7 +1004,6 @@ app.post('/api/topics/:topicId/read', async (request, response, next) => {
       return sendError(response, request, 403, 'FORBIDDEN', 'You do not have access to this topic.');
     }
     await feedbacks.markTopicRead({ topicId: request.params.topicId, userId: viewerId });
-    await publishUnreadBadges([viewerId]);
     return response.status(204).end();
   } catch (error) { return next(error); }
 });
@@ -1100,9 +1103,7 @@ app.delete('/api/topics/:topicId', async (request, response, next) => {
         return sendError(response, request, 403, 'FORBIDDEN', 'Only an empty topic can be deleted. Ask an admin to remove one with messages.');
       }
     }
-    const audience = await feedbacks.topicAudienceIds(request.params.topicId);
     await feedbacks.deleteTopic(request.params.topicId);
-    await publishUnreadBadges(audience);
     return response.status(204).end();
   } catch (error) { return next(error); }
 });

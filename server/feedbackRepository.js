@@ -910,46 +910,28 @@ export async function listTyping({ topicId, viewerId, viewerIsPrivileged }) {
   return rows;
 }
 
-// Everyone who can read a topic (the people whose unread badge a new message
-// in it changes). ponytail: the shared Organization channel is everyone, so
-// one org message recomputes every active user's badge — batch/debounce this
-// if the org channel gets busy.
-export async function topicAudienceIds(topicId) {
-  const [rows] = await pool.execute(
-    `SELECT u.id FROM topics t JOIN users u ON u.removed_at IS NULL AND (
-       (t.target_type = 'user' AND u.id IN (t.created_by, t.target_id))
-       OR (t.target_type = 'group' AND u.id IN (SELECT user_id FROM group_members WHERE group_id = t.target_id))
-       OR (t.target_type = 'org' AND (t.target_id = 'organization' OR u.id IN (t.created_by, t.target_id))))
-     WHERE t.id = ?`,
-    [topicId]
-  );
-  return rows.map(row => row.id);
-}
-
-export async function activeUserIds() {
-  const [rows] = await pool.execute('SELECT id FROM users WHERE removed_at IS NULL');
-  return rows.map(row => row.id);
-}
-
-// Total unread per person across every topic they can see — the same unread
-// rule as listMyTopics (non-privileged), as { email, count } for the gateway.
-export async function unreadBadges(userIds) {
-  if (!userIds.length) return [];
+// Unread chat messages per person, for the gateway's app-icon badge
+// (GET /gateway/badges): the same unread rule as listMyTopics
+// (non-privileged), only people with something, at most 5,000.
+// ponytail: one correlated subquery per active user, fine at a few hundred
+// users; keep a per-user unread counter if the gateway's minutely read gets slow.
+export async function unreadBadges() {
   const [rows] = await pool.query(
-    `SELECT u.email,
-       (SELECT COUNT(*) FROM feedback f
-          JOIN topics t ON t.id = f.topic_id
-          LEFT JOIN topic_reads r ON r.topic_id = t.id AND r.user_id = u.id
-          WHERE f.sender_id <> u.id AND f.created_at > COALESCE(r.last_read_at, '1970-01-02')
-            AND (t.created_by = u.id
-              OR (t.target_type = 'user' AND t.target_id = u.id)
-              OR (t.target_type = 'org' AND (t.target_id = 'organization' OR t.target_id = u.id))
-              OR (t.target_type = 'group' AND t.target_id IN (SELECT group_id FROM group_members WHERE user_id = u.id)))
-       ) AS count
-     FROM users u WHERE u.id IN (?) AND u.email IS NOT NULL AND u.email <> ''`,
-    [userIds]
+    `SELECT email, count FROM (
+       SELECT u.email,
+         (SELECT COUNT(*) FROM feedback f
+            JOIN topics t ON t.id = f.topic_id
+            LEFT JOIN topic_reads r ON r.topic_id = t.id AND r.user_id = u.id
+            WHERE f.sender_id <> u.id AND f.created_at > COALESCE(r.last_read_at, '1970-01-02')
+              AND (t.created_by = u.id
+                OR (t.target_type = 'user' AND t.target_id = u.id)
+                OR (t.target_type = 'org' AND (t.target_id = 'organization' OR t.target_id = u.id))
+                OR (t.target_type = 'group' AND t.target_id IN (SELECT group_id FROM group_members WHERE user_id = u.id)))
+         ) AS count
+       FROM users u WHERE u.removed_at IS NULL AND u.email IS NOT NULL AND u.email <> ''
+     ) unread WHERE count > 0 LIMIT 5000`
   );
-  return rows.map(row => ({ email: row.email, count: Math.min(Number(row.count), 99999) }));
+  return rows.map(row => ({ email: row.email, count: Number(row.count) }));
 }
 
 export async function markTopicRead({ topicId, userId }) {

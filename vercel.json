@@ -6,9 +6,6 @@
       "includeFiles": "dist/**"
     }
   },
-  "crons": [
-    { "path": "/cron/badges", "schedule": "0 18 * * *" }
-  ],
   "routes": [
     { "src": "/(.*)", "dest": "/api/index" }
   ]
