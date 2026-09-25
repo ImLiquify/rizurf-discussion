@@ -8,6 +8,7 @@ import { config } from './config.js';
 import { databaseIsHealthy, ensureSchemaCompatibility } from './database.js';
 import { fetchAllInterns } from './internApi.js';
 import * as feedbacks from './feedbackRepository.js';
+import { publishUnreadBadgesLater } from './gatewayBadges.js';
 import { clearSession, exchangeAuthorizationCode, gatewayAuthorizeUrl, gatewaySessionStatus, noStoreHeaders, readSession, renewSessionIfConfirmed, setSession, verifyGatewayToken } from './sessionAuth.js';
 
 const app = express();
@@ -492,6 +493,7 @@ app.delete('/api/feedback/:feedbackId', async (request, response, next) => {
         : 'Only the author or someone who moderates this conversation can delete this.');
     }
     await feedbacks.deleteFeedback(request.params.feedbackId);
+    if (meta.topicId) publishUnreadBadgesLater(feedbacks.topicAudienceIds(meta.topicId));
     return response.status(204).end();
   } catch (error) { return next(error); }
 });
@@ -574,6 +576,7 @@ async function createPrivateFeedback(request, response, next) {
       feedbacks.markTopicRead({ topicId, userId: senderId }),
       feedbacks.clearTyping({ topicId, userId: senderId })
     ]);
+    publishUnreadBadgesLater(feedbacks.topicAudienceIds(topicId));
     return sendJson(response, 201, created);
   } catch (error) { return next(error); }
 }
@@ -985,6 +988,7 @@ app.post('/api/topics/:topicId/read', async (request, response, next) => {
       return sendError(response, request, 403, 'FORBIDDEN', 'You do not have access to this topic.');
     }
     await feedbacks.markTopicRead({ topicId: request.params.topicId, userId: viewerId });
+    publishUnreadBadgesLater([viewerId]);
     return response.status(204).end();
   } catch (error) { return next(error); }
 });
@@ -1084,7 +1088,9 @@ app.delete('/api/topics/:topicId', async (request, response, next) => {
         return sendError(response, request, 403, 'FORBIDDEN', 'Only an empty topic can be deleted. Ask an admin to remove one with messages.');
       }
     }
+    const audience = await feedbacks.topicAudienceIds(request.params.topicId);
     await feedbacks.deleteTopic(request.params.topicId);
+    publishUnreadBadgesLater(audience);
     return response.status(204).end();
   } catch (error) { return next(error); }
 });
