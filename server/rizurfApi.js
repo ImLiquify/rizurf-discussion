@@ -353,7 +353,10 @@ app.get('/gateway/badges', async (request, response) => {
   try {
     response.set('cache-control', 'no-store');
     return sendJson(response, 200, { badges: await feedbacks.unreadBadges() });
-  } catch (error) { return sendError(response, request, 500, 'INTERNAL_ERROR', 'Could not count unread messages.'); }
+  } catch (error) {
+    console.error('[gateway/badges]', error);
+    return sendError(response, request, 500, 'INTERNAL_ERROR', `Could not count unread messages: ${error.code || ''} ${error.message}`.trim());
+  }
 });
 const OPENAPI_JSON = JSON.stringify(openapi);
 app.get('/openapi.json', (_request, response) => {

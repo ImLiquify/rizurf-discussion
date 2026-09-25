@@ -912,24 +912,26 @@ export async function listTyping({ topicId, viewerId, viewerIsPrivileged }) {
 
 // Unread chat messages per person, for the gateway's app-icon badge
 // (GET /gateway/badges): the same unread rule as listMyTopics
-// (non-privileged), only people with something, at most 5,000.
-// ponytail: one correlated subquery per active user, fine at a few hundred
-// users; keep a per-user unread counter if the gateway's minutely read gets slow.
+// (non-privileged), only people with something, at most 5,000. Set-based:
+// first every (topic, person) pair with access — a DM's two people, a
+// group's members, everyone for the Organization channel (plus legacy
+// per-person org threads) — then one indexed join to the unread messages.
 export async function unreadBadges() {
   const [rows] = await pool.query(
-    `SELECT email, count FROM (
-       SELECT u.email,
-         (SELECT COUNT(*) FROM feedback f
-            JOIN topics t ON t.id = f.topic_id
-            LEFT JOIN topic_reads r ON r.topic_id = t.id AND r.user_id = u.id
-            WHERE f.sender_id <> u.id AND f.created_at > COALESCE(r.last_read_at, '1970-01-02')
-              AND (t.created_by = u.id
-                OR (t.target_type = 'user' AND t.target_id = u.id)
-                OR (t.target_type = 'org' AND (t.target_id = 'organization' OR t.target_id = u.id))
-                OR (t.target_type = 'group' AND t.target_id IN (SELECT group_id FROM group_members WHERE user_id = u.id)))
-         ) AS count
-       FROM users u WHERE u.removed_at IS NULL AND u.email IS NOT NULL AND u.email <> ''
-     ) unread WHERE count > 0 LIMIT 5000`
+    `SELECT u.email, COUNT(*) AS count
+     FROM (
+       SELECT id AS topic_id, created_by AS user_id FROM topics
+       UNION SELECT id, target_id FROM topics WHERE target_type IN ('user', 'org')
+       UNION SELECT t.id, gm.user_id FROM topics t JOIN group_members gm ON gm.group_id = t.target_id WHERE t.target_type = 'group'
+       UNION SELECT t.id, all_users.id FROM topics t JOIN users all_users ON all_users.removed_at IS NULL
+         WHERE t.target_type = 'org' AND t.target_id = 'organization'
+     ) access
+     JOIN users u ON u.id = access.user_id AND u.removed_at IS NULL AND u.email IS NOT NULL AND u.email <> ''
+     JOIN feedback f ON f.topic_id = access.topic_id AND f.sender_id <> u.id
+     LEFT JOIN topic_reads r ON r.topic_id = access.topic_id AND r.user_id = u.id
+     WHERE f.created_at > COALESCE(r.last_read_at, '1970-01-02')
+     GROUP BY u.email
+     LIMIT 5000`
   );
   return rows.map(row => ({ email: row.email, count: Number(row.count) }));
 }
