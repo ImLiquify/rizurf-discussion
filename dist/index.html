@@ -2143,7 +2143,8 @@
        so the wider reaction bar extends into the thread, never past its edge. */
     .chat-message-actions {
       position: absolute;
-      top: -14px;
+      bottom: -26px;
+      z-index: 3;
       left: 8px;
       display: flex;
       gap: 2px;
@@ -2305,7 +2306,9 @@
 
     /* ---- Replies ---- */
     .chat-reply-quote {
-      display: block;
+      display: flex;
+      align-items: center;
+      gap: 8px;
       width: 100%;
       margin: 2px 0 4px;
       padding: 5px 10px;
@@ -2320,6 +2323,8 @@
       text-overflow: ellipsis;
     }
     .chat-reply-quote strong { color: var(--text-main); margin-right: 6px; }
+    .chat-reply-quote-text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .chat-reply-thumb { width: 36px; height: 36px; flex-shrink: 0; object-fit: cover; border-radius: 5px; background: var(--bg-subtle); }
     .compose-reply-bar {
       flex-basis: 100%;
       order: -1;
@@ -2336,6 +2341,7 @@
     }
     .compose-reply-bar[hidden] { display: none; }
     .compose-reply-bar span { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .compose-reply-bar .chat-reply-thumb { width: 32px; height: 32px; }
     .compose-reply-bar strong { color: var(--text-main); }
     .compose-reply-bar button { color: var(--text-subtle); font-size: 1.1rem; line-height: 1; padding: 2px 6px; }
 
@@ -2469,6 +2475,73 @@
     .topic-empty-plus:hover { transform: scale(1.06); background: var(--bg-surface); }
     .topic-empty-title { font-size: 1rem; font-weight: 700; color: var(--text-main); }
     .topic-empty-sub { font-size: 0.85rem; color: var(--text-muted); }
+
+    /* ---- Presence: green dot on the avatar of someone online ---- */
+    .feedbacks-list-item-icon, .presence-wrap { position: relative; }
+    .presence-wrap { display: inline-flex; flex-shrink: 0; }
+    .presence-dot { display: none; }
+    .presence-dot.online {
+      display: block;
+      position: absolute;
+      right: -1px;
+      bottom: -1px;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--status-success);
+      border: 2px solid var(--bg-surface);
+    }
+
+    /* ---- Group header, members list, roles ---- */
+    .group-header-actions { display: flex; align-items: center; gap: 10px; }
+    .members-section-label {
+      margin: 14px 0 6px;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-subtle);
+    }
+    .members-section-label:first-child { margin-top: 0; }
+    .members-row { display: flex; align-items: center; gap: 10px; padding: 6px 4px; }
+    .members-row .group-modal-member-avatar { width: 34px; height: 34px; }
+    .members-row-name { flex: 1; min-width: 0; font-size: 0.9rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .role-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 1px 8px;
+      border-radius: var(--radius-full);
+      border: 1px solid var(--role-color, var(--border-color));
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-main);
+      white-space: nowrap;
+    }
+    .role-chip::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--role-color); }
+    .role-chip button { color: var(--text-subtle); font-size: 0.9rem; line-height: 1; padding: 0 0 0 2px; }
+    .role-chip button:hover { color: #DC2626; }
+    .member-role-chips { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+    .role-add-select {
+      font-size: 0.72rem;
+      padding: 2px 4px;
+      border-radius: var(--radius-full);
+      border: 1px dashed var(--border-color);
+      background: var(--bg-surface);
+      color: var(--text-muted);
+    }
+    .group-roles-list { display: flex; flex-direction: column; gap: 6px; }
+    .group-role-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border-light); border-radius: var(--radius-md); }
+    .group-role-swatch { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+    .group-role-name { font-size: 0.88rem; font-weight: 700; color: var(--text-main); }
+    .group-role-perms { flex: 1; min-width: 0; font-size: 0.74rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .role-editor { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--accent-cyan); border-radius: var(--radius-md); background: var(--bg-surface); }
+    .role-editor-row { display: flex; gap: 10px; align-items: center; }
+    .role-editor-row input[type="color"] { width: 42px; height: 38px; padding: 2px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-canvas); }
+    .role-perm { display: flex; gap: 10px; align-items: flex-start; font-size: 0.84rem; color: var(--text-main); cursor: pointer; }
+    .role-perm input { margin-top: 3px; accent-color: var(--accent-cyan); }
+    .role-perm small { display: block; color: var(--text-muted); font-size: 0.74rem; }
+    .role-editor-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
     /* ---- Group roles ---- */
     .group-role-badge {
@@ -3570,6 +3643,23 @@
     <div class="media-lightbox-stage" id="lightboxStage" onclick="if (event.target === this) closeLightbox()"></div>
   </div>
 
+  <div class="modal-overlay" id="membersModalOverlay" onclick="if (event.target === this) closeMembersModal()">
+    <div class="modal-content-card group-modal-card" role="dialog" aria-modal="true" aria-labelledby="membersModalTitle">
+      <div class="modal-header">
+        <div class="modal-target-profile">
+          <h3 id="membersModalTitle">Members</h3>
+        </div>
+        <button class="btn-modal-close" onclick="closeMembersModal()" title="Close dialog" aria-label="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-scrollable-body" id="membersModalBody" style="gap:0;"></div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="confirmDeleteOverlay" onclick="if (event.target === this) closeDeleteConfirm()">
     <div class="modal-content-card confirm-modal-card" role="alertdialog" aria-modal="true"
       aria-labelledby="confirmDeleteTitle" aria-describedby="confirmDeleteNote confirmDeleteText">
@@ -3612,10 +3702,15 @@
           </div>
           <button type="button" class="group-modal-rename-btn" onclick="submitGroupAvatar()">Save photo</button>
         </div>
+        <div id="groupModalRolesField" hidden>
+          <label class="group-modal-label">Roles</label>
+          <div class="group-roles-list" id="groupModalRolesList"></div>
+        </div>
         <div id="groupModalCurrentMembersField" hidden>
           <label class="group-modal-label">Current members</label>
           <div class="group-modal-member-list" id="groupModalCurrentMembersList"></div>
         </div>
+        <div id="groupModalAddField">
         <label class="group-modal-label" id="groupModalAddLabel">Members</label>
         <div class="search-input-wrapper">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -3626,6 +3721,7 @@
         </div>
         <div class="group-modal-member-list" id="groupModalMemberList"></div>
         <button type="button" class="btn-submit-feedback group-modal-submit" id="groupModalSubmitBtn" onclick="submitGroupModal()">Create</button>
+        </div>
         <button type="button" class="group-modal-delete-btn" id="groupModalDeleteBtn" onclick="submitGroupDelete()" hidden>Delete group</button>
       </div>
     </div>
@@ -3800,12 +3896,21 @@
 
     function isPrivilegedViewer() { return currentRoleView === "admin" || currentRoleView === "manager"; }
 
-    // A group is run by its owner (creator) and the sub-admins the owner
-    // appoints — company admins/managers get no bypass. myRole comes from
-    // GET /api/groups?mine=1. Mirrors requireGroupRole in rizurfApi.js.
-    function myGroupRole(groupId) { return myGroups.find(g => g.id === groupId)?.myRole || null; }
-    function isGroupManager(groupId) { return ["owner", "admin"].includes(myGroupRole(groupId)); }
-    function isGroupOwner(groupId) { return myGroupRole(groupId) === "owner"; }
+    // Discord-style group roles: the owner can do everything; everyone else
+    // gets the permissions of the roles the owner gave them (isOwner and
+    // myPermissions come from GET /api/groups?mine=1). Company admins/managers
+    // get no bypass. Mirrors GROUP_PERMISSIONS / requireGroupPermission in rizurfApi.js.
+    const GROUP_PERMISSIONS = {
+      manage_group: { label: "Edit group", hint: "Rename, change the photo, create sub-groups" },
+      manage_members: { label: "Manage members", hint: "Add and remove people" },
+      manage_messages: { label: "Manage messages", hint: "Delete anyone's messages and topics" }
+    };
+    function myGroup(groupId) { return myGroups.find(g => g.id === groupId); }
+    function isGroupOwner(groupId) { return Boolean(myGroup(groupId)?.isOwner); }
+    function groupCan(groupId, permission) {
+      const group = myGroup(groupId);
+      return Boolean(group && (group.isOwner || String(group.myPermissions || "").split(",").includes(permission)));
+    }
 
     function updateCurrentUserProfile() {
       const sidebarName = document.getElementById("sidebarUserName");
@@ -3836,6 +3941,29 @@
        INITIALIZATION & RENDERING
        ========================================================================== */
     const API_BASE_URL = "/api";
+
+    // If the sign-in session has run out (or the gateway ended it), every API
+    // call answers 401. Reload once so the server sends us through the gateway
+    // sign-in and straight back, instead of rendering failed loads as empty
+    // chats. Guarded so a sign-in that keeps failing can't reload in a loop.
+    const nativeFetch = window.fetch.bind(window);
+    let reauthStarted = false;
+    window.fetch = async (...args) => {
+      const response = await nativeFetch(...args);
+      const url = String(args[0] instanceof Request ? args[0].url : args[0]);
+      if (response.status === 401 && url.startsWith(API_BASE_URL) && !reauthStarted) {
+        reauthStarted = true;
+        let last = 0;
+        try { last = Number(sessionStorage.getItem("rizurf-reauth-at")) || 0; } catch (error) { /* ignore */ }
+        if (Date.now() - last > 30000) {
+          try { sessionStorage.setItem("rizurf-reauth-at", String(Date.now())); } catch (error) { /* ignore */ }
+          window.location.reload();
+        } else {
+          showToast("Your session ended. Please reload the page to sign in again.");
+        }
+      }
+      return response;
+    };
 
     function mapRoleToView(role) {
       const value = String(role || "").toLowerCase();
@@ -4018,6 +4146,9 @@
 
     window.addEventListener("DOMContentLoaded", async () => {
       await loadBackendData();
+      pingPresence();
+      window.setInterval(pingPresence, 60000);
+      document.addEventListener("visibilitychange", pingPresence);
       renderAll();
       window.setInterval(refreshPublicFeed, 45000);
       if (currentMainTab === "feedbacks") startMyTopicsPolling();
@@ -4093,8 +4224,10 @@
         ];
         if (!allGroupsDirectory.length) fetches.push(fetch(`${API_BASE_URL}/groups`));
         const [groupsResponse, topicsResponse, allGroupsResponse] = await Promise.all(fetches);
-        myGroups = groupsResponse.ok ? ((await groupsResponse.json()).data || []) : [];
-        myTopics = topicsResponse.ok ? ((await topicsResponse.json()).data || []) : [];
+        // A failed refresh keeps what's already on screen — replacing it with
+        // [] made groups and DMs vanish after one bad response.
+        if (groupsResponse.ok) myGroups = (await groupsResponse.json()).data || [];
+        if (topicsResponse.ok) myTopics = (await topicsResponse.json()).data || [];
         if (allGroupsResponse) allGroupsDirectory = allGroupsResponse.ok ? ((await allGroupsResponse.json()).data || []) : [];
       } catch (error) {
         console.warn("Feedbacks tab data fetch error:", error);
@@ -4201,9 +4334,9 @@
 
     function feedbacksListItemHtml({ type, id, name, icon, avatarUrl, preview, previewIsNew, unread, active }) {
       const safeName = escapeHtml(name || "");
-      const iconHtml = avatarUrl
+      const iconHtml = (avatarUrl
         ? `<img src="${escapeHtml(avatarUrl)}" alt="${safeName}" class="feedbacks-list-item-avatar" />`
-        : `<span>${icon}</span>`;
+        : `<span>${icon}</span>`) + (type === "user" ? presenceDotHtml(id) : "");
       return `
         <button type="button" class="feedbacks-list-item${active ? " active" : ""}"
           onclick="openContainer('${type}', '${escapeHtml(id)}', '${safeName.replace(/'/g, "&#039;")}')">
@@ -4330,7 +4463,7 @@
         return `<div class="feedbacks-group-block">
           <div class="feedbacks-group-block-row">${expandToggle}${row}</div>
           ${subgroupsHtml}
-          ${isGroupManager(group.id) ? `<button type="button" class="feedbacks-subgroup-add-btn" onclick="createSubgroupPrompt('${group.id}')">+ Sub-group</button>` : ""}
+          ${groupCan(group.id, "manage_group") ? `<button type="button" class="feedbacks-subgroup-add-btn" onclick="createSubgroupPrompt('${group.id}')">+ Sub-group</button>` : ""}
         </div>`;
       }).join("");
 
@@ -4340,9 +4473,9 @@
       const orphanSubgroupsHtml = myGroups.filter(sub => sub.parentGroupId && !topLevelGroups.some(g => g.id === sub.parentGroupId))
         .map(subgroupTextRowHtml).join("");
 
-      // A DM with someone who has left (no longer in EMPLOYEES) drops out of
-      // the list — their name should disappear from the app.
-      const dmsHtml = [...dmMap.entries()].filter(([counterpartId]) => EMPLOYEES.some(e => e.id === counterpartId)).map(([counterpartId, topics]) => {
+      // DMs with people who have left are already dropped by the server
+      // (listMyTopics), so a hiccup loading EMPLOYEES can't empty this list.
+      const dmsHtml = [...dmMap.entries()].map(([counterpartId, topics]) => {
         const emp = EMPLOYEES.find(e => e.id === counterpartId);
         const summary = containerSummary(topics);
         // Unread: one new message shows itself; more shows a count, capped at 4+.
@@ -4386,6 +4519,8 @@
     let groupModalSearch = "";
     let groupModalSelectedIds = new Set();
     let groupModalCurrentMembers = []; // fetched for "edit" so existing members aren't offered as candidates
+    let groupModalRoles = []; // the group's roles, for the settings modal
+    let roleEditor = null; // { id (null = new), name, color, permissions: Set } while creating/editing a role
 
     async function openGroupModal({ mode, parentGroupId = null, targetGroupId = null, initialName = "", initialAvatar = "" }) {
       groupModalMode = mode;
@@ -4398,8 +4533,14 @@
       document.getElementById("groupModalTitle").textContent =
         mode === "edit" ? "Edit group" : parentGroupId ? "Create sub-group" : "Create group";
       document.getElementById("groupModalNameInput").value = mode === "edit" ? initialName : "";
+      // Edit mode shows only what this person's permissions allow.
+      const canEditGroup = mode !== "edit" || groupCan(targetGroupId, "manage_group");
+      document.getElementById("groupModalNameField").hidden = !canEditGroup;
       document.getElementById("groupModalRenameBtn").hidden = mode !== "edit";
-      document.getElementById("groupModalAvatarField").hidden = mode !== "edit";
+      document.getElementById("groupModalAvatarField").hidden = mode !== "edit" || !canEditGroup;
+      document.getElementById("groupModalAddField").hidden = mode === "edit" && !groupCan(targetGroupId, "manage_members");
+      document.getElementById("groupModalRolesField").hidden = mode !== "edit" || !isGroupOwner(targetGroupId);
+      roleEditor = null;
       document.getElementById("groupModalAvatarInput").value = initialAvatar || "";
       document.getElementById("groupModalAvatarPreview").src = avatarSrc(initialAvatar);
       document.getElementById("groupModalCurrentMembersField").hidden = mode !== "edit";
@@ -4468,56 +4609,223 @@
 
     async function refreshGroupModalCurrentMembers() {
       try {
-        const response = await fetch(`${API_BASE_URL}/groups/${groupModalTargetGroupId}/members`);
-        const json = response.ok ? await response.json() : { data: [] };
-        groupModalCurrentMembers = json.data || [];
+        const [members, roles] = await Promise.all([
+          fetch(`${API_BASE_URL}/groups/${groupModalTargetGroupId}/members`).then(r => r.ok ? r.json() : { data: [] }),
+          fetch(`${API_BASE_URL}/groups/${groupModalTargetGroupId}/roles`).then(r => r.ok ? r.json() : { data: [] })
+        ]);
+        groupModalCurrentMembers = members.data || [];
+        groupModalRoles = roles.data || [];
       } catch (error) {
         groupModalCurrentMembers = [];
+        groupModalRoles = [];
       }
-      if (groupModalMode === "edit") renderGroupModalCurrentMembers();
+      if (groupModalMode === "edit") { renderGroupModalCurrentMembers(); renderGroupModalRoles(); }
       renderGroupModalMemberList();
     }
 
-    // Owner: can promote/demote sub-admins and remove anyone but themselves.
-    // Sub-admin: can remove regular members only. Mirrors rizurfApi.js.
+    // Settings → current members. Owner: assigns roles (chips + "+ Role").
+    // "Manage members": removes people — except the owner, and (unless you're
+    // the owner) anyone holding a permission role. Mirrors rizurfApi.js.
+    function roleById(id) { return groupModalRoles.find(role => role.id === id); }
+    function memberHasPermissionRole(member) {
+      return member.roleIds.some(id => (roleById(id)?.permissions || []).length);
+    }
+
     function renderGroupModalCurrentMembers() {
       const listEl = document.getElementById("groupModalCurrentMembersList");
       if (!listEl) return;
       const iAmOwner = isGroupOwner(groupModalTargetGroupId);
+      const canManageMembers = groupCan(groupModalTargetGroupId, "manage_members");
       listEl.innerHTML = groupModalCurrentMembers.length ? groupModalCurrentMembers.map(m => {
-        const badge = m.role === "owner" ? `<span class="group-role-badge owner">Owner</span>`
-          : m.role === "admin" ? `<span class="group-role-badge admin">Sub-admin</span>` : "";
-        const roleToggle = iAmOwner && m.role !== "owner"
-          ? `<button type="button" class="group-role-toggle" onclick="setGroupModalMemberRole('${m.id}', '${m.role === "admin" ? "member" : "admin"}')">${m.role === "admin" ? "Remove sub-admin" : "Make sub-admin"}</button>`
-          : "";
-        const canRemove = m.role !== "owner" && (iAmOwner || m.role !== "admin");
+        const chips = m.isOwner
+          ? `<span class="group-role-badge owner">Owner</span>`
+          : m.roleIds.map(roleById).filter(Boolean).map(role => `
+              <span class="role-chip" style="--role-color:${escapeHtml(role.color)}">${escapeHtml(role.name)}${iAmOwner
+                ? `<button type="button" onclick="setMemberRoles('${m.id}', ${escapeHtml(JSON.stringify(m.roleIds.filter(id => id !== role.id)))})" title="Remove role ${escapeHtml(role.name)}" aria-label="Remove role ${escapeHtml(role.name)}">&times;</button>` : ""}</span>`).join("");
+        const unassigned = groupModalRoles.filter(role => !m.roleIds.includes(role.id));
+        const addRole = iAmOwner && !m.isOwner && unassigned.length
+          ? `<select class="role-add-select" aria-label="Give ${escapeHtml(m.name)} a role" onchange="if (this.value) setMemberRoles('${m.id}', ${escapeHtml(JSON.stringify(m.roleIds))}.concat(this.value))">
+               <option value="">+ Role</option>${unassigned.map(role => `<option value="${escapeHtml(role.id)}">${escapeHtml(role.name)}</option>`).join("")}
+             </select>` : "";
+        const canRemove = canManageMembers && !m.isOwner && (iAmOwner || !memberHasPermissionRole(m));
         const removeBtn = canRemove
           ? `<button type="button" class="group-modal-member-remove" onclick="removeGroupModalMember('${m.id}')" title="Remove from group">&times;</button>`
           : "";
         return `
           <div class="group-modal-member-row">
-            <img src="${avatarSrc(m.avatar)}" alt="${escapeHtml(m.name)}" class="group-modal-member-avatar" />
+            <span class="presence-wrap"><img src="${avatarSrc(m.avatar)}" alt="" class="group-modal-member-avatar" />${presenceDotHtml(m.id)}</span>
             <span class="group-modal-member-name">${escapeHtml(m.name)}</span>
-            ${badge}${roleToggle}${removeBtn}
+            <span class="member-role-chips">${chips}${addRole}</span>
+            ${removeBtn}
           </div>`;
       }).join("") : `<div class="feedbacks-section-empty">No members yet.</div>`;
     }
 
-    async function setGroupModalMemberRole(userId, role) {
-      if (!groupModalTargetGroupId) return;
+    async function setMemberRoles(userId, roleIds) {
       try {
-        const response = await fetch(`${API_BASE_URL}/groups/${groupModalTargetGroupId}/members/${userId}`, {
-          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role })
+        const response = await fetch(`${API_BASE_URL}/groups/${groupModalTargetGroupId}/members/${userId}/roles`, {
+          method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ roleIds })
         });
         if (!response.ok) {
           const err = await response.json().catch(() => null);
-          throw new Error(err?.error?.message || "Could not change that member's role.");
+          throw new Error(err?.error?.message || "Could not update that member's roles.");
         }
-        showToast(role === "admin" ? "Made sub-admin." : "Sub-admin removed.");
         await refreshGroupModalCurrentMembers();
       } catch (error) {
-        showToast(error.message || "Could not change that member's role.");
+        showToast(error.message || "Could not update that member's roles.");
       }
+    }
+
+    // Settings → Roles (owner only): list, create, edit, delete.
+    function renderGroupModalRoles() {
+      const el = document.getElementById("groupModalRolesList");
+      if (!el) return;
+      const rows = groupModalRoles.map(role => roleEditor?.id === role.id ? roleEditorHtml() : `
+        <div class="group-role-row">
+          <span class="group-role-swatch" style="background:${escapeHtml(role.color)}"></span>
+          <span class="group-role-name">${escapeHtml(role.name)}</span>
+          <span class="group-role-perms">${escapeHtml(role.permissions.map(p => GROUP_PERMISSIONS[p]?.label).filter(Boolean).join(" · ") || "No permissions")}</span>
+          <button type="button" class="group-role-toggle" onclick="editGroupRole('${role.id}')">Edit</button>
+          <button type="button" class="group-modal-member-remove" onclick="deleteGroupRole('${role.id}')" title="Delete role ${escapeHtml(role.name)}" aria-label="Delete role ${escapeHtml(role.name)}">&times;</button>
+        </div>`).join("");
+      el.innerHTML = rows
+        + (roleEditor && !roleEditor.id ? roleEditorHtml() : `<button type="button" class="group-modal-rename-btn" onclick="editGroupRole(null)">+ Create role</button>`)
+        + (!groupModalRoles.length && !roleEditor ? `<div class="group-modal-hint">No roles yet. Create one (e.g. "Sub-admin") and give it permissions, then assign it to members below.</div>` : "");
+    }
+
+    function roleEditorHtml() {
+      return `
+        <div class="role-editor">
+          <div class="role-editor-row">
+            <input type="text" id="roleEditorName" class="group-modal-name-input" placeholder="Role name, e.g. Sub-admin" maxlength="60" value="${escapeHtml(roleEditor.name)}" aria-label="Role name" />
+            <input type="color" id="roleEditorColor" value="${escapeHtml(roleEditor.color)}" aria-label="Role colour" />
+          </div>
+          ${Object.entries(GROUP_PERMISSIONS).map(([key, perm]) => `
+            <label class="role-perm">
+              <input type="checkbox" data-permission="${key}" ${roleEditor.permissions.has(key) ? "checked" : ""} />
+              <span>${escapeHtml(perm.label)}<small>${escapeHtml(perm.hint)}</small></span>
+            </label>`).join("")}
+          <div class="role-editor-actions">
+            <button type="button" class="btn-cancel-inline" onclick="roleEditor = null; renderGroupModalRoles()">Cancel</button>
+            <button type="button" class="btn-save-inline" onclick="saveGroupRole()">${roleEditor.id ? "Save role" : "Create role"}</button>
+          </div>
+        </div>`;
+    }
+
+    function editGroupRole(roleId) {
+      const role = roleId ? roleById(roleId) : null;
+      roleEditor = role
+        ? { id: role.id, name: role.name, color: role.color, permissions: new Set(role.permissions) }
+        : { id: null, name: "", color: "#039DB1", permissions: new Set() };
+      renderGroupModalRoles();
+      setTimeout(() => document.getElementById("roleEditorName")?.focus({ preventScroll: true }), 30);
+    }
+
+    async function saveGroupRole() {
+      const name = document.getElementById("roleEditorName").value.trim();
+      if (!name) { showToast("Give the role a name."); return; }
+      const body = {
+        name,
+        color: document.getElementById("roleEditorColor").value,
+        permissions: [...document.querySelectorAll(".role-editor [data-permission]")].filter(box => box.checked).map(box => box.dataset.permission)
+      };
+      const url = roleEditor.id
+        ? `${API_BASE_URL}/groups/${groupModalTargetGroupId}/roles/${roleEditor.id}`
+        : `${API_BASE_URL}/groups/${groupModalTargetGroupId}/roles`;
+      try {
+        const response = await fetch(url, {
+          method: roleEditor.id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+        });
+        if (!response.ok) {
+          const err = await response.json().catch(() => null);
+          throw new Error(err?.error?.message || "Could not save that role.");
+        }
+        showToast(roleEditor.id ? "Role saved." : `Created role "${name}".`);
+        roleEditor = null;
+        await refreshGroupModalCurrentMembers();
+      } catch (error) {
+        showToast(error.message || "Could not save that role.");
+      }
+    }
+
+    async function deleteGroupRole(roleId) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/groups/${groupModalTargetGroupId}/roles/${roleId}`, { method: "DELETE" });
+        if (!response.ok) throw new Error();
+        showToast("Role deleted.");
+        await refreshGroupModalCurrentMembers();
+      } catch (error) {
+        showToast("Could not delete that role.");
+      }
+    }
+
+    // Members list (anyone in the group): Discord-style — the owner, then one
+    // section per role (each person under their top role, in role order),
+    // then everyone else. Online people get the green dot.
+    async function openMembersModal(groupId) {
+      const group = myGroup(groupId);
+      document.getElementById("membersModalTitle").textContent = `Members — ${group?.name || "Group"}`;
+      const body = document.getElementById("membersModalBody");
+      body.innerHTML = skeletonListRowsHtml(3);
+      document.getElementById("membersModalOverlay").classList.add("open");
+      document.body.style.overflow = "hidden";
+      try {
+        const [members, roles] = await Promise.all([
+          fetch(`${API_BASE_URL}/groups/${groupId}/members`).then(r => r.ok ? r.json() : { data: [] }),
+          fetch(`${API_BASE_URL}/groups/${groupId}/roles`).then(r => r.ok ? r.json() : { data: [] })
+        ]);
+        renderMembersModal(members.data || [], roles.data || []);
+      } catch (error) {
+        body.innerHTML = `<div class="feedbacks-section-empty">Could not load the members.</div>`;
+      }
+    }
+
+    function renderMembersModal(members, roles) {
+      const row = (member, role) => `
+        <div class="members-row">
+          <span class="presence-wrap"><img src="${avatarSrc(member.avatar)}" alt="" class="group-modal-member-avatar" />${presenceDotHtml(member.id)}</span>
+          <span class="members-row-name" ${role ? `style="color:${escapeHtml(role.color)}"` : ""}>${escapeHtml(member.name)}</span>
+        </div>`;
+      const topRole = member => roles.find(role => member.roleIds.includes(role.id));
+      const sections = [];
+      const owners = members.filter(m => m.isOwner);
+      if (owners.length) sections.push(["Owner", owners.map(m => row(m, null))]);
+      for (const role of roles) {
+        const holders = members.filter(m => !m.isOwner && topRole(m)?.id === role.id);
+        if (holders.length) sections.push([`${role.name} — ${holders.length}`, holders.map(m => row(m, role))]);
+      }
+      const rest = members.filter(m => !m.isOwner && !topRole(m));
+      if (rest.length) sections.push([`Members — ${rest.length}`, rest.map(m => row(m, null))]);
+      document.getElementById("membersModalBody").innerHTML = sections.length
+        ? sections.map(([label, rows]) => `<div class="members-section-label">${escapeHtml(label)}</div>${rows.join("")}`).join("")
+        : `<div class="feedbacks-section-empty">No members yet.</div>`;
+    }
+
+    function closeMembersModal() {
+      const overlay = document.getElementById("membersModalOverlay");
+      if (!overlay?.classList.contains("open")) return;
+      overlay.classList.remove("open");
+      document.body.style.overflow = "";
+    }
+
+    // Presence: ping once a minute while the tab is visible; the answer is
+    // who's online. Dots are marked with data-presence-user so a refresh
+    // just toggles them in place, without re-rendering anything.
+    let onlineUserIds = new Set();
+    function presenceDotHtml(userId) {
+      return `<span class="presence-dot${onlineUserIds.has(userId) ? " online" : ""}" data-presence-user="${escapeHtml(userId)}" title="Online" aria-hidden="true"></span>`;
+    }
+    function applyPresence() {
+      document.querySelectorAll("[data-presence-user]").forEach(el => el.classList.toggle("online", onlineUserIds.has(el.dataset.presenceUser)));
+    }
+    async function pingPresence() {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const response = await fetch(`${API_BASE_URL}/presence`, { method: "POST" });
+        if (!response.ok) return;
+        onlineUserIds = new Set((await response.json()).online || []);
+        applyPresence();
+      } catch (error) { /* next ping tries again */ }
     }
 
     async function removeGroupModalMember(userId) {
@@ -5023,7 +5331,7 @@
           <button type="button" class="chat-message-action-btn" onclick="openMessageMenu(event, '${message.id}')" title="More" aria-label="More actions" aria-haspopup="menu">⋯</button>
         </div>`;
       const replyHtml = message.replyToId
-        ? `<button type="button" class="chat-reply-quote" onclick="jumpToMessage('${message.replyToId}')" title="Go to the original message">${message.replyToSenderName ? `<strong>${escapeHtml(message.replyToSenderName)}</strong>` : ""}${escapeHtml(message.replyToContent == null ? "Original message was deleted" : messagePreviewText(message.replyToContent))}</button>`
+        ? `<button type="button" class="chat-reply-quote" onclick="jumpToMessage('${message.replyToId}')" title="Go to the original message">${replyThumbHtml(message.replyToAttachmentId, message.replyToAttachmentType)}<span class="chat-reply-quote-text">${message.replyToSenderName ? `<strong>${escapeHtml(message.replyToSenderName)}</strong>` : ""}${escapeHtml(message.replyToContent == null ? "Original message was deleted" : replyLabel(message.replyToContent, message.replyToAttachmentType, message.replyToAttachmentName))}</span></button>`
         : "";
       const bodyHtml = editing
         ? `<div class="inline-edit-box" style="margin-top:4px;">
@@ -5105,7 +5413,7 @@
       // Anyone can delete an empty topic. Any topic: a group's owner/sub-admins
       // in their group, admins/managers everywhere else.
       const canDelete = !topic.lastMessageAt
-        || (activeContainer?.type === "group" ? isGroupManager(activeContainer.id) : isPrivilegedViewer());
+        || (activeContainer?.type === "group" ? groupCan(activeContainer.id, "manage_messages") : isPrivilegedViewer());
       const deleteBtn = canDelete
         ? `<button type="button" class="feedbacks-row-icon-btn danger" onclick="event.stopPropagation(); deleteTopicPrompt('${topic.id}', this)" title="Delete topic">${TRASH_SVG}</button>`
         : "";
@@ -5168,9 +5476,13 @@
         return;
       }
 
-      const canManageGroup = activeContainer.type === "group" && isGroupManager(activeContainer.id);
-      const groupActionsHtml = canManageGroup
-        ? `<button type="button" class="feedbacks-row-icon-btn" onclick="editGroupPrompt('${activeContainer.id}')" title="Group settings — members, name, photo">${SETTINGS_GEAR_SVG}</button>`
+      const isGroup = activeContainer.type === "group";
+      const canManageGroup = isGroup && (isGroupOwner(activeContainer.id) || groupCan(activeContainer.id, "manage_group") || groupCan(activeContainer.id, "manage_members"));
+      const groupActionsHtml = isGroup
+        ? `<div class="group-header-actions">
+             <button type="button" class="feedbacks-new-group-btn" onclick="openMembersModal('${activeContainer.id}')" title="See who's in this group">👥 Members</button>
+             ${canManageGroup ? `<button type="button" class="feedbacks-row-icon-btn" onclick="editGroupPrompt('${activeContainer.id}')" title="Group settings — members, roles, name, photo">${SETTINGS_GEAR_SVG}</button>` : ""}
+           </div>`
         : "";
       header.innerHTML = `<div class="feedbacks-detail-title">${escapeHtml(activeContainer.name)}</div>${groupActionsHtml}`;
 
@@ -5243,7 +5555,7 @@
         const person = EMPLOYEES.find(e => e.id === activeContainer.id);
         header.innerHTML = `
           <div class="feedbacks-detail-title-group">
-            <img class="dm-header-avatar" src="${escapeHtml(avatarSrc(person?.avatar))}" alt="" />
+            <span class="presence-wrap"><img class="dm-header-avatar" src="${escapeHtml(avatarSrc(person?.avatar))}" alt="" />${presenceDotHtml(activeContainer.id)}</span>
             ${titleHtml(activeContainer.name)}
           </div>
         `;
@@ -5437,7 +5749,8 @@
         : {};
       const replyTo = replyingTo;
       const replyFields = replyTo
-        ? { replyToId: replyTo.id, replyToContent: replyTo.content, replyToSenderName: replyTo.senderName }
+        ? { replyToId: replyTo.id, replyToContent: replyTo.content, replyToSenderName: replyTo.senderName,
+            replyToAttachmentId: replyTo.attachmentId, replyToAttachmentType: replyTo.attachmentType, replyToAttachmentName: replyTo.attachmentName }
         : {};
       cancelReply();
 
@@ -5584,8 +5897,14 @@
         item("copy", "⧉", "Copy text"),
         message.senderId === CURRENT_USER.id && withinEditWindow(message) ? item("edit", "✎", "Edit") : "",
         // Your own message: delete for everyone. Anyone else's: hide it for
-        // you only (mirrors DELETE vs POST .../hide in rizurfApi.js).
-        item("delete", "🗑", message.senderId === CURRENT_USER.id ? "Delete" : "Delete for me", "danger")
+        // you only — plus "for everyone" if you can manage messages in this
+        // group (mirrors DELETE vs POST .../hide in rizurfApi.js).
+        ...(message.senderId === CURRENT_USER.id
+          ? [item("delete-all", "🗑", "Delete", "danger")]
+          : [
+              activeContainer?.type === "group" && groupCan(activeContainer.id, "manage_messages") ? item("delete-all", "🗑", "Delete for everyone", "danger") : "",
+              item("delete-me", "🗑", "Delete for me", "danger")
+            ])
       ].join("");
     }
 
@@ -5601,13 +5920,13 @@
       else if (action.startsWith("pin:")) setMessagePin(id, action.slice(4));
       else if (action === "copy") copyMessageText(id);
       else if (action === "edit") startChatMessageEdit(id);
-      else if (action === "delete") openDeleteConfirm(id);
+      else if (action === "delete-all") openDeleteConfirm(id, false);
+      else if (action === "delete-me") openDeleteConfirm(id, true);
     }
 
-    function openDeleteConfirm(id) {
+    function openDeleteConfirm(id, forMe) {
       const message = conversationMessages.find(m => m.id === id);
       if (!message) return;
-      const forMe = message.senderId !== CURRENT_USER.id;
       pendingDelete = { id, forMe };
       document.getElementById("confirmDeleteNote").textContent = forMe
         ? "It will be removed for you only. Everyone else in the chat will still see it."
@@ -5727,9 +6046,29 @@
     function startReply(id) {
       const message = conversationMessages.find(m => m.id === id);
       if (!message) return;
-      replyingTo = { id, senderName: message.senderName, content: message.content };
+      replyingTo = { id, senderName: message.senderName, content: message.content,
+        attachmentId: message.attachmentId, attachmentType: message.attachmentType, attachmentName: message.attachmentName };
       renderReplyBar();
       document.getElementById("feedbacksComposeInput")?.focus({ preventScroll: true });
+    }
+
+    // A small preview of the replied-to image/video (nothing for other files).
+    function replyThumbHtml(attachmentId, attachmentType) {
+      if (!attachmentId) return "";
+      const url = `${API_BASE_URL}/attachments/${encodeURIComponent(attachmentId)}`;
+      if (INLINE_IMAGE_TYPES.has(attachmentType)) return `<img class="chat-reply-thumb" src="${url}" alt="" loading="lazy" />`;
+      if (INLINE_VIDEO_TYPES.has(attachmentType)) return `<video class="chat-reply-thumb" src="${url}#t=0.1" preload="metadata" muted playsinline aria-hidden="true"></video>`;
+      return "";
+    }
+
+    // "Photo" / "Video" instead of the "📎 file.png" placeholder text a
+    // caption-less attachment carries; real text is shown as-is.
+    function replyLabel(content, attachmentType, attachmentName) {
+      if (attachmentName && content === `📎 ${attachmentName}`) {
+        if (INLINE_IMAGE_TYPES.has(attachmentType)) return "Photo";
+        if (INLINE_VIDEO_TYPES.has(attachmentType)) return "Video";
+      }
+      return messagePreviewText(content);
     }
 
     function cancelReply() {
@@ -5742,7 +6081,7 @@
       if (!bar) return;
       bar.hidden = !replyingTo;
       bar.innerHTML = replyingTo
-        ? `<span>Replying to <strong>${escapeHtml(replyingTo.senderName)}</strong>: ${escapeHtml(messagePreviewText(replyingTo.content))}</span>
+        ? `${replyThumbHtml(replyingTo.attachmentId, replyingTo.attachmentType)}<span>Replying to <strong>${escapeHtml(replyingTo.senderName)}</strong>: ${escapeHtml(replyLabel(replyingTo.content, replyingTo.attachmentType, replyingTo.attachmentName))}</span>
            <button type="button" onclick="cancelReply()" title="Cancel reply" aria-label="Cancel reply">✕</button>`
         : "";
     }
@@ -5994,7 +6333,7 @@
     });
     document.addEventListener("keydown", event => {
       const lightboxOpen = !document.getElementById("mediaLightbox").hidden;
-      if (event.key === "Escape") { closeLightbox(); closeMessageMenu(); toggleStickerPicker(false); closeDeleteConfirm(); }
+      if (event.key === "Escape") { closeLightbox(); closeMessageMenu(); toggleStickerPicker(false); closeDeleteConfirm(); closeMembersModal(); }
       else if (lightboxOpen && (event.key === "+" || event.key === "=")) zoomLightbox(0.25);
       else if (lightboxOpen && event.key === "-") zoomLightbox(-0.25);
     });

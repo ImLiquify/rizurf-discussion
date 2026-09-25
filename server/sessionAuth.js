@@ -65,16 +65,31 @@ export function setSession(response, claims) {
 }
 export function clearSession(response) { response.setHeader('set-cookie', cookie(0, '')); }
 
-export async function gatewaySessionIsLive(session) {
-  if (!session?.sid || !session?.sub) return false;
+// 'active' (the gateway confirmed it), 'inactive' (it said no), or 'unknown'
+// (couldn't ask — treated as live, fail-open, MICROAPP_AUTH §5). Never cached.
+export async function gatewaySessionStatus(session) {
+  if (!session?.sid || !session?.sub) return 'inactive';
   try {
     const response = await fetch(`${config.gatewayUrl}/oauth/introspect`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sid: session.sid, sub: session.sub }),
       signal: AbortSignal.timeout(5000)
     });
-    if (!response.ok) return true;
-    return Boolean((await response.json()).active);
-  } catch { return true; }
+    if (!response.ok) return 'unknown';
+    return (await response.json()).active ? 'active' : 'inactive';
+  } catch { return 'unknown'; }
+}
+
+export async function gatewaySessionIsLive(session) {
+  return (await gatewaySessionStatus(session)) !== 'inactive';
+}
+
+// Re-issue the session cookie with a fresh 15-minute expiry, but only when
+// the gateway itself just confirmed the session, and only once it's used up
+// a few minutes (so not on every request).
+export function renewSessionIfConfirmed(response, session, status) {
+  if (status !== 'active' || response.headersSent) return;
+  if (session.exp * 1000 - Date.now() > (config.sessionTtlSeconds - 180) * 1000) return;
+  setSession(response, session);
 }
 
 export async function exchangeAuthorizationCode(code) {

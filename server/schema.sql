@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `synced_at`        timestamp    NULL DEFAULT NULL,
   `permission_role`  varchar(20)  NOT NULL DEFAULT 'user',
   `removed_at`       timestamp    NULL DEFAULT NULL,
+  `last_seen_at`     timestamp    NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_users_external_id` (`external_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -172,6 +173,30 @@ CREATE TABLE IF NOT EXISTS `topic_typing` (
   `user_id`    varchar(50) NOT NULL,
   `updated_at` timestamp   NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`topic_id`, `user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Discord-style group roles; `permissions` is a comma list of
+-- manage_group / manage_members / manage_messages. The group owner (its
+-- created_by) always has every permission and is the only one who manages roles.
+CREATE TABLE IF NOT EXISTS `group_roles` (
+  `id`          varchar(60) NOT NULL,
+  `group_id`    varchar(50) NOT NULL,
+  `name`        varchar(60) NOT NULL,
+  `color`       varchar(7)  NOT NULL DEFAULT '#039DB1',
+  `permissions` varchar(255) NOT NULL DEFAULT '',
+  `position`    int         NOT NULL DEFAULT 0,
+  `created_at`  timestamp   NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_group_roles_group` (`group_id`),
+  CONSTRAINT `fk_group_roles_group` FOREIGN KEY (`group_id`) REFERENCES `feedback_groups` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `group_member_roles` (
+  `role_id` varchar(60) NOT NULL,
+  `user_id` varchar(50) NOT NULL,
+  PRIMARY KEY (`role_id`, `user_id`),
+  KEY `idx_group_member_roles_user` (`user_id`),
+  CONSTRAINT `fk_group_member_roles_role` FOREIGN KEY (`role_id`) REFERENCES `group_roles` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- "Delete for me": chat messages a person hid from their own view only.

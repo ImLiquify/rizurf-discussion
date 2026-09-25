@@ -270,6 +270,7 @@ export async function listFeedback({ targetId, senderId, participantId, groupMem
   const [rows] = await pool.execute(
     `SELECT EXISTS(SELECT 1 FROM message_stars ms WHERE ms.feedback_id = f.id AND ms.user_id = ?) AS starred,
        f.reply_to_id AS replyToId, rf.content AS replyToContent, ru.name AS replyToSenderName,
+       rf.attachment_id AS replyToAttachmentId, ra.mime_type AS replyToAttachmentType, ra.filename AS replyToAttachmentName,
        CASE WHEN f.pinned_until IS NULL OR f.pinned_until > NOW() THEN f.pinned_at END AS pinnedAt,
        f.id, f.sender_id AS senderId, u.name AS senderName, u.avatar AS senderAvatar, f.target_id AS targetId,
        f.target_type AS targetType, f.visibility, f.topic_id AS topicId, tp.name AS topicName, tp.created_by AS topicCreatedBy,
@@ -287,6 +288,7 @@ export async function listFeedback({ targetId, senderId, participantId, groupMem
      LEFT JOIN topics tp ON tp.id = f.topic_id
      LEFT JOIN feedback rf ON rf.id = f.reply_to_id
      LEFT JOIN users ru ON ru.id = rf.sender_id
+     LEFT JOIN attachments ra ON ra.id = rf.attachment_id
      ${where}
      ORDER BY f.created_at DESC LIMIT ? OFFSET ?`,
     [viewerId || '', ...parameters]
@@ -542,20 +544,81 @@ export async function getGroupById(id) {
   return rows[0] || null;
 }
 
-// 'owner' (the creator), 'admin' (a sub-admin), 'member', or null (not in
-// the group / no such group). Owner and sub-admins manage the group.
-export async function getGroupRole(groupId, userId) {
+// What `userId` may do in `groupId`: { isOwner, isMember, permissions: Set }
+// — the owner has every permission; a member has the union of their roles'.
+// null if there's no such group.
+export async function getGroupAccess(groupId, userId, allPermissions) {
   const [rows] = await pool.execute(
-    `SELECT CASE WHEN g.created_by = ? THEN 'owner' ELSE gm.role END AS role
-     FROM feedback_groups g LEFT JOIN group_members gm ON gm.group_id = g.id AND gm.user_id = ?
-     WHERE g.id = ? LIMIT 1`, [userId, userId, groupId]
+    `SELECT g.created_by = ? AS isOwner,
+       EXISTS(SELECT 1 FROM group_members WHERE group_id = g.id AND user_id = ?) AS isMember,
+       (SELECT GROUP_CONCAT(r.permissions) FROM group_roles r JOIN group_member_roles mr ON mr.role_id = r.id
+          WHERE r.group_id = g.id AND mr.user_id = ?) AS permissions
+     FROM feedback_groups g WHERE g.id = ? LIMIT 1`, [userId, userId, userId, groupId]
   );
-  return rows[0]?.role || null;
+  if (!rows[0]) return null;
+  const isOwner = Boolean(rows[0].isOwner);
+  const isMember = Boolean(rows[0].isMember) || isOwner;
+  const permissions = isOwner ? new Set(allPermissions)
+    : new Set(isMember ? String(rows[0].permissions || '').split(',').filter(Boolean) : []);
+  return { isOwner, isMember, permissions };
 }
 
-export async function setGroupMemberRole({ groupId, userId, role }) {
-  const [result] = await pool.execute('UPDATE group_members SET role = ? WHERE group_id = ? AND user_id = ?', [role, groupId, userId]);
-  return result.affectedRows > 0;
+export async function listGroupRoles(groupId) {
+  const [rows] = await pool.execute(
+    'SELECT id, name, color, permissions, position FROM group_roles WHERE group_id = ? ORDER BY position, created_at',
+    [groupId]
+  );
+  return rows.map(row => ({ ...row, permissions: row.permissions ? row.permissions.split(',') : [] }));
+}
+
+export async function getGroupRoleById(groupId, roleId) {
+  const [rows] = await pool.execute('SELECT id FROM group_roles WHERE id = ? AND group_id = ? LIMIT 1', [roleId, groupId]);
+  return rows[0] || null;
+}
+
+export async function createGroupRole({ id, groupId, name, color, permissions }) {
+  await pool.execute(
+    `INSERT INTO group_roles (id, group_id, name, color, permissions, position)
+     SELECT ?, ?, ?, ?, ?, COALESCE(MAX(position), 0) + 1 FROM group_roles WHERE group_id = ?`,
+    [id, groupId, name, color, permissions.join(','), groupId]
+  );
+  return (await listGroupRoles(groupId)).find(role => role.id === id);
+}
+
+export async function updateGroupRole({ groupId, roleId, name, color, permissions }) {
+  const sets = [];
+  const params = [];
+  if (name !== undefined) { sets.push('name = ?'); params.push(name); }
+  if (color !== undefined) { sets.push('color = ?'); params.push(color); }
+  if (permissions !== undefined) { sets.push('permissions = ?'); params.push(permissions.join(',')); }
+  if (sets.length) await pool.execute(`UPDATE group_roles SET ${sets.join(', ')} WHERE id = ? AND group_id = ?`, [...params, roleId, groupId]);
+  return (await listGroupRoles(groupId)).find(role => role.id === roleId);
+}
+
+export async function deleteGroupRole({ groupId, roleId }) {
+  await pool.execute('DELETE FROM group_roles WHERE id = ? AND group_id = ?', [roleId, groupId]);
+}
+
+// Replaces a member's roles in this group with `roleIds` (each already
+// verified to belong to the group by the caller).
+export async function setMemberRoles({ groupId, userId, roleIds }) {
+  await pool.execute(
+    'DELETE mr FROM group_member_roles mr JOIN group_roles r ON r.id = mr.role_id WHERE r.group_id = ? AND mr.user_id = ?',
+    [groupId, userId]
+  );
+  for (const roleId of roleIds) {
+    await pool.execute('INSERT IGNORE INTO group_member_roles (role_id, user_id) VALUES (?, ?)', [roleId, userId]);
+  }
+}
+
+// Presence: stamp the caller as seen now, and return everyone seen within
+// the last `windowSeconds` (MySQL's clock on both sides).
+export async function touchPresence({ userId, windowSeconds }) {
+  if (userId) await pool.execute('UPDATE users SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?', [userId]);
+  const [rows] = await pool.execute(
+    'SELECT id FROM users WHERE last_seen_at > NOW() - INTERVAL ? SECOND AND removed_at IS NULL', [windowSeconds]
+  );
+  return rows.map(row => row.id);
 }
 
 export async function isGroupMember(groupId, userId) {
@@ -573,6 +636,7 @@ export async function addGroupMember({ groupId, userId, addedBy }) {
 
 export async function removeGroupMember({ groupId, userId }) {
   await pool.execute('DELETE FROM group_members WHERE group_id = ? AND user_id = ?', [groupId, userId]);
+  await setMemberRoles({ groupId, userId, roleIds: [] });
 }
 
 // `name` and/or `avatar` — whichever is provided (undefined means "leave
@@ -624,7 +688,9 @@ export async function listGroups({ mine, parentId, limit, offset }) {
   parameters.push(limit, offset);
   const [rows] = await pool.execute(
     `SELECT g.id, g.name, g.created_by AS createdBy, g.parent_group_id AS parentGroupId, g.avatar, g.created_at AS createdAt,
-       ${mine ? "CASE WHEN g.created_by = gm.user_id THEN 'owner' ELSE gm.role END AS myRole," : ''}
+       ${mine ? `g.created_by = gm.user_id AS isOwner,
+         (SELECT GROUP_CONCAT(r.permissions) FROM group_roles r JOIN group_member_roles mr ON mr.role_id = r.id
+            WHERE r.group_id = g.id AND mr.user_id = gm.user_id) AS myPermissions,` : ''}
        (SELECT COUNT(*) FROM group_members gmc JOIN users mu ON mu.id = gmc.user_id
           WHERE gmc.group_id = g.id AND mu.removed_at IS NULL) AS memberCount,
        (SELECT COUNT(*) FROM feedback_groups WHERE parent_group_id = g.id) AS subgroupCount
@@ -637,14 +703,16 @@ export async function listGroups({ mine, parentId, limit, offset }) {
 
 export async function listGroupMembers(groupId) {
   const [rows] = await pool.execute(
-    `SELECT u.id, u.name, u.avatar, CASE WHEN g.created_by = u.id THEN 'owner' ELSE gm.role END AS role
+    `SELECT u.id, u.name, u.avatar, g.created_by = u.id AS isOwner,
+       (SELECT GROUP_CONCAT(mr.role_id) FROM group_member_roles mr JOIN group_roles r ON r.id = mr.role_id
+          WHERE r.group_id = gm.group_id AND mr.user_id = u.id) AS roleIds
      FROM group_members gm
      JOIN users u ON u.id = gm.user_id
      JOIN feedback_groups g ON g.id = gm.group_id
-     WHERE gm.group_id = ? AND u.removed_at IS NULL ORDER BY (g.created_by = u.id) DESC, (gm.role = 'admin') DESC, u.name`,
+     WHERE gm.group_id = ? AND u.removed_at IS NULL ORDER BY (g.created_by = u.id) DESC, u.name`,
     [groupId]
   );
-  return rows;
+  return rows.map(row => ({ ...row, isOwner: Boolean(row.isOwner), roleIds: row.roleIds ? row.roleIds.split(',') : [] }));
 }
 
 // ==========================================================================
@@ -758,8 +826,11 @@ export async function listMyTopics({ viewerId, viewerIsPrivileged }) {
      LEFT JOIN feedback_groups g ON t.target_type = 'group' AND g.id = t.target_id
      LEFT JOIN users org_user ON t.target_type = 'org' AND org_user.id = t.target_id
      WHERE ${TOPIC_ACCESS_SQL}
+       AND NOT (t.target_type = 'user' AND EXISTS (
+         SELECT 1 FROM users counterpart
+         WHERE counterpart.id = IF(t.created_by = ?, t.target_id, t.created_by) AND counterpart.removed_at IS NOT NULL))
      ORDER BY lastMessageAt IS NULL, lastMessageAt DESC, t.created_at DESC`,
-    [viewerId || '', viewerId || '', ...accessParams(viewerIsPrivileged, viewerId)]
+    [viewerId || '', viewerId || '', ...accessParams(viewerIsPrivileged, viewerId), viewerId || '']
   );
   return rows;
 }

@@ -8,7 +8,7 @@ import { config } from './config.js';
 import { databaseIsHealthy, ensureSchemaCompatibility } from './database.js';
 import { fetchAllInterns } from './internApi.js';
 import * as feedbacks from './feedbackRepository.js';
-import { clearSession, exchangeAuthorizationCode, gatewayAuthorizeUrl, gatewaySessionIsLive, noStoreHeaders, readSession, setSession, verifyGatewayToken } from './sessionAuth.js';
+import { clearSession, exchangeAuthorizationCode, gatewayAuthorizeUrl, gatewaySessionStatus, noStoreHeaders, readSession, renewSessionIfConfirmed, setSession, verifyGatewayToken } from './sessionAuth.js';
 
 const app = express();
 const startedAt = Date.now();
@@ -99,8 +99,21 @@ const openapi = {
       get: operation('List a group\'s members.', 'feedback:read', discovery('List Group Members', 'Read who belongs to a project group.', ['groupId'], ['data'])),
       post: operation('Add a member to a group.', 'feedback:write', discovery('Add Group Member', 'Add any employee to a project group; the group\'s leader (creator), an admin, or a manager only.', ['groupId', 'userId'], [], ['GET /api/groups/{groupId}/members']))
     },
+    '/api/groups/{groupId}/members/{userId}/roles': {
+      put: operation('Set a member\'s roles.', 'feedback:write', discovery('Set Member Roles', 'Replace which of the group\'s roles a member has; the group owner only.', ['groupId', 'userId', 'roleIds'], [], ['GET /api/groups/{groupId}/roles']))
+    },
+    '/api/groups/{groupId}/roles': {
+      get: operation('List a group\'s roles.', 'feedback:read', discovery('List Group Roles', 'Read a group\'s roles and their permissions.', ['groupId'], ['data'])),
+      post: operation('Create a group role.', 'feedback:write', discovery('Create Group Role', 'Create a role (name, colour, permissions: manage_group, manage_members, manage_messages); the group owner only.', ['groupId', 'name', 'color', 'permissions'], ['id']))
+    },
+    '/api/groups/{groupId}/roles/{roleId}': {
+      patch: operation('Edit a group role.', 'feedback:write', discovery('Edit Group Role', 'Rename, recolour or change the permissions of a role; the group owner only.', ['groupId', 'roleId', 'name', 'color', 'permissions'], ['id'])),
+      delete: operation('Delete a group role.', 'feedback:write', discovery('Delete Group Role', 'Delete a role (members keep their membership); the group owner only.', ['groupId', 'roleId'], []))
+    },
+    '/api/presence': {
+      post: operation('Report presence.', 'feedback:write', discovery('Report Presence', 'Mark the caller as online and read who else is online.', [], ['online']))
+    },
     '/api/groups/{groupId}/members/{userId}': {
-      patch: operation('Set a member\'s group role.', 'feedback:write', discovery('Set Group Role', 'Make a member a sub-admin or a regular member; the group owner only.', ['groupId', 'userId', 'role'], [])),
       delete: operation('Remove a group member.', 'feedback:write', discovery('Remove Group Member', 'Remove an employee from a project group.', ['groupId', 'userId'], [], ['GET /api/groups/{groupId}/members']))
     },
     '/api/topics': {
@@ -134,7 +147,10 @@ function routeKey(pathname) {
   if (/^\/api\/feedback\/[^/]+\/star$/.test(pathname)) return '/api/feedback/{feedbackId}/star';
   if (/^\/api\/feedback\/[^/]+\/hide$/.test(pathname)) return '/api/feedback/{feedbackId}/hide';
   if (/^\/api\/feedback\/[^/]+$/.test(pathname)) return '/api/feedback/{feedbackId}';
+  if (/^\/api\/groups\/[^/]+\/members\/[^/]+\/roles$/.test(pathname)) return '/api/groups/{groupId}/members/{userId}/roles';
   if (/^\/api\/groups\/[^/]+\/members\/[^/]+$/.test(pathname)) return '/api/groups/{groupId}/members/{userId}';
+  if (/^\/api\/groups\/[^/]+\/roles\/[^/]+$/.test(pathname)) return '/api/groups/{groupId}/roles/{roleId}';
+  if (/^\/api\/groups\/[^/]+\/roles$/.test(pathname)) return '/api/groups/{groupId}/roles';
   if (/^\/api\/groups\/[^/]+\/members$/.test(pathname)) return '/api/groups/{groupId}/members';
   if (/^\/api\/groups\/[^/]+$/.test(pathname)) return '/api/groups/{groupId}';
   if (/^\/api\/topics\/[^/]+\/read$/.test(pathname)) return '/api/topics/{topicId}/read';
@@ -287,7 +303,14 @@ app.use(async (request, response, next) => {
   if (!match) {
     const session = readSession(request);
     if (session) {
-      const live = gatewaySessionIsLive(session);
+      // Live check (never cached), and — only when the gateway actually
+      // confirmed the session — push the cookie's 15-minute expiry forward,
+      // so an active person isn't dropped mid-use. A fail-open "unknown"
+      // never renews, so the expiry stays a real backstop (MICROAPP_AUTH §6).
+      const live = gatewaySessionStatus(session).then(status => {
+        renewSessionIfConfirmed(response, session, status);
+        return status !== 'inactive';
+      });
       if (request.method === 'GET' || await live) {
         if (request.method === 'GET') request.sessionLive = live;
         request.auth = { ...session, token_use: 'session', scope: FIRST_PARTY_SCOPES.join(' ') };
@@ -457,10 +480,13 @@ app.delete('/api/feedback/:feedbackId', async (request, response, next) => {
     const meta = await loadAccessibleFeedback(request, response, request.params.feedbackId);
     if (!meta) return;
     const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
-    // Chat messages: only their author deletes them (for everyone); anyone
-    // else can only hide one for themselves (POST .../hide). Public wall
-    // posts keep the moderator rule.
-    if (meta.visibility === 'private' ? meta.senderId !== callerId : !await canModerateMessage(meta, callerId)) {
+    // Chat messages: their author, or in a group anyone with "Manage
+    // messages", deletes for everyone; anyone else can only hide one for
+    // themselves (POST .../hide). Public wall posts keep the moderator rule.
+    const allowed = meta.visibility === 'private'
+      ? meta.senderId === callerId || (meta.targetType === 'group' && await groupCan(meta.targetId, callerId, 'manage_messages'))
+      : await canModerateMessage(meta, callerId);
+    if (!allowed) {
       return sendError(response, request, 403, 'FORBIDDEN', meta.visibility === 'private'
         ? 'You can only delete your own messages. Use "Delete for me" to hide someone else\'s.'
         : 'Only the author or someone who moderates this conversation can delete this.');
@@ -470,17 +496,24 @@ app.delete('/api/feedback/:feedbackId', async (request, response, next) => {
   } catch (error) { return next(error); }
 });
 
-// Who besides the author may edit/delete a message: in a group, only its
-// owner and sub-admins (company admins/managers get no bypass there — groups
-// are run by their own admins); everywhere else, admins/managers.
-async function canModerateMessage(meta, callerId) {
-  if (meta.senderId === callerId) return true;
-  if (meta.visibility === 'private' && meta.targetType === 'group') return isGroupManager(meta.targetId, callerId);
-  return isPrivilegedRole((await feedbacks.getUserById(callerId))?.permissionRole);
+// Group permissions a role can grant (the owner always has all of them).
+// Mirrors GROUP_PERMISSIONS in index.html.
+const GROUP_PERMISSIONS = ['manage_group', 'manage_members', 'manage_messages'];
+const GROUP_PERMISSION_LABELS = {
+  manage_group: 'Edit group', manage_members: 'Manage members', manage_messages: 'Manage messages'
+};
+
+async function groupCan(groupId, userId, permission) {
+  return Boolean((await feedbacks.getGroupAccess(groupId, userId, GROUP_PERMISSIONS))?.permissions.has(permission));
 }
 
-async function isGroupManager(groupId, userId) {
-  return ['owner', 'admin'].includes(await feedbacks.getGroupRole(groupId, userId));
+// Who besides the author may edit/delete a message: in a group, whoever has
+// "Manage messages" there (company admins/managers get no bypass — groups
+// are run by their own roles); everywhere else, admins/managers.
+async function canModerateMessage(meta, callerId) {
+  if (meta.senderId === callerId) return true;
+  if (meta.visibility === 'private' && meta.targetType === 'group') return groupCan(meta.targetId, callerId, 'manage_messages');
+  return isPrivilegedRole((await feedbacks.getUserById(callerId))?.permissionRole);
 }
 
 // Private feedback (DM / group / Organization) — always sent into a topic.
@@ -701,8 +734,10 @@ app.get('/api/groups', async (request, response, next) => {
     return sendJson(response, 200, { data: await feedbacks.listGroups({ mine, parentId: request.query.parentId, ...page }), ...page });
   } catch (error) { return next(error); }
 });
-// Groups are run by their own owner (creator) and the sub-admins the owner
-// appoints — see isGroupManager. Company admins/managers get no bypass here.
+// Groups are run by their owner (creator) plus whoever the owner gives a
+// role with the matching permission — Discord-style. Company admins/managers
+// get no bypass here. The owner always has every permission and is the only
+// one who creates roles or assigns them.
 app.post('/api/groups', async (request, response, next) => {
   const auth = request.auth || {};
   if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
@@ -716,8 +751,8 @@ app.post('/api/groups', async (request, response, next) => {
       if (!parent) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No parent group with that id.');
       // One level of nesting only — a sub-group can't itself have sub-groups.
       if (parent.parentGroupId) return sendError(response, request, 422, 'VALIDATION_ERROR', 'A sub-group cannot itself have sub-groups.', { fields: ['parentGroupId'] });
-      if (!await isGroupManager(parentGroupId, createdBy)) {
-        return sendError(response, request, 403, 'FORBIDDEN', 'Only the group\'s owner or a sub-admin can create a sub-group.');
+      if (!await groupCan(parentGroupId, createdBy, 'manage_group')) {
+        return sendError(response, request, 403, 'FORBIDDEN', 'You need the "Edit group" permission in the parent group to create a sub-group.');
       }
       resolvedParentId = parentGroupId;
     }
@@ -731,66 +766,125 @@ app.get('/api/groups/:groupId/members', async (request, response, next) => {
   } catch (error) { return next(error); }
 });
 
-// Resolves the caller and their role in :groupId, sending the error itself
-// (and returning null) when the group is missing or the role isn't allowed.
-async function requireGroupRole(request, response, allowed) {
+// Resolves the caller and what they may do in :groupId, sending the error
+// itself (and returning null) when the group is missing or the caller lacks
+// `permission` ('owner' = the group owner only).
+async function requireGroupPermission(request, response, permission) {
   const auth = request.auth || {};
   if (!auth.sub) { sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.'); return null; }
   const group = await feedbacks.getGroupById(request.params.groupId);
   if (!group) { sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.'); return null; }
   const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
-  const role = await feedbacks.getGroupRole(group.id, callerId);
-  if (!allowed.includes(role)) {
-    sendError(response, request, 403, 'FORBIDDEN', allowed.includes('admin')
-      ? 'Only the group\'s owner or a sub-admin can do this.' : 'Only the group\'s owner can do this.');
+  const access = await feedbacks.getGroupAccess(group.id, callerId, GROUP_PERMISSIONS);
+  if (permission === 'owner' ? !access.isOwner : !access.permissions.has(permission)) {
+    sendError(response, request, 403, 'FORBIDDEN', permission === 'owner'
+      ? 'Only the group\'s owner can do this.'
+      : `You need the "${GROUP_PERMISSION_LABELS[permission]}" permission in this group.`);
     return null;
   }
-  return { group, callerId, role };
+  return { group, callerId, access };
 }
 
 app.post('/api/groups/:groupId/members', async (request, response, next) => {
   const { userId } = request.body || {};
   if (!validText(userId)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'userId is required.', { fields: ['userId'] });
   try {
-    const ctx = await requireGroupRole(request, response, ['owner', 'admin']);
+    const ctx = await requireGroupPermission(request, response, 'manage_members');
     if (!ctx) return;
     if (!await feedbacks.getUserById(userId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No user with that id.');
     await feedbacks.addGroupMember({ groupId: ctx.group.id, userId, addedBy: ctx.callerId });
     return response.status(204).end();
   } catch (error) { return next(error); }
 });
-// Owner only: make a member a sub-admin ('admin') or back to 'member'.
-app.patch('/api/groups/:groupId/members/:userId', async (request, response, next) => {
-  const { role } = request.body || {};
-  if (!['admin', 'member'].includes(role)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'role must be admin or member.', { fields: ['role'] });
-  try {
-    const ctx = await requireGroupRole(request, response, ['owner']);
-    if (!ctx) return;
-    if (request.params.userId === ctx.group.createdBy) return sendError(response, request, 422, 'VALIDATION_ERROR', 'The owner\'s role can\'t be changed.');
-    if (!await feedbacks.setGroupMemberRole({ groupId: ctx.group.id, userId: request.params.userId, role })) {
-      return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'That person is not in this group.');
-    }
-    return response.status(204).end();
-  } catch (error) { return next(error); }
-});
 app.delete('/api/groups/:groupId/members/:userId', async (request, response, next) => {
   try {
-    const ctx = await requireGroupRole(request, response, ['owner', 'admin']);
+    const ctx = await requireGroupPermission(request, response, 'manage_members');
     if (!ctx) return;
-    const targetRole = await feedbacks.getGroupRole(ctx.group.id, request.params.userId);
-    if (targetRole === 'owner') return sendError(response, request, 422, 'VALIDATION_ERROR', 'The owner can\'t be removed from their own group.');
-    // Sub-admins manage members, not each other.
-    if (targetRole === 'admin' && ctx.role !== 'owner') return sendError(response, request, 403, 'FORBIDDEN', 'Only the group\'s owner can remove a sub-admin.');
+    const target = await feedbacks.getGroupAccess(ctx.group.id, request.params.userId, GROUP_PERMISSIONS);
+    if (target?.isOwner) return sendError(response, request, 422, 'VALIDATION_ERROR', 'The owner can\'t be removed from their own group.');
+    // Only the owner removes someone who holds any permission (no admin
+    // kicking another admin).
+    if (target?.permissions.size && !ctx.access.isOwner) return sendError(response, request, 403, 'FORBIDDEN', 'Only the group\'s owner can remove someone with a permission role.');
     await feedbacks.removeGroupMember({ groupId: ctx.group.id, userId: request.params.userId });
     return response.status(204).end();
   } catch (error) { return next(error); }
 });
+// Owner only: replace a member's roles.
+app.put('/api/groups/:groupId/members/:userId/roles', async (request, response, next) => {
+  const roleIds = request.body?.roleIds;
+  if (!Array.isArray(roleIds) || !roleIds.every(validText)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'roleIds must be an array of role ids.', { fields: ['roleIds'] });
+  try {
+    const ctx = await requireGroupPermission(request, response, 'owner');
+    if (!ctx) return;
+    if (!await feedbacks.isGroupMember(ctx.group.id, request.params.userId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'That person is not in this group.');
+    for (const roleId of roleIds) {
+      if (!await feedbacks.getGroupRoleById(ctx.group.id, roleId)) return sendError(response, request, 422, 'VALIDATION_ERROR', `No role ${roleId} in this group.`, { fields: ['roleIds'] });
+    }
+    await feedbacks.setMemberRoles({ groupId: ctx.group.id, userId: request.params.userId, roleIds: [...new Set(roleIds)] });
+    return response.status(204).end();
+  } catch (error) { return next(error); }
+});
+
+// Roles: anyone may read them (like the member list); only the owner edits.
+function validRoleBody(body, { partial }) {
+  const { name, color, permissions } = body || {};
+  if (!partial || name !== undefined) {
+    if (!validText(name) || name.trim().length > 60) return 'name is required (60 characters max).';
+  }
+  if (color !== undefined && !/^#[0-9a-fA-F]{6}$/.test(color)) return 'color must be a hex colour like #039DB1.';
+  if (permissions !== undefined && (!Array.isArray(permissions) || !permissions.every(p => GROUP_PERMISSIONS.includes(p)))) {
+    return `permissions must be a list of: ${GROUP_PERMISSIONS.join(', ')}.`;
+  }
+  return null;
+}
+app.get('/api/groups/:groupId/roles', async (request, response, next) => {
+  try {
+    if (!await feedbacks.getGroupById(request.params.groupId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No group with that id.');
+    return sendJson(response, 200, { data: await feedbacks.listGroupRoles(request.params.groupId) });
+  } catch (error) { return next(error); }
+});
+app.post('/api/groups/:groupId/roles', async (request, response, next) => {
+  const invalid = validRoleBody(request.body, { partial: false });
+  if (invalid) return sendError(response, request, 422, 'VALIDATION_ERROR', invalid);
+  try {
+    const ctx = await requireGroupPermission(request, response, 'owner');
+    if (!ctx) return;
+    const { name, color = '#039DB1', permissions = [] } = request.body;
+    return sendJson(response, 201, await feedbacks.createGroupRole({
+      id: `role_${crypto.randomUUID()}`, groupId: ctx.group.id, name: name.trim(), color, permissions: [...new Set(permissions)]
+    }));
+  } catch (error) { return next(error); }
+});
+app.patch('/api/groups/:groupId/roles/:roleId', async (request, response, next) => {
+  const invalid = validRoleBody(request.body, { partial: true });
+  if (invalid) return sendError(response, request, 422, 'VALIDATION_ERROR', invalid);
+  try {
+    const ctx = await requireGroupPermission(request, response, 'owner');
+    if (!ctx) return;
+    if (!await feedbacks.getGroupRoleById(ctx.group.id, request.params.roleId)) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No role with that id in this group.');
+    const { name, color, permissions } = request.body;
+    return sendJson(response, 200, await feedbacks.updateGroupRole({
+      groupId: ctx.group.id, roleId: request.params.roleId,
+      name: name !== undefined ? name.trim() : undefined, color,
+      permissions: permissions !== undefined ? [...new Set(permissions)] : undefined
+    }));
+  } catch (error) { return next(error); }
+});
+app.delete('/api/groups/:groupId/roles/:roleId', async (request, response, next) => {
+  try {
+    const ctx = await requireGroupPermission(request, response, 'owner');
+    if (!ctx) return;
+    await feedbacks.deleteGroupRole({ groupId: ctx.group.id, roleId: request.params.roleId });
+    return response.status(204).end();
+  } catch (error) { return next(error); }
+});
+
 app.patch('/api/groups/:groupId', async (request, response, next) => {
   const { name, avatar } = request.body || {};
   if (name !== undefined && !validText(name)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'name cannot be blank.', { fields: ['name'] });
   if (name === undefined && avatar === undefined) return sendError(response, request, 422, 'VALIDATION_ERROR', 'name or avatar is required.', { fields: ['name', 'avatar'] });
   try {
-    const ctx = await requireGroupRole(request, response, ['owner', 'admin']);
+    const ctx = await requireGroupPermission(request, response, 'manage_group');
     if (!ctx) return;
     return sendJson(response, 200, await feedbacks.updateGroup({
       groupId: ctx.group.id,
@@ -801,10 +895,21 @@ app.patch('/api/groups/:groupId', async (request, response, next) => {
 });
 app.delete('/api/groups/:groupId', async (request, response, next) => {
   try {
-    const ctx = await requireGroupRole(request, response, ['owner']);
+    const ctx = await requireGroupPermission(request, response, 'owner');
     if (!ctx) return;
     await feedbacks.deleteGroup(ctx.group.id);
     return response.status(204).end();
+  } catch (error) { return next(error); }
+});
+
+// Presence: the open app pings this about once a minute; the response is who
+// else was seen in the last couple of minutes (the green "online" dot).
+const PRESENCE_WINDOW_SECONDS = 150;
+app.post('/api/presence', async (request, response, next) => {
+  try {
+    const { viewerId } = await resolveViewerForRead(request.auth);
+    if (!viewerId) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
+    return sendJson(response, 200, { online: await feedbacks.touchPresence({ userId: viewerId, windowSeconds: PRESENCE_WINDOW_SECONDS }) });
   } catch (error) { return next(error); }
 });
 
@@ -967,9 +1072,9 @@ app.delete('/api/topics/:topicId', async (request, response, next) => {
     if (!viewerId) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
     const topic = await feedbacks.getTopicById(request.params.topicId);
     if (!topic) return sendError(response, request, 404, 'RESOURCE_NOT_FOUND', 'No topic with that id.');
-    // A group's own owner/sub-admins delete any of its topics (company
+    // In a group, "Manage messages" deletes any of its topics (company
     // admins/managers don't manage groups); elsewhere admins/managers do.
-    const canDeleteAny = topic.targetType === 'group' ? await isGroupManager(topic.targetId, viewerId) : isPrivileged;
+    const canDeleteAny = topic.targetType === 'group' ? await groupCan(topic.targetId, viewerId, 'manage_messages') : isPrivileged;
     if (!canDeleteAny) {
       if (!await feedbacks.canViewTopic({ topicId: request.params.topicId, viewerId, viewerIsPrivileged: false })) {
         return sendError(response, request, 403, 'FORBIDDEN', 'You do not have access to this topic.');
@@ -1008,7 +1113,9 @@ async function serveMicroapp(request, response) {
     catch { clearSession(response); return response.redirect(302, gatewayAuthorizeUrl()); }
   }
   const session = readSession(request);
-  if (!session || !await gatewaySessionIsLive(session)) { clearSession(response); return response.redirect(302, gatewayAuthorizeUrl()); }
+  const status = session ? await gatewaySessionStatus(session) : 'inactive';
+  if (status === 'inactive') { clearSession(response); return response.redirect(302, gatewayAuthorizeUrl()); }
+  renewSessionIfConfirmed(response, session, status);
   return response.sendFile(path.join(publicDist, 'index.html'));
 }
 app.get(['/', '/me'], (request, response, next) => { serveMicroapp(request, response).catch(next); });

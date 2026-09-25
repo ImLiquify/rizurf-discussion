@@ -98,7 +98,9 @@ export async function ensureSchemaCompatibility() {
     // Set when a directory-synced person is no longer in the directory (they
     // left). The row stays so their past messages keep an author; they just
     // drop out of every people list. Cleared again if they come back.
-    ['removed_at', 'TIMESTAMP NULL']
+    ['removed_at', 'TIMESTAMP NULL'],
+    // Presence: bumped by POST /api/presence while the app is open.
+    ['last_seen_at', 'TIMESTAMP NULL']
   ], columns.get('users'));
 
   // `reactions` originally keyed on (user_id, feedback_id, reaction) — feedback
@@ -172,9 +174,8 @@ export async function ensureSchemaCompatibility() {
     CONSTRAINT fk_group_members_user FOREIGN KEY (user_id) REFERENCES users (id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
 
-  // 'admin' = a sub-admin appointed by the group's owner (its created_by,
-  // which is never stored here — see getGroupRole). Owner + sub-admins are
-  // the only people who can change a group.
+  // Legacy: 'admin' marked a sub-admin before group roles existed; it's
+  // converted into a "Sub-admin" role further below and no longer read.
   await addMissingColumns('group_members', [
     ['role', "VARCHAR(10) NOT NULL DEFAULT 'member'"]
   ], columns.get('group_members'));
@@ -318,4 +319,41 @@ export async function ensureSchemaCompatibility() {
     PRIMARY KEY (user_id, feedback_id),
     KEY idx_message_stars_feedback (feedback_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
+
+  // Discord-style group roles: the owner creates roles with permissions
+  // (a comma list of GROUP_PERMISSIONS in rizurfApi.js) and assigns members.
+  await pool.query(`CREATE TABLE IF NOT EXISTS group_roles (
+    id varchar(60) NOT NULL,
+    group_id varchar(50) NOT NULL,
+    name varchar(60) NOT NULL,
+    color varchar(7) NOT NULL DEFAULT '#039DB1',
+    permissions varchar(255) NOT NULL DEFAULT '',
+    position int NOT NULL DEFAULT 0,
+    created_at timestamp NOT NULL DEFAULT current_timestamp(),
+    PRIMARY KEY (id),
+    KEY idx_group_roles_group (group_id),
+    CONSTRAINT fk_group_roles_group FOREIGN KEY (group_id) REFERENCES feedback_groups (id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS group_member_roles (
+    role_id varchar(60) NOT NULL,
+    user_id varchar(50) NOT NULL,
+    PRIMARY KEY (role_id, user_id),
+    KEY idx_group_member_roles_user (user_id),
+    CONSTRAINT fk_group_member_roles_role FOREIGN KEY (role_id) REFERENCES group_roles (id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
+
+  // One-time: the old per-member 'admin' flag (sub-admin) becomes a
+  // "Sub-admin" role with every permission. A no-op once converted.
+  const [legacyAdmins] = await pool.query("SELECT group_id, user_id FROM group_members WHERE role = 'admin'");
+  for (const groupId of new Set(legacyAdmins.map(row => row.group_id))) {
+    const roleId = `role_${crypto.createHash('md5').update(groupId).digest('hex')}_subadmin`;
+    await pool.query(
+      `INSERT IGNORE INTO group_roles (id, group_id, name, color, permissions) VALUES (?, ?, 'Sub-admin', '#039DB1', 'manage_group,manage_members,manage_messages')`,
+      [roleId, groupId]
+    );
+    for (const row of legacyAdmins.filter(r => r.group_id === groupId)) {
+      await pool.query('INSERT IGNORE INTO group_member_roles (role_id, user_id) VALUES (?, ?)', [roleId, row.user_id]);
+    }
+    await pool.query("UPDATE group_members SET role = 'member' WHERE group_id = ? AND role = 'admin'", [groupId]);
+  }
 }
