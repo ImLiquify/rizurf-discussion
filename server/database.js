@@ -94,7 +94,11 @@ export async function ensureSchemaCompatibility() {
     // The gateway's reliable admin/hr/supervisor/user claim. Kept separate
     // from `role_title`, which holds a job title (e.g. "Intern") for
     // intern-directory-sourced rows and must not be used for access control.
-    ['permission_role', "VARCHAR(20) NOT NULL DEFAULT 'user'"]
+    ['permission_role', "VARCHAR(20) NOT NULL DEFAULT 'user'"],
+    // Set when a directory-synced person is no longer in the directory (they
+    // left). The row stays so their past messages keep an author; they just
+    // drop out of every people list. Cleared again if they come back.
+    ['removed_at', 'TIMESTAMP NULL']
   ], columns.get('users'));
 
   // `reactions` originally keyed on (user_id, feedback_id, reaction) — feedback
@@ -105,6 +109,17 @@ export async function ensureSchemaCompatibility() {
   if (reactionColumns.size && !reactionColumns.has('comment_id')) {
     await pool.query("ALTER TABLE reactions ADD COLUMN comment_id VARCHAR(60) NOT NULL DEFAULT ''");
     await pool.query('ALTER TABLE reactions DROP PRIMARY KEY, ADD PRIMARY KEY (user_id, feedback_id, comment_id, reaction)');
+  }
+
+  // Emoji must compare byte-for-byte: under utf8mb4_general_ci, MySQL 5.7
+  // treats every emoji outside the BMP (😂 😮 👍 👏 …) as the same character,
+  // so one person's 😂 and 😮 collided — the second toggled the first off.
+  const [[reactionColumn]] = await pool.query(
+    `SELECT COLLATION_NAME AS collation FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reactions' AND COLUMN_NAME = 'reaction'`
+  );
+  if (reactionColumn && reactionColumn.collation !== 'utf8mb4_bin') {
+    await pool.query('ALTER TABLE reactions MODIFY reaction VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL');
   }
 
   // Private feedback (DMs, project groups, the Organization channel) reuses

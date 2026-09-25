@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { databaseIsHealthy, ensureSchemaCompatibility } from './database.js';
-import { fetchInterns } from './internApi.js';
+import { fetchAllInterns } from './internApi.js';
 import * as feedbacks from './feedbackRepository.js';
 import { clearSession, exchangeAuthorizationCode, gatewayAuthorizeUrl, gatewaySessionIsLive, noStoreHeaders, readSession, setSession, verifyGatewayToken } from './sessionAuth.js';
 
@@ -230,8 +230,11 @@ async function synchronizeInterns(correlationId, { force = false } = {}) {
       if (!force && await feedbacks.isInternSyncFresh(INTERN_SYNC_TTL_MS / 1000)) {
         return 0;
       }
-      const interns = await fetchInterns({ correlationId });
+      const { interns, complete } = await fetchAllInterns({ correlationId });
       await feedbacks.upsertInternUsers(interns);
+      // People who left the directory drop out of the app — only when the
+      // full directory was read, never from a partial or empty response.
+      if (complete && interns.length) await feedbacks.markMissingInternsRemoved(interns.map(intern => intern.externalId));
       return interns.length;
     } finally {
       internSyncInFlight = null;
@@ -667,10 +670,13 @@ app.post('/api/feedback/:feedbackId/star', async (request, response, next) => {
     return sendJson(response, 200, { starred });
   } catch (error) { return next(error); }
 });
-const ALLOWED_REACTIONS = new Set(['❤️', '👏', '💡', '🙌']);
+// Chat quick reactions — must match CHAT_REACTIONS in index.html (change both
+// together). The public wall keeps its own original four.
+const CHAT_REACTIONS = ['❤️', '😂', '😮', '😢', '👍'];
+const ALLOWED_REACTIONS = new Set(['❤️', '👏', '💡', '🙌', ...CHAT_REACTIONS]);
 app.post('/api/feedback/:feedbackId/reactions', async (request, response, next) => {
   const { reaction, commentId = '' } = request.body || {};
-  if (!ALLOWED_REACTIONS.has(reaction)) return sendError(response, request, 422, 'VALIDATION_ERROR', 'reaction must be one of ❤️ 👏 💡 🙌.', { fields: ['reaction'] });
+  if (!ALLOWED_REACTIONS.has(reaction)) return sendError(response, request, 422, 'VALIDATION_ERROR', `reaction must be one of ${[...ALLOWED_REACTIONS].join(' ')}.`, { fields: ['reaction'] });
   const auth = request.auth || {};
   if (!auth.sub) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
   const feedbackId = request.params.feedbackId;

@@ -23,8 +23,20 @@ export async function upsertInternUsers(interns) {
      ON DUPLICATE KEY UPDATE
        name = VALUES(name), email = VALUES(email), role_title = VALUES(role_title),
        department = VALUES(department), avatar = VALUES(avatar), skills = VALUES(skills),
-       source = 'intern-api', synced_at = CURRENT_TIMESTAMP`,
+       source = 'intern-api', synced_at = CURRENT_TIMESTAMP, removed_at = NULL`,
     rowParams
+  );
+}
+
+// Everyone synced from the directory before who isn't in it any more has
+// left: flag them (not delete — their messages keep an author). Only call
+// with the COMPLETE current directory (see fetchAllInterns).
+export async function markMissingInternsRemoved(currentExternalIds) {
+  if (!currentExternalIds.length) return;
+  await pool.query(
+    `UPDATE users SET removed_at = CURRENT_TIMESTAMP
+     WHERE source = 'intern-api' AND removed_at IS NULL AND external_id NOT IN (?)`,
+    [currentExternalIds]
   );
 }
 
@@ -158,7 +170,7 @@ export async function getUserById(id) {
 
 export async function listEmployees({ limit, offset }) {
   const [rows] = await pool.execute(
-    'SELECT id, name, role_title AS role, department, avatar, skills FROM users ORDER BY name LIMIT ? OFFSET ?',
+    'SELECT id, name, role_title AS role, department, avatar, skills FROM users WHERE removed_at IS NULL ORDER BY name LIMIT ? OFFSET ?',
     [limit, offset]
   );
   // `skills` is stored as a JSON-encoded string (see upsertInternUsers) —
@@ -171,7 +183,7 @@ export async function listEmployees({ limit, offset }) {
 export async function listSyncedInterns({ limit, offset }) {
   const [rows] = await pool.execute(
     `SELECT id, external_id AS externalId, name, email, role_title AS role, department, avatar, skills, synced_at AS syncedAt
-     FROM users WHERE source = 'intern-api' ORDER BY name LIMIT ? OFFSET ?`,
+     FROM users WHERE source = 'intern-api' AND removed_at IS NULL ORDER BY name LIMIT ? OFFSET ?`,
     [limit, offset]
   );
   return rows;
@@ -613,7 +625,8 @@ export async function listGroups({ mine, parentId, limit, offset }) {
   const [rows] = await pool.execute(
     `SELECT g.id, g.name, g.created_by AS createdBy, g.parent_group_id AS parentGroupId, g.avatar, g.created_at AS createdAt,
        ${mine ? "CASE WHEN g.created_by = gm.user_id THEN 'owner' ELSE gm.role END AS myRole," : ''}
-       (SELECT COUNT(*) FROM group_members WHERE group_id = g.id) AS memberCount,
+       (SELECT COUNT(*) FROM group_members gmc JOIN users mu ON mu.id = gmc.user_id
+          WHERE gmc.group_id = g.id AND mu.removed_at IS NULL) AS memberCount,
        (SELECT COUNT(*) FROM feedback_groups WHERE parent_group_id = g.id) AS subgroupCount
      FROM feedback_groups g ${join} ${where}
      ORDER BY g.created_at DESC LIMIT ? OFFSET ?`,
@@ -628,7 +641,7 @@ export async function listGroupMembers(groupId) {
      FROM group_members gm
      JOIN users u ON u.id = gm.user_id
      JOIN feedback_groups g ON g.id = gm.group_id
-     WHERE gm.group_id = ? ORDER BY (g.created_by = u.id) DESC, (gm.role = 'admin') DESC, u.name`,
+     WHERE gm.group_id = ? AND u.removed_at IS NULL ORDER BY (g.created_by = u.id) DESC, (gm.role = 'admin') DESC, u.name`,
     [groupId]
   );
   return rows;

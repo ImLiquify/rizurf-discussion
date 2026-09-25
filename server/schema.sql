@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `source`           varchar(30)  NOT NULL DEFAULT 'local',
   `synced_at`        timestamp    NULL DEFAULT NULL,
   `permission_role`  varchar(20)  NOT NULL DEFAULT 'user',
+  `removed_at`       timestamp    NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_users_external_id` (`external_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -69,7 +70,7 @@ CREATE TABLE IF NOT EXISTS `comments` (
 CREATE TABLE IF NOT EXISTS `reactions` (
   `user_id`     varchar(50) NOT NULL,
   `feedback_id` varchar(50) NOT NULL,
-  `reaction`    varchar(20) NOT NULL,
+  `reaction`    varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
   `created_at`  timestamp   NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`user_id`, `feedback_id`, `reaction`),
   KEY `fk_reactions_feedback` (`feedback_id`),

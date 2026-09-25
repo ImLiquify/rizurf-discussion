@@ -8,6 +8,8 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>Rizurf Discussion</title>
+  <!-- Apply the saved theme before first paint (no light flash). -->
+  <script>try { if (localStorage.getItem("rizurf-theme") === "dark") document.documentElement.dataset.theme = "dark"; } catch (e) {}</script>
   <!-- Swapped at load for the Rizurf mark cropped out of the brand logo (setBrandFavicon). -->
   <link rel="icon" id="appFavicon" href="/assets/logo-0Yo0gl14.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -94,6 +96,31 @@
       --transition-smooth: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
+    /* Dark mode (profile → Dark mode), built from Styles.md's own palette:
+       --brand-dark canvas, --neutral-dark surfaces, --brand-navy for raised/
+       subtle areas, brand teal accents, --brand-ice text. Only the semantic
+       tokens change; the brand/neutral palette itself stays as specified. */
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg-main: #0E1B2C;
+      --bg-surface: #0E1B2C;
+      --bg-muted: #0A2A4E;
+      --bg-canvas: #021732;
+      --bg-subtle: #0A2A4E;
+      --bg-hover: #123A64;
+      --text-main: #E7F6F8;
+      --text-muted: #A7B6C8;
+      --text-subtle: #7D8FA5;
+      --border-light: #1B3452;
+      --primary-light: rgba(3, 157, 177, 0.18);
+      --primary-hover: #3CC2D4;
+      --danger-light: rgba(224, 83, 61, 0.16);
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.35);
+      --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.45);
+      --shadow-lg: 0 12px 28px -6px rgba(0, 0, 0, 0.55);
+      --shadow-xl: 0 20px 35px -8px rgba(0, 0, 0, 0.6);
+    }
+
     /* ==========================================================================
        2. RESET & BASE STYLES
        ========================================================================== */
@@ -120,25 +147,25 @@
     h1 {
       font-size: var(--font-size-h1);
       font-weight: 700;
-      color: var(--neutral-dark);
+      color: var(--text-main);
     }
 
     h2 {
       font-size: var(--font-size-h2);
       font-weight: 700;
-      color: var(--neutral-dark);
+      color: var(--text-main);
     }
 
     h3 {
       font-size: var(--font-size-h3);
       font-weight: 700;
-      color: var(--neutral-dark);
+      color: var(--text-main);
     }
 
     p {
       font-size: var(--font-size-p);
       font-weight: 500;
-      color: var(--neutral-dark);
+      color: var(--text-main);
     }
 
     button,
@@ -477,8 +504,8 @@
     }
 
     .author-avatar.anon-avatar {
-      background: var(--neutral-bg);
-      color: var(--neutral-gray);
+      background: var(--bg-subtle);
+      color: var(--text-muted);
     }
 
     .author-meta {
@@ -604,7 +631,7 @@
       font-size: 0.9rem;
       outline: none;
       resize: vertical;
-      background: #FFFFFF;
+      background: var(--bg-surface);
     }
 
     .inline-edit-controls {
@@ -639,7 +666,7 @@
     }
 
     .btn-cancel-inline:hover {
-      background: #E2E8F0;
+      background: var(--bg-hover);
       color: var(--text-main);
     }
 
@@ -807,7 +834,7 @@
     }
 
     .btn-action-icon-mini:hover {
-      background: #E2E8F0;
+      background: var(--bg-hover);
       color: var(--text-main);
     }
 
@@ -818,7 +845,7 @@
 
     /* Comment Input Box */
     .comment-input-box {
-      background: #FFFFFF;
+      background: var(--bg-surface);
       border: 1px solid var(--border-color);
       border-radius: var(--radius-md);
       padding: 10px 12px;
@@ -1275,7 +1302,7 @@
 
     .modal-header {
       padding: 20px 24px;
-      background: #FFFFFF;
+      background: var(--bg-surface);
       border-bottom: 1px solid var(--border-color);
       display: flex;
       align-items: center;
@@ -1330,7 +1357,7 @@
     }
 
     .btn-modal-close:hover {
-      background: #E2E8F0;
+      background: var(--bg-hover);
       color: var(--text-main);
     }
 
@@ -1376,7 +1403,7 @@
       outline: none;
       transition: border-color var(--transition-fast);
       margin-bottom: 12px;
-      background: #FFFFFF;
+      background: var(--bg-surface);
     }
 
     .feedback-textarea:focus {
@@ -1544,7 +1571,7 @@
       display: flex;
       height: calc(100vh - 64px);
       min-height: 480px;
-      background: #FFFFFF;
+      background: var(--bg-surface);
       margin: -28px -28px 0 -28px;
       overflow: hidden;
     }
@@ -1826,6 +1853,7 @@
     .feedbacks-messages-scroll {
       flex: 1;
       overflow-y: auto;
+      overflow-x: hidden;
       padding: 20px;
       display: flex;
       flex-direction: column;
@@ -2111,10 +2139,12 @@
 
     /* ---- Per-message actions: hover toolbar (reply + "more"), the "more" menu. ---- */
     .chat-message-row { position: relative; }
+    /* Anchored to the bubble's inner side (left for others, right for mine)
+       so the wider reaction bar extends into the thread, never past its edge. */
     .chat-message-actions {
       position: absolute;
       top: -14px;
-      right: 8px;
+      left: 8px;
       display: flex;
       gap: 2px;
       padding: 2px;
@@ -2126,7 +2156,7 @@
       pointer-events: none;
       transition: opacity 0.12s ease;
     }
-    .chat-message-row.mine .chat-message-actions { right: auto; left: 8px; }
+    .chat-message-row.mine .chat-message-actions { left: auto; right: 8px; }
     .chat-message-row:hover .chat-message-actions,
     .chat-message-row:focus-within .chat-message-actions,
     .chat-message-row.menu-open .chat-message-actions { opacity: 1; pointer-events: auto; }
@@ -2196,18 +2226,81 @@
     .confirm-modal-danger:hover { background: #B91C1C; }
     .chat-message-menu .menu-icon { width: 18px; text-align: center; }
 
+    /* Quick reactions: the hover bar's emoji row + the chips under a bubble. */
+    .chat-quick-reactions { display: flex; padding-right: 3px; margin-right: 2px; border-right: 1px solid var(--border-color); }
+    .chat-quick-reactions button {
+      width: 28px; height: 26px;
+      font-size: 1rem;
+      line-height: 1;
+      border-radius: var(--radius-full);
+      transition: transform 0.12s ease;
+    }
+    .chat-quick-reactions button:hover { transform: scale(1.3); }
+    .chat-reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+    .chat-reaction-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 1px 8px;
+      border-radius: var(--radius-full);
+      border: 1px solid var(--border-color);
+      background: var(--bg-surface);
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+    .chat-reaction-chip.mine { border-color: var(--accent-cyan); background: var(--accent-cyan-light); color: var(--accent-cyan-hover); font-weight: 700; }
+
+    /* Dark mode toggle in the profile modal */
+    .theme-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 12px 14px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      background: var(--bg-surface);
+      text-align: left;
+      cursor: pointer;
+    }
+    .theme-toggle-title { display: block; font-size: 0.9rem; font-weight: 700; color: var(--text-main); }
+    .theme-toggle-sub { display: block; font-size: 0.76rem; color: var(--text-muted); }
+    .theme-toggle-switch {
+      appearance: none;
+      flex-shrink: 0;
+      width: 42px; height: 24px;
+      border-radius: var(--radius-full);
+      background: var(--border-color);
+      position: relative;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    .theme-toggle-switch::after {
+      content: "";
+      position: absolute;
+      top: 3px; left: 3px;
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      background: #FFFFFF;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+      transition: transform 0.2s ease;
+    }
+    .theme-toggle-switch:checked { background: var(--accent-cyan); }
+    .theme-toggle-switch:checked::after { transform: translateX(18px); }
+    .theme-toggle-switch:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
+
     .chat-mention-line {
       align-self: stretch;
       display: flex;
       flex-direction: column;
       margin: 0 -12px;
       padding: 8px 12px;
-      border-left: 3px solid #F59E0B;
+      border-left: 3px solid var(--accent-cyan);
       border-radius: 6px;
-      background: rgba(245, 158, 11, 0.12);
+      background: var(--accent-cyan-light);
     }
     .chat-mention-line.pulse { animation: mention-pulse 0.7s ease-in-out 2; }
-    @keyframes mention-pulse { 50% { background: rgba(245, 158, 11, 0.38); } }
+    @keyframes mention-pulse { 50% { background: rgba(3, 157, 177, 0.32); } }
     @media (prefers-reduced-motion: reduce) { .chat-mention-line.pulse { animation: none; } }
 
     /* ---- Replies ---- */
@@ -3005,7 +3098,7 @@
       padding: 0 28px;
       height: 64px;
       min-height: 64px;
-      background: #FFFFFF;
+      background: var(--bg-surface);
       border-bottom: 1px solid var(--border-color);
       box-shadow: 0 1px 4px rgba(15,23,42,0.06);
       z-index: 40;
@@ -3584,6 +3677,13 @@
         </button>
       </div>
       <div class="modal-scrollable-body profile-modal-body">
+        <label class="theme-toggle-row" for="darkModeToggle">
+          <span>
+            <span class="theme-toggle-title">Dark mode</span>
+            <span class="theme-toggle-sub">Saved on this device</span>
+          </span>
+          <input type="checkbox" id="darkModeToggle" class="theme-toggle-switch" role="switch" onchange="setDarkMode(this.checked)" />
+        </label>
         <p class="profile-modal-note">A full profile page is coming soon.</p>
         <button type="button" class="btn-logout" onclick="handleGoToAllApps()">Go back to all apps</button>
       </div>
@@ -3744,17 +3844,31 @@
       return "employee";
     }
 
+    // Every current employee, all pages (the API returns at most 100 per
+    // call) — people who left the directory aren't returned at all. null if
+    // the first page fails.
+    async function fetchAllEmployees() {
+      const all = [];
+      for (let offset = 0; offset < 5000; offset += 100) {
+        const response = await fetch(`${API_BASE_URL}/employees?limit=100&offset=${offset}`);
+        if (!response.ok) return offset ? all : null;
+        const page = (await response.json()).data || [];
+        all.push(...page);
+        if (page.length < 100) break;
+      }
+      return all;
+    }
+
     async function loadBackendData() {
       try {
-        const [meResponse, employeesResponse, feedbackResponse] = await Promise.all([
+        const [meResponse, employeesList, feedbackResponse] = await Promise.all([
           fetch(`${API_BASE_URL}/me`),
-          fetch(`${API_BASE_URL}/employees`),
+          fetchAllEmployees(),
           fetch(`${API_BASE_URL}/feedback`)
         ]);
 
-        if (employeesResponse.ok) {
-          const empJson = await employeesResponse.json();
-          const list = Array.isArray(empJson) ? empJson : (empJson.data || []);
+        if (employeesList) {
+          const list = employeesList;
           EMPLOYEES.splice(0, EMPLOYEES.length, ...list.map(e => ({
             id: e.id,
             name: e.name,
@@ -4226,7 +4340,9 @@
       const orphanSubgroupsHtml = myGroups.filter(sub => sub.parentGroupId && !topLevelGroups.some(g => g.id === sub.parentGroupId))
         .map(subgroupTextRowHtml).join("");
 
-      const dmsHtml = [...dmMap.entries()].map(([counterpartId, topics]) => {
+      // A DM with someone who has left (no longer in EMPLOYEES) drops out of
+      // the list — their name should disappear from the app.
+      const dmsHtml = [...dmMap.entries()].filter(([counterpartId]) => EMPLOYEES.some(e => e.id === counterpartId)).map(([counterpartId, topics]) => {
         const emp = EMPLOYEES.find(e => e.id === counterpartId);
         const summary = containerSummary(topics);
         // Unread: one new message shows itself; more shows a count, capped at 4+.
@@ -4797,7 +4913,7 @@
         // nothing actually new; that redundant re-render was the "message
         // flickers/disappears" bug. Content is part of the signature so
         // someone else's edit re-renders too, not just new/removed messages.
-        const signature = list => list.map(m => `${m.id}\u0000${m.content}\u0000${m.pinnedAt || ""}`).join("\u0001");
+        const signature = list => list.map(m => `${m.id}\u0000${m.content}\u0000${m.pinnedAt || ""}\u0000${JSON.stringify(m.reactions || {})}`).join("\u0001");
         if (signature([...fetched, ...pending]) === signature(conversationMessages)) return;
 
         conversationMessages = [...fetched, ...pending];
@@ -4901,6 +5017,8 @@
       const editing = editingChatMessageId === message.id;
       const actionsHtml = message.pending || editing ? "" : `
         <div class="chat-message-actions">
+          <span class="chat-quick-reactions">${CHAT_REACTIONS.map(emoji =>
+            `<button type="button" onclick="toggleChatReaction('${message.id}', '${emoji}')" title="React ${emoji}" aria-label="React ${emoji}">${emoji}</button>`).join("")}</span>
           <button type="button" class="chat-message-action-btn" onclick="startReply('${message.id}')" title="Reply" aria-label="Reply">↩</button>
           <button type="button" class="chat-message-action-btn" onclick="openMessageMenu(event, '${message.id}')" title="More" aria-label="More actions" aria-haspopup="menu">⋯</button>
         </div>`;
@@ -4918,6 +5036,14 @@
         : sticker
         ? `${replyHtml}<img class="chat-sticker" src="/assets/stickers/${encodeURIComponent(sticker.file)}" alt="${escapeHtml(sticker.label)} sticker" loading="lazy" />`
         : `${replyHtml}${chatAttachmentHtml(message)}${showText ? `<div class="chat-message-text">${message.targetType === "user" ? escapeHtml(messagePreviewText(message.content)) : highlightMentionsHtml(messagePreviewText(message.content))}</div>` : ""}`;
+      const reactionEntries = editing ? [] : Object.entries(message.reactions || {}).filter(([, count]) => count > 0);
+      const reactionsHtml = reactionEntries.length
+        ? `<div class="chat-reactions">${reactionEntries.map(([emoji, count]) => {
+            const reacted = (message.userReactions || []).includes(emoji);
+            return `<button type="button" class="chat-reaction-chip${reacted ? " mine" : ""}" onclick="toggleChatReaction('${message.id}', '${emoji}')"
+              title="${reacted ? "Remove your reaction" : "React"}" aria-pressed="${reacted}">${emoji} ${count}</button>`;
+          }).join("")}</div>`
+        : "";
       return `
         <div class="chat-message-row${mine ? " mine" : ""}${message.pending ? " pending" : ""}${message.pinnedAt ? " pinned" : ""}${sticker ? " sticker-message" : ""}${openMessageMenuId === message.id ? " menu-open" : ""}" id="chat-msg-${message.id}">
           ${actionsHtml}
@@ -4926,6 +5052,7 @@
             ${statusHtml}
           </div>
           ${bodyHtml}
+          ${reactionsHtml}
         </div>
       `;
     }
@@ -5640,7 +5767,36 @@
     // Stickers are static images in /assets/stickers/ (dist/assets/stickers/),
     // sent as the plain message text "[sticker:<id>]" — no schema change, and
     // previews/replies/pins just need messagePreviewText(). Add entries here.
-    const STICKERS = []; // { id: "thumbs-up", file: "thumbs-up.png", label: "Thumbs up" }
+    const STICKERS = [
+      { id: "thumbs-up", file: "thumbs-up.webp", label: "Thumbs up" },
+      { id: "point", file: "point.webp", label: "Nice one" },
+      { id: "cheer", file: "cheer.webp", label: "Yay" },
+      { id: "trophy", file: "trophy.webp", label: "Winner" },
+      { id: "cool", file: "cool.webp", label: "Cool" },
+      { id: "thinking", file: "thinking.webp", label: "Hmm?" },
+      { id: "working", file: "working.webp", label: "Working on it" },
+      { id: "idea", file: "idea.webp", label: "Idea" },
+      { id: "on-my-way", file: "on-my-way.webp", label: "On my way" },
+      { id: "love-it", file: "love-it.webp", label: "Love it" },
+      { id: "sleepy", file: "sleepy.webp", label: "Sleepy" },
+      { id: "announcement", file: "announcement.webp", label: "Announcement" },
+      { id: "done", file: "done.webp", label: "Done" },
+      { id: "celebrate", file: "celebrate.webp", label: "Celebrate" },
+      { id: "studying", file: "studying.webp", label: "Studying" },
+      { id: "graduated", file: "graduated.webp", label: "Graduated" },
+      { id: "hello", file: "hello.webp", label: "Hello" },
+      { id: "coffee", file: "coffee.webp", label: "Coffee break" },
+      { id: "back-to-school", file: "back-to-school.webp", label: "Heading in" },
+      { id: "schedule", file: "schedule.webp", label: "Schedule" },
+      { id: "presentation", file: "presentation.webp", label: "Presentation" },
+      { id: "goal", file: "goal.webp", label: "Goal" },
+      { id: "on-time", file: "on-time.webp", label: "On time" },
+      { id: "paperwork", file: "paperwork.webp", label: "Paperwork" },
+      { id: "mail", file: "mail.webp", label: "Mail" },
+      { id: "ok", file: "ok.webp", label: "OK" },
+      { id: "support", file: "support.webp", label: "Support" },
+      { id: "chill", file: "chill.webp", label: "Chill" }
+    ];
     const STICKER_TOKEN_RE = /^\[sticker:([a-z0-9_-]+)\]$/;
 
     function stickerFor(content) {
@@ -5713,6 +5869,38 @@
     function jumpToPinned() {
       const m = pinnedMessages[pinnedTickerIndex % pinnedMessages.length];
       if (m) jumpToMessage(m.id);
+    }
+
+    // The quick-reaction set shown on hover — change it here and in
+    // CHAT_REACTIONS in server/rizurfApi.js (the server only accepts these).
+    const CHAT_REACTIONS = ["❤️", "😂", "😮", "😢", "👍"];
+
+    async function toggleChatReaction(id, emoji) {
+      const message = conversationMessages.find(m => m.id === id);
+      if (!message || message.pending) return;
+      const before = { reactions: message.reactions, userReactions: message.userReactions };
+      const reactions = { ...(message.reactions || {}) };
+      let userReactions = [...(message.userReactions || [])];
+      if (userReactions.includes(emoji)) {
+        userReactions = userReactions.filter(e => e !== emoji);
+        reactions[emoji] = (reactions[emoji] || 1) - 1;
+        if (!reactions[emoji]) delete reactions[emoji];
+      } else {
+        userReactions.push(emoji);
+        reactions[emoji] = (reactions[emoji] || 0) + 1;
+      }
+      Object.assign(message, { reactions, userReactions });
+      renderConversationMessages();
+      try {
+        const response = await fetch(`${API_BASE_URL}/feedback/${id}/reactions`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reaction: emoji })
+        });
+        if (!response.ok) throw new Error();
+      } catch (error) {
+        Object.assign(message, before);
+        renderConversationMessages();
+        showToast("Could not add that reaction. Please try again.");
+      }
     }
 
     function toggleStarredFilter() {
@@ -5844,8 +6032,16 @@
       document.getElementById("profileModalName").textContent = CURRENT_USER.name || "No User Selected";
       document.getElementById("profileModalRole").textContent = CURRENT_USER.role
         ? `${CURRENT_USER.role} • ${CURRENT_USER.department}` : "--";
+      document.getElementById("darkModeToggle").checked = document.documentElement.dataset.theme === "dark";
       document.getElementById("profileModalOverlay").classList.add("open");
       document.body.style.overflow = "hidden";
+    }
+
+    // Per-device preference (localStorage), applied pre-paint by the <head> script.
+    function setDarkMode(on) {
+      if (on) document.documentElement.dataset.theme = "dark";
+      else delete document.documentElement.dataset.theme;
+      try { localStorage.setItem("rizurf-theme", on ? "dark" : "light"); } catch (error) { /* private mode: just not remembered */ }
     }
 
     function closeProfileModal() {

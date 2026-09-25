@@ -123,5 +123,27 @@ export async function fetchInterns({ limit = 100, offset = 0, correlationId } = 
     email: intern.email_address || intern.email || null,
     avatar: intern.photo_url || intern.avatar || intern.profile_photo || null,
     skills: Array.isArray(intern.skills) ? intern.skills : []
-  })).filter(intern => intern.externalId !== 'undefined');
+  }));
+}
+
+// The whole directory, page by page (the API caps a page at 100). `complete`
+// is false if paging looked broken (a page repeating the previous one, i.e.
+// the API ignoring offset) or ran past the safety cap — callers must never
+// treat an incomplete list as "everyone who's still here".
+export async function fetchAllInterns({ correlationId } = {}) {
+  const PAGE = 100;
+  const all = [];
+  const seen = new Set();
+  for (let offset = 0; offset < 50 * PAGE; offset += PAGE) {
+    const page = await fetchInterns({ limit: PAGE, offset, correlationId });
+    if (page.length && page.every(intern => seen.has(intern.externalId))) return { interns: all, complete: false };
+    for (const intern of page) {
+      if (seen.has(intern.externalId)) continue;
+      seen.add(intern.externalId);
+      if (intern.externalId !== 'undefined') all.push(intern);
+    }
+    // Counted before dropping id-less entries, so a short page really is the last.
+    if (page.length < PAGE) return { interns: all, complete: true };
+  }
+  return { interns: all, complete: false };
 }
