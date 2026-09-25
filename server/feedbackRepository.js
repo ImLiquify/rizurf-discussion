@@ -215,8 +215,9 @@ export async function listFeedback({ targetId, senderId, participantId, groupMem
   const conditions = [];
   const parameters = [];
   if (visibility === 'private') {
-    conditions.push('f.visibility = \'private\'', PRIVATE_ACCESS_SQL);
-    parameters.push(...privateAccessParams(viewerIsPrivileged, viewerId));
+    conditions.push('f.visibility = \'private\'', PRIVATE_ACCESS_SQL,
+      'NOT EXISTS (SELECT 1 FROM message_hidden mh WHERE mh.feedback_id = f.id AND mh.user_id = ?)');
+    parameters.push(...privateAccessParams(viewerIsPrivileged, viewerId), viewerId || '');
     if (participantId) {
       conditions.push('f.target_type = \'user\' AND (f.sender_id = ? OR f.target_id = ?)');
       parameters.push(participantId, participantId);
@@ -755,6 +756,10 @@ export async function setPinned({ feedbackId, pinnedBy }) {
     'UPDATE feedback SET pinned_at = IF(? IS NULL, NULL, CURRENT_TIMESTAMP), pinned_by = ? WHERE id = ?',
     [pinnedBy, pinnedBy, feedbackId]
   );
+}
+
+export async function hideMessageForUser({ userId, feedbackId }) {
+  await pool.execute('INSERT IGNORE INTO message_hidden (user_id, feedback_id) VALUES (?, ?)', [userId, feedbackId]);
 }
 
 export async function setStarred({ userId, feedbackId, starred }) {

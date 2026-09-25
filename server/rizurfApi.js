@@ -78,6 +78,9 @@ const openapi = {
     '/api/feedback/{feedbackId}/pin': {
       post: operation('Pin or unpin a message.', 'feedback:write', discovery('Pin Message', 'Pin a private message to the top of its conversation for everyone in it, or unpin it.', ['feedbackId', 'pinned'], ['pinned']))
     },
+    '/api/feedback/{feedbackId}/hide': {
+      post: operation('Hide a message for yourself.', 'feedback:write', discovery('Hide Message', 'Delete a chat message for yourself only ("delete for me"); everyone else still sees it.', ['feedbackId'], []))
+    },
     '/api/feedback/{feedbackId}/star': {
       post: operation('Star or unstar a message.', 'feedback:write', discovery('Star Message', 'Star a private message for yourself only, or unstar it.', ['feedbackId', 'starred'], ['starred']))
     },
@@ -129,6 +132,7 @@ function routeKey(pathname) {
   if (/^\/api\/feedback\/[^/]+\/reactions$/.test(pathname)) return '/api/feedback/{feedbackId}/reactions';
   if (/^\/api\/feedback\/[^/]+\/pin$/.test(pathname)) return '/api/feedback/{feedbackId}/pin';
   if (/^\/api\/feedback\/[^/]+\/star$/.test(pathname)) return '/api/feedback/{feedbackId}/star';
+  if (/^\/api\/feedback\/[^/]+\/hide$/.test(pathname)) return '/api/feedback/{feedbackId}/hide';
   if (/^\/api\/feedback\/[^/]+$/.test(pathname)) return '/api/feedback/{feedbackId}';
   if (/^\/api\/groups\/[^/]+\/members\/[^/]+$/.test(pathname)) return '/api/groups/{groupId}/members/{userId}';
   if (/^\/api\/groups\/[^/]+\/members$/.test(pathname)) return '/api/groups/{groupId}/members';
@@ -450,8 +454,13 @@ app.delete('/api/feedback/:feedbackId', async (request, response, next) => {
     const meta = await loadAccessibleFeedback(request, response, request.params.feedbackId);
     if (!meta) return;
     const callerId = await feedbacks.resolveIdentityAccount({ sub: auth.sub, email: auth.email, name: auth.name, role: auth.role });
-    if (!await canModerateMessage(meta, callerId)) {
-      return sendError(response, request, 403, 'FORBIDDEN', 'Only the author or someone who moderates this conversation can delete this.');
+    // Chat messages: only their author deletes them (for everyone); anyone
+    // else can only hide one for themselves (POST .../hide). Public wall
+    // posts keep the moderator rule.
+    if (meta.visibility === 'private' ? meta.senderId !== callerId : !await canModerateMessage(meta, callerId)) {
+      return sendError(response, request, 403, 'FORBIDDEN', meta.visibility === 'private'
+        ? 'You can only delete your own messages. Use "Delete for me" to hide someone else\'s.'
+        : 'Only the author or someone who moderates this conversation can delete this.');
     }
     await feedbacks.deleteFeedback(request.params.feedbackId);
     return response.status(204).end();
@@ -632,6 +641,16 @@ app.post('/api/feedback/:feedbackId/pin', async (request, response, next) => {
     const pinned = Boolean(request.body?.pinned);
     await feedbacks.setPinned({ feedbackId: meta.id, pinnedBy: pinned ? viewerId : null });
     return sendJson(response, 200, { pinned });
+  } catch (error) { return next(error); }
+});
+app.post('/api/feedback/:feedbackId/hide', async (request, response, next) => {
+  try {
+    const meta = await loadAccessibleFeedback(request, response, request.params.feedbackId);
+    if (!meta) return;
+    if (meta.visibility !== 'private') return sendError(response, request, 422, 'VALIDATION_ERROR', 'Only chat messages can be hidden.');
+    const { viewerId } = await resolveViewerForRead(request.auth);
+    await feedbacks.hideMessageForUser({ userId: viewerId, feedbackId: meta.id });
+    return response.status(204).end();
   } catch (error) { return next(error); }
 });
 app.post('/api/feedback/:feedbackId/star', async (request, response, next) => {

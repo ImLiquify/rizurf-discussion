@@ -2168,7 +2168,30 @@
     }
     .chat-message-menu button:hover { background: var(--bg-subtle); }
     .chat-message-menu button.danger { color: #DC2626; }
-    .chat-message-menu button.danger.armed { background: rgba(220, 38, 38, 0.1); font-weight: 700; }
+    /* Delete confirmation pop-up */
+    .confirm-modal-card { max-width: 400px; }
+    .confirm-modal-body { padding: 24px; display: flex; flex-direction: column; gap: 10px; }
+    .confirm-modal-body h3 { font-size: 1.05rem; font-weight: 800; color: var(--text-main); }
+    .confirm-modal-note { font-size: 0.85rem; color: var(--text-muted); }
+    .confirm-modal-quote {
+      margin: 4px 0 0;
+      padding: 10px 12px;
+      border-left: 3px solid var(--border-color);
+      border-radius: 6px;
+      background: var(--bg-subtle);
+      font-size: 0.86rem;
+      color: var(--text-main);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      max-height: 140px;
+      overflow-y: auto;
+    }
+    .confirm-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+    .confirm-modal-actions button { padding: 9px 16px; border-radius: var(--radius-md); font-size: 0.86rem; font-weight: 700; }
+    .confirm-modal-cancel { color: var(--text-main); background: var(--bg-subtle); }
+    .confirm-modal-cancel:hover { background: var(--border-color); }
+    .confirm-modal-danger { color: #fff; background: #DC2626; }
+    .confirm-modal-danger:hover { background: #B91C1C; }
     .chat-message-menu .menu-icon { width: 18px; text-align: center; }
 
     .chat-mention-line {
@@ -2239,11 +2262,25 @@
     }
     .chat-pinned-ticker:hover { background: var(--bg-subtle); color: var(--text-main); }
     .chat-pinned-ticker svg { flex-shrink: 0; color: var(--accent-cyan); }
-    .chat-pinned-ticker-text { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-    .chat-pinned-ticker-text.slide-in { animation: pinned-slide-in 0.35s ease; }
-    .chat-pinned-ticker-count { flex-shrink: 0; font-size: 0.7rem; color: var(--text-subtle); font-variant-numeric: tabular-nums; }
-    @keyframes pinned-slide-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-    @media (prefers-reduced-motion: reduce) { .chat-pinned-ticker-text.slide-in { animation: none; } }
+    /* The current pin rolls up out of a one-line window while the next rolls
+       in from below. */
+    .chat-pinned-ticker-window { position: relative; min-width: 0; height: 1.35em; overflow: hidden; }
+    /* The incoming line stays in normal flow so it sizes the window; only
+       the outgoing one is layered on top while it rolls away. */
+    .chat-pinned-ticker-text { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .chat-pinned-ticker-text.roll-out { position: absolute; inset: 0; }
+    .chat-pinned-ticker-text.roll-in { animation: pinned-roll-in 0.4s ease both; }
+    .chat-pinned-ticker-text.roll-out { animation: pinned-roll-out 0.4s ease both; }
+    @keyframes pinned-roll-in { from { transform: translateY(100%); opacity: 0; } to { transform: none; opacity: 1; } }
+    @keyframes pinned-roll-out { from { transform: none; opacity: 1; } to { transform: translateY(-100%); opacity: 0; } }
+    /* Vertical dots: which pin is showing. */
+    .chat-pinned-dots { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+    .chat-pinned-dots span { width: 4px; height: 4px; border-radius: 50%; background: var(--border-color); transition: background 0.2s ease; }
+    .chat-pinned-dots span.active { background: var(--accent-cyan); }
+    @media (prefers-reduced-motion: reduce) {
+      .chat-pinned-ticker-text.roll-in, .chat-pinned-ticker-text.roll-out { animation: none; }
+      .chat-pinned-ticker-text.roll-out { display: none; }
+    }
     .feedbacks-row-icon-btn.active { color: #D97706; background: rgba(217, 119, 6, 0.1); }
 
     /* ---- Media in bubbles + lightbox ---- */
@@ -3438,6 +3475,21 @@
     <div class="media-lightbox-stage" id="lightboxStage" onclick="if (event.target === this) closeLightbox()"></div>
   </div>
 
+  <div class="modal-overlay" id="confirmDeleteOverlay" onclick="if (event.target === this) closeDeleteConfirm()">
+    <div class="modal-content-card confirm-modal-card" role="alertdialog" aria-modal="true"
+      aria-labelledby="confirmDeleteTitle" aria-describedby="confirmDeleteNote confirmDeleteText">
+      <div class="confirm-modal-body">
+        <h3 id="confirmDeleteTitle">Are you sure you want to delete?</h3>
+        <p class="confirm-modal-note" id="confirmDeleteNote"></p>
+        <blockquote class="confirm-modal-quote" id="confirmDeleteText"></blockquote>
+        <div class="confirm-modal-actions">
+          <button type="button" class="confirm-modal-cancel" id="confirmDeleteCancelBtn" onclick="closeDeleteConfirm()">Cancel</button>
+          <button type="button" class="confirm-modal-danger" id="confirmDeleteBtn" onclick="confirmDelete()">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="groupModalOverlay" onclick="handleGroupModalBackdropClick(event)">
     <div class="modal-content-card group-modal-card" onclick="event.stopPropagation()">
       <div class="modal-header">
@@ -3627,7 +3679,7 @@
     let replyingTo = null; // {id, senderName, content} of the message the compose box is replying to
     let showStarredOnly = false; // header ★ toggle: filter the open thread to my starred messages
     let openMessageMenuId = null; // message whose ⋯ menu is open
-    let deleteArmed = false; // first click on "Delete" in that menu arms it, the second deletes
+    let pendingDelete = null; // { id, forMe } awaiting the confirm pop-up
     let pinnedMessages = []; // pinned messages of the open thread, newest pin first
     let pinnedTickerIndex = 0; // which one the header carousel is showing
     const pulsedMentionIds = new Set(); // mentions of me that already did their two pulses this session
@@ -4858,7 +4910,7 @@
            </div>`
         : sticker
         ? `${replyHtml}<img class="chat-sticker" src="/assets/stickers/${encodeURIComponent(sticker.file)}" alt="${escapeHtml(sticker.label)} sticker" loading="lazy" />`
-        : `${replyHtml}${chatAttachmentHtml(message)}${showText ? `<div class="chat-message-text">${message.targetType === "user" ? escapeHtml(message.content) : highlightMentionsHtml(message.content)}</div>` : ""}`;
+        : `${replyHtml}${chatAttachmentHtml(message)}${showText ? `<div class="chat-message-text">${message.targetType === "user" ? escapeHtml(messagePreviewText(message.content)) : highlightMentionsHtml(messagePreviewText(message.content))}</div>` : ""}`;
       return `
         <div class="chat-message-row${mine ? " mine" : ""}${message.pending ? " pending" : ""}${message.pinnedAt ? " pinned" : ""}${sticker ? " sticker-message" : ""}${openMessageMenuId === message.id ? " menu-open" : ""}" id="chat-msg-${message.id}">
           ${actionsHtml}
@@ -5069,7 +5121,7 @@
           </div>
         `;
       }
-      renderPinnedTicker(false);
+      renderPinnedTicker();
       header.insertAdjacentHTML("beforeend", `
         <button type="button" class="feedbacks-row-icon-btn${showStarredOnly ? " active" : ""}" onclick="toggleStarredFilter()"
           title="${showStarredOnly ? "Show all messages" : "Show only my starred messages"}" aria-pressed="${showStarredOnly}">★</button>`);
@@ -5378,13 +5430,6 @@
       if (menu) menu.hidden = true;
       document.querySelectorAll(".chat-message-row.menu-open").forEach(el => el.classList.remove("menu-open"));
       openMessageMenuId = null;
-      deleteArmed = false;
-    }
-
-    // Mirrors canModerateMessage in rizurfApi.js.
-    function canDeleteChatMessage(message) {
-      if (message.senderId === CURRENT_USER.id) return true;
-      return activeContainer?.type === "group" ? isGroupManager(activeContainer.id) : isPrivilegedViewer();
     }
 
     function renderMessageMenu() {
@@ -5398,22 +5443,68 @@
         item("pin", "📌", message.pinnedAt ? "Unpin" : "Pin"),
         item("copy", "⧉", "Copy text"),
         message.senderId === CURRENT_USER.id && withinEditWindow(message) ? item("edit", "✎", "Edit") : "",
-        canDeleteChatMessage(message)
-          ? item("delete", "🗑", deleteArmed ? "Click again to delete" : "Delete", `danger${deleteArmed ? " armed" : ""}`) : ""
+        // Your own message: delete for everyone. Anyone else's: hide it for
+        // you only (mirrors DELETE vs POST .../hide in rizurfApi.js).
+        item("delete", "🗑", message.senderId === CURRENT_USER.id ? "Delete" : "Delete for me", "danger")
       ].join("");
     }
 
     function messageMenuAction(action) {
       const id = openMessageMenuId;
-      // Delete takes a second click on the same item — no blocking confirm().
-      if (action === "delete" && !deleteArmed) { deleteArmed = true; renderMessageMenu(); return; }
       closeMessageMenu();
       if (action === "reply") startReply(id);
       else if (action === "star") toggleMessageStar(id);
       else if (action === "pin") toggleMessagePin(id);
       else if (action === "copy") copyMessageText(id);
       else if (action === "edit") startChatMessageEdit(id);
-      else if (action === "delete") deleteChatMessage(id);
+      else if (action === "delete") openDeleteConfirm(id);
+    }
+
+    function openDeleteConfirm(id) {
+      const message = conversationMessages.find(m => m.id === id);
+      if (!message) return;
+      const forMe = message.senderId !== CURRENT_USER.id;
+      pendingDelete = { id, forMe };
+      document.getElementById("confirmDeleteNote").textContent = forMe
+        ? "It will be removed for you only. Everyone else in the chat will still see it."
+        : "It will be deleted for everyone in the chat.";
+      document.getElementById("confirmDeleteText").textContent = messagePreviewText(message.content);
+      document.getElementById("confirmDeleteBtn").textContent = forMe ? "Delete for me" : "Delete for everyone";
+      document.getElementById("confirmDeleteOverlay").classList.add("open");
+      document.getElementById("confirmDeleteCancelBtn").focus({ preventScroll: true });
+    }
+
+    function closeDeleteConfirm() {
+      document.getElementById("confirmDeleteOverlay").classList.remove("open");
+      pendingDelete = null;
+    }
+
+    function confirmDelete() {
+      if (!pendingDelete) return;
+      const { id, forMe } = pendingDelete;
+      closeDeleteConfirm();
+      if (forMe) hideChatMessage(id);
+      else deleteChatMessage(id);
+    }
+
+    async function hideChatMessage(id) {
+      const index = conversationMessages.findIndex(m => m.id === id);
+      if (index < 0) return;
+      const topicId = activeTopic?.id;
+      const [removed] = conversationMessages.splice(index, 1);
+      if (replyingTo?.id === id) cancelReply();
+      renderConversationMessages();
+      try {
+        const response = await fetch(`${API_BASE_URL}/feedback/${id}/hide`, { method: "POST" });
+        if (!response.ok) throw new Error();
+        showToast("🗑️ Deleted for you.");
+      } catch (error) {
+        if (activeTopic?.id === topicId && !conversationMessages.some(m => m.id === id)) {
+          conversationMessages.push(removed);
+          renderConversationMessages();
+        }
+        showToast("Could not delete that message. Please try again.");
+      }
     }
 
     async function toggleMessageStar(id) {
@@ -5565,23 +5656,38 @@
 
     const PIN_ICON_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>`;
 
-    // Fills #pinnedTicker with pinnedMessages[pinnedTickerIndex]; `animate`
-    // only on an actual rotation, not on every re-render of the header.
-    function renderPinnedTicker(animate) {
+    const pinnedTickerLine = m => `<strong>${escapeHtml(m.senderName)}:</strong> ${escapeHtml(messagePreviewText(m.content))}`;
+
+    // Fills #pinnedTicker with pinnedMessages[pinnedTickerIndex].
+    // `previous` (the pin being replaced) is only passed on an actual
+    // rotation — it rolls out while the new one rolls in.
+    function renderPinnedTicker(previous = null) {
       const ticker = document.getElementById("pinnedTicker");
       if (!ticker || !pinnedMessages.length) return;
-      pinnedTickerIndex %= pinnedMessages.length;
+      const count = pinnedMessages.length;
+      pinnedTickerIndex %= count;
       const m = pinnedMessages[pinnedTickerIndex];
+      // At most 4 dots; with more pins the dots window follows the active one.
+      const shown = Math.min(count, 4);
+      const first = Math.min(Math.max(0, pinnedTickerIndex - 1), count - shown);
+      const dots = count > 1
+        ? `<span class="chat-pinned-dots" aria-hidden="true">${Array.from({ length: shown }, (_, i) =>
+            `<span class="${first + i === pinnedTickerIndex ? "active" : ""}"></span>`).join("")}</span>`
+        : "";
       ticker.title = "Go to this pinned message";
-      ticker.innerHTML = `${PIN_ICON_SVG}
-        <span class="chat-pinned-ticker-text${animate ? " slide-in" : ""}"><strong>${escapeHtml(m.senderName)}:</strong> ${escapeHtml(messagePreviewText(m.content))}</span>
-        ${pinnedMessages.length > 1 ? `<span class="chat-pinned-ticker-count">${pinnedTickerIndex + 1}/${pinnedMessages.length}</span>` : ""}`;
+      ticker.setAttribute("aria-label", `Pinned message ${pinnedTickerIndex + 1} of ${count}: ${m.senderName}: ${messagePreviewText(m.content)}`);
+      ticker.innerHTML = `${dots}${PIN_ICON_SVG}
+        <span class="chat-pinned-ticker-window">
+          ${previous ? `<span class="chat-pinned-ticker-text roll-out" aria-hidden="true">${pinnedTickerLine(previous)}</span>` : ""}
+          <span class="chat-pinned-ticker-text${previous ? " roll-in" : ""}">${pinnedTickerLine(m)}</span>
+        </span>`;
     }
 
     function rotatePinnedTicker() {
       if (pinnedMessages.length < 2 || !document.getElementById("pinnedTicker")) return;
+      const previous = pinnedMessages[pinnedTickerIndex % pinnedMessages.length];
       pinnedTickerIndex = (pinnedTickerIndex + 1) % pinnedMessages.length;
-      renderPinnedTicker(true);
+      renderPinnedTicker(previous);
     }
     window.setInterval(rotatePinnedTicker, 3500);
 
@@ -5681,7 +5787,7 @@
     });
     document.addEventListener("keydown", event => {
       const lightboxOpen = !document.getElementById("mediaLightbox").hidden;
-      if (event.key === "Escape") { closeLightbox(); closeMessageMenu(); toggleStickerPicker(false); }
+      if (event.key === "Escape") { closeLightbox(); closeMessageMenu(); toggleStickerPicker(false); closeDeleteConfirm(); }
       else if (lightboxOpen && (event.key === "+" || event.key === "=")) zoomLightbox(0.25);
       else if (lightboxOpen && event.key === "-") zoomLightbox(-0.25);
     });

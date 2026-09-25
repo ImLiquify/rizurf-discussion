@@ -285,6 +285,14 @@ export async function ensureSchemaCompatibility() {
     PRIMARY KEY (topic_id, user_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
 
+  // "Delete for me": messages a person hid from their own view only.
+  await pool.query(`CREATE TABLE IF NOT EXISTS message_hidden (
+    user_id varchar(50) NOT NULL,
+    feedback_id varchar(60) NOT NULL,
+    created_at timestamp NOT NULL DEFAULT current_timestamp(),
+    PRIMARY KEY (user_id, feedback_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
+
   // Per-person starred messages (private to whoever starred them).
   await pool.query(`CREATE TABLE IF NOT EXISTS message_stars (
     user_id varchar(50) NOT NULL,
