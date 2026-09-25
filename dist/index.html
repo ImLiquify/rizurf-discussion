@@ -11,6 +11,7 @@
   <!-- Apply the saved theme before first paint (no light flash). -->
   <script>try { if (localStorage.getItem("rizurf-theme") === "dark") document.documentElement.dataset.theme = "dark"; } catch (e) {}</script>
   <!-- Swapped at load for the Rizurf mark cropped out of the brand logo (setBrandFavicon). -->
+  <script src="https://web-omega-two-47.vercel.app/widget/gateway-button.js" defer></script>
   <link rel="icon" id="appFavicon" href="/assets/logo-0Yo0gl14.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,7 +24,7 @@
        1. CSS VARIABLES & DESIGN TOKENS
        ========================================================================== */
     :root {
-      --brand-dark: #021732;
+      --brand-dark: #dbe0e8;
       --brand-navy: #0A2A4E;
       --brand-teal-dark: #027E8F;
       --brand-teal: #039DB1;
@@ -40,9 +41,21 @@
       --status-warning: #E8A317;
       --status-danger: #E0533D;
 
-      --primary: var(--brand-teal);
-      --primary-hover: var(--brand-teal-dark);
-      --primary-light: var(--brand-ice);
+      /* RIZURF_DESIGN_SYSTEM.md: indigo means "clickable / selected";
+         navy and teal mean "Rizurf" (text, logo) and are never interactive. */
+      --navy: #021732;
+      --navy-700: #0A2A4E;
+      --teal: #039DB1;
+      --ink: #0E1B2C;
+      --muted: #5A6B80;
+      --line: #E3E8EF;
+      --soft: #F6F8FB;
+      --primary-600: #4338CA;
+      --notify: #E5484D;
+
+      --primary: #4F46E5;
+      --primary-hover: var(--primary-600);
+      --primary-light: color-mix(in srgb, #4F46E5 11%, white);
       --bg-main: var(--neutral-white);
       --bg-surface: var(--neutral-white);
       --bg-muted: var(--neutral-bg);
@@ -61,23 +74,24 @@
       --accent-cyan: var(--primary);
       --accent-cyan-hover: var(--primary-hover);
       --accent-cyan-light: var(--primary-light);
-      --accent-cyan-glow: rgba(3, 157, 177, 0.22);
+      --accent-cyan-glow: color-mix(in srgb, #4F46E5 15%, white);
 
       --danger-color: var(--status-danger);
       --danger-hover: #C84431;
       --danger-light: #FCE9E5;
 
       --border-color: var(--border-light);
-      --border-focus: var(--brand-teal);
+      --border-focus: var(--primary);
 
-      --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
-      --shadow-md: 0 4px 12px -2px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
-      --shadow-lg: 0 12px 28px -6px rgba(15, 23, 42, 0.08), 0 4px 10px -2px rgba(15, 23, 42, 0.03);
-      --shadow-xl: 0 20px 35px -8px rgba(15, 23, 42, 0.12);
+      --shadow-sm: 0 1px 2px 0 rgba(2, 23, 50, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(2, 23, 50, 0.07), 0 2px 4px -2px rgba(2, 23, 50, 0.05);
+      --shadow-lg: 0 10px 15px -3px rgba(2, 23, 50, 0.08), 0 4px 6px -4px rgba(2, 23, 50, 0.04);
+      --shadow-xl: 0 20px 25px -5px rgba(2, 23, 50, 0.1), 0 8px 10px -6px rgba(2, 23, 50, 0.04);
+      --shadow-float: 0 16px 32px -6px rgba(2, 23, 50, 0.16), 0 6px 12px -3px rgba(2, 23, 50, 0.08);
 
-      --radius-sm: 8px;
-      --radius-md: 12px;
-      --radius-lg: 16px;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
       --radius-xl: 20px;
       --radius-full: 9999px;
 
@@ -94,6 +108,7 @@
 
       --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
       --transition-smooth: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     /* Dark mode (profile → Dark mode), built from Styles.md's own palette:
@@ -112,8 +127,9 @@
       --text-muted: #A7B6C8;
       --text-subtle: #7D8FA5;
       --border-light: #1B3452;
-      --primary-light: rgba(3, 157, 177, 0.18);
-      --primary-hover: #3CC2D4;
+      --primary-light: rgba(79, 70, 229, 0.22);
+      --primary-hover: #818CF8;
+      --accent-cyan-glow: rgba(79, 70, 229, 0.3);
       --danger-light: rgba(224, 83, 61, 0.16);
       --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.35);
       --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.45);
@@ -1569,7 +1585,7 @@
 
     .feedbacks-layout {
       display: flex;
-      height: calc(100vh - 64px);
+      height: calc(100vh - 72px); /* 4px top line + 68px top bar */
       min-height: 480px;
       background: var(--bg-surface);
       margin: -28px -28px 0 -28px;
@@ -2318,7 +2334,7 @@
       background: var(--accent-cyan-light);
     }
     .chat-mention-line.pulse { animation: mention-pulse 0.7s ease-in-out 2; }
-    @keyframes mention-pulse { 50% { background: rgba(3, 157, 177, 0.32); } }
+    @keyframes mention-pulse { 50% { background: rgba(79, 70, 229, 0.25); } }
     @media (prefers-reduced-motion: reduce) { .chat-mention-line.pulse { animation: none; } }
 
     /* ---- Replies ---- */
@@ -2540,7 +2556,7 @@
       font-weight: 600;
     }
     .members-manage-btn:hover { color: var(--text-main); background: var(--bg-subtle); }
-    .members-toggle-btn.active { color: var(--accent-cyan); }
+    .members-toggle-btn.active { color: var(--primary); background: var(--primary-light); }
     @media (max-width: 1100px) {
       .members-panel { width: 200px; }
     }
@@ -2976,7 +2992,7 @@
       z-index: 99;
     }
 
-    @media (max-width: 768px) {
+    @media (max-width: 1000px) {
       .mobile-nav-toggle { display: inline-flex; }
       .sidebar {
         transform: translateX(-100%);
@@ -3116,26 +3132,25 @@
       background: rgba(255,255,255,0.25);
     }
 
-    /* Teams-style rail (desktop): icons only, widening over the page on
-       hover/focus so the labels slide into view. The page itself never
-       reflows — it keeps a 72px margin. Mobile keeps the full drawer. */
-    @media (min-width: 769px) {
-      .sidebar { width: 72px; min-width: 72px; transition: width 0.18s ease, box-shadow 0.18s ease; }
-      .sidebar:hover, .sidebar:has(:focus-visible) { width: 240px; box-shadow: 8px 0 28px rgba(0,0,0,0.28); }
-      html .main-panel { margin-left: 72px; } /* beats the later base rule */
-      .sidebar-nav { overflow-x: hidden; }
-      .sidebar-brand { padding: 16px 16px !important; overflow: hidden; }
-      .sidebar-brand img { max-width: none !important; height: 36px; transition: clip-path 0.18s ease; }
-      .sidebar:not(:hover):not(:has(:focus-visible)) .sidebar-brand img { clip-path: inset(0 calc(100% - 26px) 0 0); } /* just the mark */
-      .sidebar-nav-link { position: relative; padding: 10px 15px; white-space: nowrap; }
-      .sidebar-user-badge, .sidebar-nav-label { white-space: nowrap; }
-      .sidebar-nav-label, .sidebar-nav-link .nav-text, .sidebar-user-info { opacity: 0; transition: opacity 0.12s ease; }
-      .sidebar:is(:hover, :has(:focus-visible)) :is(.sidebar-nav-label, .nav-text, .sidebar-user-info) { opacity: 1; }
+    /* Rail (RIZURF_DESIGN_SYSTEM.md §2): 56px of icons, widening to 208px
+       over the page on hover/keyboard focus — the page never reflows.
+       Below 1000px it's the ☰ drawer instead. */
+    @media (min-width: 1001px) {
+      .sidebar { width: 56px; min-width: 56px; transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1); }
+      .sidebar:hover, .sidebar:has(:focus-visible) { width: 208px; box-shadow: var(--shadow-lg); }
+      html .main-panel { margin-left: 56px; } /* beats the later base rule */
+      .sidebar-user-badge { padding: 12px 9px; white-space: nowrap; }
+      .nav-text, .sidebar-user-info { opacity: 0; transition: opacity 0.14s ease; }
+      .sidebar:is(:hover, :has(:focus-visible)) :is(.nav-text, .sidebar-user-info) { opacity: 1; }
+      .sidebar:not(:hover):not(:has(:focus-visible)) .brand-full { display: none; }
+      .sidebar:is(:hover, :has(:focus-visible)) .brand-icon { display: none; }
       /* Collapsed, the unread count sits on the icon's corner. */
       .sidebar:not(:hover):not(:has(:focus-visible)) .nav-badge {
-        position: absolute; top: 3px; left: 30px; padding: 0 5px; font-size: 0.62rem;
-        background: var(--status-danger, #E0533D);
+        position: absolute; top: 2px; left: 24px; padding: 0 5px; font-size: 0.62rem;
       }
+    }
+    @media (max-width: 1000px) {
+      .brand-icon { display: none; }
     }
     @media (prefers-reduced-motion: reduce) {
       .sidebar, .sidebar-nav-label, .nav-text, .sidebar-user-info { transition: none !important; }
@@ -3145,7 +3160,7 @@
        fades back to normal on its own — no JS cleanup needed. */
     @keyframes ping-flash {
       0% { background: var(--status-danger, #E0533D); transform: scale(1.5); }
-      100% { background: rgba(255,255,255,0.15); transform: scale(1); }
+      100% { background: var(--status-danger, #E0533D); transform: scale(1); }
     }
     .nav-badge.ping-flash { animation: ping-flash 1.1s ease-out; }
 
@@ -3174,7 +3189,7 @@
       width: 38px;
       height: 38px;
       border-radius: var(--radius-full);
-      border: 2px solid rgba(0,163,166,0.6);
+      border: 2px solid var(--border-color);
       position: relative;
       flex-shrink: 0;
     }
@@ -3315,8 +3330,8 @@
 
     .top-role-switcher:hover,
     .top-role-switcher:focus-within {
-      border-color: #00A3A6;
-      box-shadow: 0 0 0 2px rgba(0,163,166,0.15);
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px var(--accent-cyan-glow);
     }
 
     /* ---- Content Area ---- */
@@ -3340,9 +3355,10 @@
     .btn-submit-comment,
     .btn-submit-reply,
     .btn-save-inline {
-      background: var(--brand-navy);
+      background: var(--primary);
       color: var(--neutral-white);
-      border-radius: var(--radius-pill);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-sm);
     }
 
     .brand-logo-icon {
@@ -3353,17 +3369,93 @@
     .btn-submit-comment:hover,
     .btn-submit-reply:hover,
     .btn-save-inline:hover {
-      background: var(--brand-dark);
+      background: var(--primary-600);
+      box-shadow: var(--shadow-md);
     }
 
     .top-role-switcher {
       background: var(--neutral-white);
     }
 
+    /* design-system.css / components.css */
+    /* Shell (RIZURF_DESIGN_SYSTEM.md §2): 4px navy→indigo line on top,
+       white sidebar and 68px top bar, content on --soft. Tokens, so dark
+       mode stays dark. */
+    body::before {
+      content: ""; position: fixed; top: 0; left: 0; right: 0; height: 4px; z-index: 200;
+      background: linear-gradient(90deg, var(--navy) 0%, var(--primary) 100%);
+    }
+    .sidebar { top: 4px; height: calc(100vh - 4px); background: var(--bg-surface); border-right: 1px solid var(--border-color); box-shadow: none; }
+    .main-panel { margin-top: 4px; height: calc(100vh - 4px); background: var(--bg-canvas); }
+    .top-header-bar { height: 68px; min-height: 68px; padding: 0 32px; box-shadow: none; }
+    .breadcrumb { font-size: 13.5px; color: var(--text-muted); }
+    .breadcrumb-active { color: var(--navy); font-weight: 650; }
+    :root[data-theme="dark"] .breadcrumb-active { color: var(--text-main); }
+
+    .sidebar-brand { padding: 18px 16px !important; border-bottom: 1px solid var(--border-color) !important; overflow: hidden; white-space: nowrap; }
+    .brand-icon, .brand-full { display: block; height: 28px; width: auto; }
+    :root[data-theme="dark"] .brand-full { filter: brightness(0) invert(1); }
+    .sidebar-nav-label { display: none; }
+    .sidebar-nav { gap: 0; padding: 10px 8px 8px; overflow-x: hidden; scrollbar-width: none; }
+    .sidebar-nav::-webkit-scrollbar { width: 0; height: 0; }
+    .sidebar-nav-link {
+      position: relative; gap: 11px; padding: 8px; margin-bottom: 2px;
+      border: none; border-radius: var(--radius-md); white-space: nowrap;
+      color: var(--text-muted); font-size: 13.5px; font-weight: 600;
+      transition: background var(--transition-fast), color var(--transition-fast);
+    }
+    .sidebar-nav-link .nav-icon { width: 24px; height: 24px; color: inherit; opacity: 1; }
+    .sidebar-nav-link .nav-icon svg { width: 22px; height: 22px; }
+    .sidebar-nav-link:hover { background: var(--bg-subtle); color: var(--navy-700); }
+    :root[data-theme="dark"] .sidebar-nav-link:hover { color: var(--text-main); }
+    .sidebar-nav-link.active,
+    .sidebar-nav-link.active:hover { background: var(--primary-light); color: var(--primary); box-shadow: none; }
+    :root[data-theme="dark"] .sidebar-nav-link.active { color: var(--primary-hover); }
+    .sidebar-nav-link .nav-badge,
+    .sidebar-nav-link.active .nav-badge { background: var(--notify); color: #FFFFFF; }
+    .sidebar-backdrop { background: rgba(2, 23, 50, 0.45); }
+    .sidebar-user-badge { background: var(--bg-surface); border-top: 1px solid var(--border-color); }
+    .sidebar-user-badge:hover { background: var(--bg-subtle); }
+    .sidebar-user-name { color: var(--text-main); }
+    .sidebar-user-role { color: var(--text-muted); }
+    .sidebar-user-avatar .status-dot { border-color: var(--bg-surface); }
+
+    .modal-overlay { background: rgba(2, 23, 50, 0.5); }
+
+    .toast-card {
+      background: var(--brand-navy);
+      color: #FFFFFF;
+      border-radius: var(--radius-sm);
+      border-left: 4px solid var(--primary);
+      box-shadow: var(--shadow-lg);
+      padding: 0.75rem 1.25rem;
+      font-size: 0.85rem;
+    }
+
+    input:focus-visible,
+    textarea:focus-visible,
+    select:focus-visible,
+    .search-input-field:focus,
+    .topic-search-input:focus,
+    .feedbacks-compose-input:focus,
+    .group-modal-name-input:focus,
+    .feedback-textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--accent-cyan-glow);
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-canvas); }
+    ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+    :root[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #1B3452; }
+    :root[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #2A4A70; }
+
     .top-role-switcher:hover,
     .top-role-switcher:focus-within {
-      border-color: var(--brand-teal);
-      box-shadow: 0 0 0 2px rgba(3, 157, 177, 0.15);
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px var(--accent-cyan-glow);
     }
 
   </style>
@@ -3380,7 +3472,8 @@
 
     <!-- Brand Header -->
     <div class="sidebar-brand" style="padding: 20px 16px; border-bottom: 1px solid rgba(255,255,255,0.08);">
-      <img src="/assets/logo-0Yo0gl14.png" alt="Rizurf Realty Logo" class="brand-logo-img" style="max-height: 44px; width: auto; max-width: 100%; object-fit: contain; display: block;" />
+      <img class="brand-icon" src="https://web-omega-two-47.vercel.app/logo-icon.png" alt="Rizurf" />
+      <img class="brand-full" src="https://web-omega-two-47.vercel.app/logo.png" alt="Rizurf Realty" />
     </div>
 
     <!-- Navigation Links -->
@@ -3445,7 +3538,7 @@
         <nav class="breadcrumb">
           <span>Discussion</span>
           <span class="breadcrumb-sep">/</span>
-          <span class="breadcrumb-active" id="breadcrumbActive">Discussion</span>
+          <span class="breadcrumb-active" id="breadcrumbActive">Chat</span>
         </nav>
       </div>
       <div class="top-header-right">
