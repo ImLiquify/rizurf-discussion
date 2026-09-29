@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS `feedback` (
   KEY `idx_feedback_sender`  (`sender_id`),
   KEY `idx_feedback_created` (`created_at`),
   KEY `idx_feedback_topic`   (`topic_id`),
+  KEY `idx_feedback_topic_created` (`topic_id`, `created_at`),
   CONSTRAINT `fk_feedback_sender` FOREIGN KEY (`sender_id`) REFERENCES `users` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 

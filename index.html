@@ -3129,7 +3129,7 @@
       .sidebar { width: 56px; min-width: 56px; transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1); }
       .sidebar:hover, .sidebar:has(:focus-visible) { width: 208px; box-shadow: var(--shadow-lg); }
       html .main-panel { margin-left: 56px; } /* beats the later base rule */
-      .sidebar-user-badge { padding: 12px 9px; white-space: nowrap; }
+      .sidebar .sidebar-user-badge { padding: 12px 9px; white-space: nowrap; } /* beats the later base rule, so the avatar centres in 56px */
       .nav-text, .sidebar-user-info { opacity: 0; transition: opacity 0.14s ease; }
       .sidebar:is(:hover, :has(:focus-visible)) :is(.nav-text, .sidebar-user-info) { opacity: 1; }
       .sidebar:not(:hover):not(:has(:focus-visible)) .brand-full { display: none; }

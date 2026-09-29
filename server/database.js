@@ -356,4 +356,14 @@ export async function ensureSchemaCompatibility() {
     }
     await pool.query("UPDATE group_members SET role = 'member' WHERE group_id = ? AND role = 'admin'", [groupId]);
   }
+
+  // Hot-path index: every chat list (listMyTopics' per-topic last message
+  // and unread count), every message load and the gateway's minutely badge
+  // read filter feedback by topic and time. topic_id was added by the ALTER
+  // above with no index (only a fresh schema.sql install had one), so
+  // without this each of those scans the whole feedback table.
+  const [hasTopicIndex] = await pool.query(
+    "SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'feedback' AND INDEX_NAME = 'idx_feedback_topic_created' LIMIT 1"
+  );
+  if (!hasTopicIndex.length) await pool.query('ALTER TABLE feedback ADD INDEX idx_feedback_topic_created (topic_id, created_at)');
 }

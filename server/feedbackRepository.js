@@ -927,9 +927,9 @@ export async function unreadBadges() {
          WHERE t.target_type = 'org' AND t.target_id = 'organization'
      ) access
      JOIN users u ON u.id = access.user_id AND u.removed_at IS NULL AND u.email IS NOT NULL AND u.email <> ''
-     JOIN feedback f ON f.topic_id = access.topic_id AND f.sender_id <> u.id
      LEFT JOIN topic_reads r ON r.topic_id = access.topic_id AND r.user_id = u.id
-     WHERE f.created_at > COALESCE(r.last_read_at, '1970-01-02')
+     JOIN feedback f ON f.topic_id = access.topic_id AND f.created_at > COALESCE(r.last_read_at, '1970-01-02')
+       AND f.sender_id <> u.id
      GROUP BY u.email
      LIMIT 5000`
   );
