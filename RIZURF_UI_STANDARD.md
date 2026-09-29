@@ -148,24 +148,7 @@ the gateway, never copied or restyled.
 
 - **Delete any "Go back to all apps" / "Back to gateway" / sign-out button of
   your own.** The gateway button is the only way back.
-- **Keep its corner empty instead of moving the button.** It sits 20px from the
-  bottom-right, about 44px tall and 140px wide (a 48px circle on phones under
-  560px). Lifting it with `data-offset` just moves it over your content. Leave
-  the corner free in your layout:
-
-```css
-/* The bar at the bottom of the screen (compose bar, form footer, toolbar):
-   leave room on the right so the button sits next to your own button. */
-.bottom-bar { padding-right: 180px; }
-@media (max-width: 560px) { .bottom-bar { padding-right: 80px; } }
-
-/* A right-hand side panel or a scrolling list that reaches the bottom:
-   leave room underneath so the last item can scroll clear of the button. */
-.side-panel, .scroll-list { padding-bottom: 88px; }
-```
-
-  Check every screen: the button must never cover a message, a Send button, a
-  list item or a form field.
+- **Leave it where it is.** Since v6 it is a small tab at the screen edge that slides out into a dock on hover, so it needs no reserved space and no `data-offset`. Your bottom bars can run right to the edge.
 
 ---
 
@@ -196,9 +179,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 ```
 
 ### Toasts
-Bottom-right would collide with the gateway button. Put toasts somewhere else
-(top-right or bottom-centre) or above the reserved corner.
-
 ```css
 .toast {
   background: var(--navy-700); color: #fff;
@@ -344,7 +324,7 @@ Optional, but if your app has it, do it this way so every app behaves the same:
 - [ ] 56px rail → 208px on hover, page doesn't move; opens on keyboard focus but doesn't stay open after a mouse click
 - [ ] Below 1000px: ☰ drawer with backdrop, nothing overflows at 375px
 - [ ] Logos and favicon load from the gateway
-- [ ] Gateway button script in `<head>`; its bottom-right corner is kept empty on every screen; no own back/sign-out button
+- [ ] Gateway button script in `<head>`; no own back/sign-out button
 - [ ] Buttons are 10px rounded rectangles; pills only for counts, tags and status
 - [ ] Counts are red `#E5484D`, hidden at 0, one per section
 - [ ] A failed load keeps what's on screen; a `401` reloads through sign-in
