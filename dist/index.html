@@ -2231,8 +2231,8 @@
     .chat-message-menu button.danger { color: #DC2626; }
     .chat-message-menu-heading { padding: 6px 10px 4px; font-size: 0.72rem; font-weight: 700; color: var(--text-subtle); text-transform: uppercase; letter-spacing: 0.04em; }
     /* Delete confirmation pop-up */
-    .confirm-modal-card { max-width: 400px; }
-    .confirm-modal-body { padding: 24px; display: flex; flex-direction: column; gap: 10px; }
+    .confirm-modal-card { max-width: 460px; }
+    .confirm-modal-body { padding: 24px; display: flex; flex-direction: column; gap: 12px; }
     .confirm-modal-body h3 { font-size: 1.05rem; font-weight: 800; color: var(--text-main); }
     .confirm-modal-note { font-size: 0.85rem; color: var(--text-muted); }
     .confirm-modal-quote {
@@ -2248,7 +2248,14 @@
       max-height: 140px;
       overflow-y: auto;
     }
-    .confirm-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+    /* Cancel sits left, the delete choices right; on a narrow screen they stack full width. */
+    .confirm-modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 12px; }
+    .confirm-modal-cancel { margin-right: auto; }
+    @media (max-width: 480px) {
+      .confirm-modal-body { padding: 20px; }
+      .confirm-modal-actions { flex-direction: column-reverse; }
+      .confirm-modal-actions button { width: 100%; margin: 0; }
+    }
     .confirm-modal-actions button { padding: 9px 16px; border-radius: var(--radius-md); font-size: 0.86rem; font-weight: 700; }
     .confirm-modal-cancel { color: var(--text-main); background: var(--bg-subtle); }
     .confirm-modal-cancel:hover { background: var(--border-color); }

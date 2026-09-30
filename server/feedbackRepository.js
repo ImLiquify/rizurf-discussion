@@ -166,9 +166,14 @@ export async function backfillGatewayProfileFromDirectory(id, email) {
   );
 }
 
+// The role shown next to a person: their gateway standing when it's more
+// than a plain user (known from their last sign-in here), otherwise the
+// directory job title. Display only — access checks read permission_role.
+const DISPLAY_ROLE_SQL = `CASE permission_role WHEN 'admin' THEN 'Admin' WHEN 'supervisor' THEN 'Manager' WHEN 'hr' THEN 'HR' ELSE role_title END`;
+
 export async function getUserById(id) {
   const [rows] = await pool.execute(
-    `SELECT id, external_id AS externalId, name, email, role_title AS role, permission_role AS permissionRole,
+    `SELECT id, external_id AS externalId, name, email, ${DISPLAY_ROLE_SQL} AS role, permission_role AS permissionRole,
        department, avatar, skills, source
      FROM users WHERE id = ? LIMIT 1`,
     [id]
@@ -179,7 +184,7 @@ export async function getUserById(id) {
 
 export async function listEmployees({ limit, offset }) {
   const [rows] = await pool.execute(
-    'SELECT id, name, role_title AS role, department, avatar, skills FROM users WHERE removed_at IS NULL ORDER BY name LIMIT ? OFFSET ?',
+    `SELECT id, name, ${DISPLAY_ROLE_SQL} AS role, department, avatar, skills FROM users WHERE removed_at IS NULL ORDER BY name LIMIT ? OFFSET ?`,
     [limit, offset]
   );
   // `skills` is stored as a JSON-encoded string (see upsertInternUsers) —
