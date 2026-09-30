@@ -3147,7 +3147,7 @@
       }
     }
     @media (max-width: 1000px) {
-      .brand-icon { display: none; }
+      html .brand-icon { display: none; } /* beats the later base rule, or both logos show in the drawer */
     }
     @media (prefers-reduced-motion: reduce) {
       .sidebar, .sidebar-nav-label, .nav-text, .sidebar-user-info { transition: none !important; }
@@ -3391,7 +3391,8 @@
 
     .sidebar-brand { padding: 18px 16px !important; border-bottom: 1px solid var(--border-color) !important; overflow: hidden; white-space: nowrap; }
     .brand-icon, .brand-full { display: block; height: 28px; width: auto; }
-    :root[data-theme="dark"] .brand-full { filter: brightness(0) invert(1); }
+    /* Dark mode keeps the logo's real colours on a small white backing, so the navy lettering stays readable. */
+    :root[data-theme="dark"] :is(.brand-icon, .brand-full) { box-sizing: content-box; padding: 4px 8px; background: #FFFFFF; border-radius: var(--radius-sm); }
     .sidebar-nav-label { display: none; }
     .sidebar-nav { gap: 0; padding: 10px 8px 8px; overflow-x: hidden; scrollbar-width: none; }
     .sidebar-nav::-webkit-scrollbar { width: 0; height: 0; }
