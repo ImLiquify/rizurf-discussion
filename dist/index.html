@@ -2191,9 +2191,8 @@
     .chat-message-row:hover .chat-message-actions,
     .chat-message-row:focus-within .chat-message-actions,
     .chat-message-row.menu-open .chat-message-actions { opacity: 1; pointer-events: auto; }
-    @media (hover: none) {
-      .chat-message-actions { opacity: 1; pointer-events: auto; }
-    }
+    /* Touch screens: tapping a message focuses it (tabindex -1), so only that one shows its bar. */
+    .chat-message-row:focus { outline: none; }
     .chat-message-action-btn {
       width: 26px; height: 26px;
       display: inline-flex; align-items: center; justify-content: center;
@@ -2623,10 +2622,19 @@
     .group-role-toggle:hover { text-decoration: underline; }
     .group-modal-hint { padding: 12px; font-size: 0.82rem; color: var(--text-subtle); text-align: center; }
 
+    /* Phones/tablets, Instagram-style: the chat list fills the screen; opening a
+       chat (its header shows) swaps to the chat full screen, ← goes back. */
+    .mobile-only { display: none; }
     @media (max-width: 900px) {
-      .feedbacks-layout { flex-direction: column; height: auto; }
-      .feedbacks-sidebar { width: auto; border-right: none; border-bottom: 1px solid var(--border-color); }
-      .members-panel { width: auto; border-left: none; border-top: 1px solid var(--border-color); }
+      .mobile-only { display: inline-flex; }
+      .feedbacks-layout { position: relative; height: calc(100dvh - 69px); min-height: 0; margin: -16px -16px 0; }
+      .feedbacks-sidebar { width: 100%; border-right: none; }
+      .feedbacks-detail { display: none; }
+      .feedbacks-layout:has(#feedbacksDetailHeader:not([hidden])) .feedbacks-sidebar { display: none; }
+      .feedbacks-layout:has(#feedbacksDetailHeader:not([hidden])) .feedbacks-detail { display: flex; }
+      /* The header stays above the sliding members panel, so its toggle can close it again. */
+      .feedbacks-detail-header { padding: 10px 12px; gap: 8px; position: relative; z-index: 6; background: var(--bg-surface); }
+      .members-panel { position: absolute; inset: 0 0 0 auto; width: min(300px, 85%); z-index: 5; padding-top: 80px; box-shadow: var(--shadow-lg); }
     }
 
     /* Group modal (create / add members — a searchable employee picker) */
@@ -2992,8 +3000,8 @@
       .sidebar.mobile-open { transform: translateX(0); }
       .sidebar-backdrop.visible { display: block; }
       .main-panel { margin-left: 0 !important; }
-      .top-header-bar { padding: 0 14px; }
-      .content-area { padding: 16px; }
+      html .top-header-bar { padding: 0 14px; }
+      html .content-area { padding: 16px; } /* beats the later base rule */
     }
 
     .sidebar-brand {
@@ -4324,6 +4332,11 @@
 
     window.addEventListener("DOMContentLoaded", async () => {
       await loadBackendData();
+      // Tapping a message (not one of its buttons/links) focuses it, which
+      // shows its reaction/actions bar — the touch-screen stand-in for hover.
+      document.getElementById("feedbacksMessagesScroll").addEventListener("click", event => {
+        if (!event.target.closest("button, a, input, textarea, img")) event.target.closest(".chat-message-row")?.focus({ preventScroll: true });
+      });
       pingPresence();
       window.setInterval(pingPresence, 60000);
       document.addEventListener("visibilitychange", pingPresence);
@@ -4965,7 +4978,7 @@
     // Shown beside a group's chat (topic list or thread) while toggled on,
     // Discord-style: one section per role (online holders, by role order),
     // then Online, then everyone Offline dimmed. The owner gets a crown.
-    let membersPanelOpen = true;
+    let membersPanelOpen = !window.matchMedia("(max-width: 900px)").matches; // on a phone it would cover the chat
     let membersPanel = null; // { groupId, members (null = loading), roles }
     function membersToggleHtml() {
       return `<button type="button" class="feedbacks-row-icon-btn members-toggle-btn${membersPanelOpen ? " active" : ""}" onclick="toggleMembersPanel()"
@@ -5376,6 +5389,17 @@
       } catch (error) { /* best-effort — the badge just stays stale until the next poll */ }
     }
 
+    // Phone ←: leave the open chat/group and show the chat list again.
+    function closeContainer() {
+      stopTopicPolling();
+      activeContainer = null;
+      activeTopic = null;
+      conversationMessages = [];
+      replyingTo = null;
+      renderFeedbacksTab();
+      renderTopicList();
+    }
+
     function backToTopicList() {
       stopTopicPolling();
       activeTopic = null;
@@ -5584,7 +5608,7 @@
           }).join("")}</div>`
         : "";
       return `
-        <div class="chat-message-row${mine ? " mine" : ""}${message.pending ? " pending" : ""}${message.pinnedAt ? " pinned" : ""}${sticker ? " sticker-message" : ""}${continued ? " continued" : ""}${openMessageMenuId === message.id ? " menu-open" : ""}" id="chat-msg-${message.id}">
+        <div class="chat-message-row${mine ? " mine" : ""}${message.pending ? " pending" : ""}${message.pinnedAt ? " pinned" : ""}${sticker ? " sticker-message" : ""}${continued ? " continued" : ""}${openMessageMenuId === message.id ? " menu-open" : ""}" id="chat-msg-${message.id}" tabindex="-1">
           ${avatarHtml}${actionsHtml}
           <div class="chat-message-meta">
             ${continued ? "" : `<span class="chat-message-sender" style="color:${senderColorFor(message.senderId)}">${escapeHtml(message.senderName)}</span>`}
@@ -5684,6 +5708,8 @@
 
     // Shows the topic list for the open container — the middle step between
     // picking who/what (left sidebar) and an actual message thread.
+    const MOBILE_BACK_HTML = `<button type="button" class="topic-back-btn mobile-only" onclick="closeContainer()" title="Back to chats" aria-label="Back to chats">&larr;</button>`;
+
     function renderTopicList() {
       const header = document.getElementById("feedbacksDetailHeader");
       const scroll = document.getElementById("feedbacksMessagesScroll");
@@ -5716,7 +5742,7 @@
              ${canManageGroup ? `<button type="button" class="feedbacks-row-icon-btn" onclick="editGroupPrompt('${activeContainer.id}')" title="Group settings — members, roles, name, photo">${SETTINGS_GEAR_SVG}</button>` : ""}
            </div>`
         : "";
-      header.innerHTML = `<div class="feedbacks-detail-title">${escapeHtml(activeContainer.name)}</div>${groupActionsHtml}`;
+      header.innerHTML = `<div class="feedbacks-detail-title-group">${MOBILE_BACK_HTML}<div class="feedbacks-detail-title">${escapeHtml(activeContainer.name)}</div></div>${groupActionsHtml}`;
 
       composeBar.hidden = true;
       if (!containerTopics.length) {
@@ -5788,6 +5814,7 @@
         const person = EMPLOYEES.find(e => e.id === activeContainer.id);
         header.innerHTML = `
           <div class="feedbacks-detail-title-group">
+            ${MOBILE_BACK_HTML}
             <span class="presence-wrap"><img class="dm-header-avatar" src="${escapeHtml(avatarSrc(person?.avatar))}" alt="" />${presenceDotHtml(activeContainer.id)}</span>
             ${titleHtml(activeContainer.name)}
           </div>
