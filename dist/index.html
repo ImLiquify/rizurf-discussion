@@ -7975,9 +7975,17 @@
     }
 
     // Browsers block sound until the person has clicked/typed on the page once; then it plays.
-    const SOUNDS = { receive: new Audio("/assets/sounds/notification.wav"), send: new Audio("/assets/sounds/send.wav") };
+    const SOUNDS = { receive: new Audio("/assets/sounds/notification.mp3"), send: new Audio("/assets/sounds/send.wav") };
     SOUNDS.send.volume = 0.25; // subtle: your own send is just a tick, the receive sound stays full
+    // An <audio> volume tops out at 1, so the receive sound goes through a
+    // Web Audio gain to be 2.5x louder. Tune RECEIVE_GAIN if it distorts.
+    const RECEIVE_GAIN = 2.5;
+    const soundBoost = new (window.AudioContext || window.webkitAudioContext)();
+    const receiveGain = soundBoost.createGain();
+    receiveGain.gain.value = RECEIVE_GAIN;
+    soundBoost.createMediaElementSource(SOUNDS.receive).connect(receiveGain).connect(soundBoost.destination);
     function playSound(name) {
+      soundBoost.resume().catch(() => {}); // starts suspended until the first click/keypress
       SOUNDS[name].currentTime = 0;
       SOUNDS[name].play().catch(() => {});
     }
