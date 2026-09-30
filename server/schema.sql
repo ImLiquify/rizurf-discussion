@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS `reactions` (
   `created_at`  timestamp   NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`user_id`, `feedback_id`, `reaction`),
   KEY `fk_reactions_feedback` (`feedback_id`),
+  KEY `idx_reactions_created` (`created_at`),
   CONSTRAINT `fk_reactions_user`     FOREIGN KEY (`user_id`)     REFERENCES `users`    (`id`),
   CONSTRAINT `fk_reactions_feedback` FOREIGN KEY (`feedback_id`) REFERENCES `feedback` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

@@ -4492,6 +4492,24 @@
       }
     }
 
+    // Someone reacted to one of my messages: same banner/sound/pop-up as a new
+    // message. The server sends the last two minutes' reactions with every
+    // list poll; the first poll only records them (nothing old is announced).
+    let seenReactionKeys = null;
+    function notifyNewReactions(reactions) {
+      const fresh = reactions.filter(r => !seenReactionKeys?.has(`${r.userId}|${r.feedbackId}|${r.reaction}`));
+      const firstPoll = !seenReactionKeys;
+      seenReactionKeys = seenReactionKeys || new Set();
+      fresh.forEach(r => seenReactionKeys.add(`${r.userId}|${r.feedbackId}|${r.reaction}`));
+      if (firstPoll) return;
+      fresh.slice(0, 3).forEach(r => {
+        const topic = myTopics.find(t => t.id === r.topicId);
+        // Watching that chat right now: the reaction appears on the message itself.
+        if (!topic || (activeTopic?.id === r.topicId && document.hasFocus())) return;
+        showMessageBanner({ ...topic, lastSenderId: r.userId, lastMessagePreview: `Reacted ${r.reaction} to "${messagePreviewText(r.content || "")}"` });
+      });
+    }
+
     // Refetches just myTopics — used right after creating a topic (so it
     // shows up in the left-hand Organization/Groups/Direct Messages list
     // immediately, instead of only after the next full loadFeedbacksData())
@@ -4500,7 +4518,8 @@
       try {
         const response = await fetch(`${API_BASE_URL}/topics?mine=1`);
         if (!response.ok) return;
-        const fetched = (await response.json()).data || [];
+        const payload = await response.json();
+        const fetched = payload.data || [];
         // The topic that's actually open is already kept live by the 3s
         // per-topic poll (pollActiveTopicMessages), which marks it read the
         // moment new messages arrive. A fetch here can land a half-second
@@ -4521,6 +4540,7 @@
         myTopics = fetched;
         renderFeedbacksTab();
         updateFeedbacksUnreadBadge();
+        notifyNewReactions(payload.reactions || []);
       } catch (error) { /* silent — next tick tries again */ }
     }
 

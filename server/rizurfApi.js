@@ -941,7 +941,12 @@ app.get('/api/topics', async (request, response, next) => {
     if (!viewerId) return sendError(response, request, 401, 'UNAUTHORIZED', 'This endpoint needs a signed-in session.');
     if (request.query.mine === '1' || request.query.mine === 'true') {
       // Deliberately not privilege-bypassed — see listMyTopics's own comment.
-      return sendJson(response, 200, { data: await feedbacks.listMyTopics({ viewerId, viewerIsPrivileged: false }) });
+      // A failed reactions read must never take the chat list down with it.
+      const [data, reactions] = await Promise.all([
+        feedbacks.listMyTopics({ viewerId, viewerIsPrivileged: false }),
+        feedbacks.listRecentReactionsToMe(viewerId).catch(error => { console.warn('[topics] recent reactions:', error.message); return []; })
+      ]);
+      return sendJson(response, 200, { data, reactions });
     }
     const { targetType, targetId } = request.query;
     if (!['user', 'group', 'org'].includes(targetType) || !validText(targetId)) {

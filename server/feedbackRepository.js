@@ -946,6 +946,22 @@ export async function unreadBadges() {
   return rows.map(row => ({ email: row.email, count: Number(row.count) }));
 }
 
+// Reactions other people put on the viewer's own chat messages in the last
+// two minutes — the chat-list poll turns new ones into notifications (the
+// client remembers which it has already shown). Newest first, at most 20.
+export async function listRecentReactionsToMe(viewerId) {
+  const [rows] = await pool.execute(
+    `SELECT r.user_id AS userId, r.feedback_id AS feedbackId, r.reaction, f.topic_id AS topicId, f.content
+     FROM reactions r
+     JOIN feedback f ON f.id = r.feedback_id
+     WHERE r.created_at > (NOW() - INTERVAL 2 MINUTE) AND r.comment_id = '' AND r.user_id <> ?
+       AND f.sender_id = ? AND f.topic_id IS NOT NULL
+     ORDER BY r.created_at DESC LIMIT 20`,
+    [viewerId, viewerId]
+  );
+  return rows;
+}
+
 export async function markTopicRead({ topicId, userId }) {
   await pool.execute(
     `INSERT INTO topic_reads (topic_id, user_id, last_read_at) VALUES (?, ?, CURRENT_TIMESTAMP)

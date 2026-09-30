@@ -366,4 +366,14 @@ export async function ensureSchemaCompatibility() {
     "SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'feedback' AND INDEX_NAME = 'idx_feedback_topic_created' LIMIT 1"
   );
   if (!hasTopicIndex.length) await pool.query('ALTER TABLE feedback ADD INDEX idx_feedback_topic_created (topic_id, created_at)');
+
+  // "Who just reacted to my messages" (listRecentReactionsToMe) runs with
+  // every chat-list poll and filters reactions by time.
+  if (reactionColumns.size && !reactionColumns.has('created_at')) {
+    await pool.query('ALTER TABLE reactions ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP');
+  }
+  const [hasReactionTimeIndex] = await pool.query(
+    "SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reactions' AND INDEX_NAME = 'idx_reactions_created' LIMIT 1"
+  );
+  if (!hasReactionTimeIndex.length) await pool.query('ALTER TABLE reactions ADD INDEX idx_reactions_created (created_at)');
 }
