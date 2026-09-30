@@ -38,6 +38,15 @@ export async function markMissingInternsRemoved(currentExternalIds) {
      WHERE source = 'intern-api' AND removed_at IS NULL AND external_id NOT IN (?)`,
     [currentExternalIds]
   );
+  // Someone who signed in may also have a gateway row with the same email
+  // (made before their directory row existed); it has to go with them.
+  await pool.query(
+    `UPDATE users g
+     JOIN users i ON i.email = g.email AND i.source = 'intern-api' AND i.removed_at IS NOT NULL
+     LEFT JOIN users still ON still.email = g.email AND still.source = 'intern-api' AND still.removed_at IS NULL
+     SET g.removed_at = CURRENT_TIMESTAMP
+     WHERE g.source = 'gateway' AND g.removed_at IS NULL AND g.email IS NOT NULL AND g.email <> '' AND still.id IS NULL`
+  );
 }
 
 // Backs the sync TTL in rizurfApi.js: whether the directory was synced
@@ -818,6 +827,7 @@ export async function listMyTopics({ viewerId, viewerIsPrivileged }) {
        g.name AS groupName, org_user.name AS orgUserName,
        (SELECT MAX(created_at) FROM feedback WHERE topic_id = t.id) AS lastMessageAt,
        (SELECT content FROM feedback WHERE topic_id = t.id ORDER BY created_at DESC LIMIT 1) AS lastMessagePreview,
+       (SELECT sender_id FROM feedback WHERE topic_id = t.id ORDER BY created_at DESC LIMIT 1) AS lastSenderId,
        (SELECT COUNT(*) FROM feedback f2
           WHERE f2.topic_id = t.id AND f2.sender_id <> ?
             AND f2.created_at > COALESCE((SELECT last_read_at FROM topic_reads WHERE topic_id = t.id AND user_id = ?), '1970-01-02')

@@ -3421,6 +3421,36 @@
       font-size: 0.85rem;
     }
 
+    /* New-message banners: top right under the top bar, gone after a few seconds. */
+    .notify-stack {
+      position: fixed; top: 81px; right: 16px; z-index: 210;
+      display: flex; flex-direction: column; gap: 10px;
+      width: min(360px, calc(100vw - 32px)); pointer-events: none;
+    }
+    .notify-banner {
+      pointer-events: auto; position: relative; display: flex; align-items: center; gap: 12px;
+      width: 100%; padding: 12px 36px 12px 12px; text-align: left; font: inherit; cursor: pointer;
+      background: var(--bg-surface); color: var(--text-main);
+      border: 1px solid var(--border-color); border-left: 4px solid var(--primary);
+      border-radius: var(--radius-md); box-shadow: var(--shadow-lg);
+      animation: notifyIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+    .notify-banner:hover { border-color: var(--primary); }
+    .notify-banner:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    .notify-banner.leaving { opacity: 0; transform: translateX(24px); }
+    .notify-banner img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex: none; }
+    .notify-banner-text { min-width: 0; display: grid; gap: 2px; }
+    .notify-banner-title { font-size: 0.85rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .notify-banner-body { font-size: 0.82rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .notify-banner-close {
+      position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; display: grid; place-items: center;
+      border: 0; border-radius: 6px; background: none; color: var(--text-muted); font-size: 16px; line-height: 1; cursor: pointer;
+    }
+    .notify-banner-close:hover { background: var(--bg-subtle); color: var(--text-main); }
+    @keyframes notifyIn { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { .notify-banner { animation: none; transition: none; } }
+
     input:focus-visible,
     textarea:focus-visible,
     select:focus-visible,
@@ -3924,6 +3954,8 @@
 
   <!-- Toast Notification Container -->
   <div class="toast-container" id="toastContainer"></div>
+  <!-- New-message banners (top right, showMessageBanner) -->
+  <div class="notify-stack" id="notifyStack" role="status" aria-live="polite"></div>
 
   <!-- ==========================================================================
        JAVASCRIPT LOGIC & STATE MANAGEMENT
@@ -4123,6 +4155,28 @@
       return all;
     }
 
+    function setEmployees(list) {
+      EMPLOYEES.splice(0, EMPLOYEES.length, ...list.map(e => ({
+        id: e.id,
+        name: e.name,
+        role: e.role || 'Intern',
+        department: e.department || 'Internship',
+        avatar: e.avatar || '',
+        skills: Array.isArray(e.skills) ? e.skills : []
+      })));
+    }
+
+    // Every 10 minutes, re-read the people list (the server re-syncs it from
+    // the intern directory first), so people who left drop out and new ones
+    // appear without a reload. A failed read keeps the current list.
+    async function refreshEmployees() {
+      if (document.visibilityState !== "visible") return;
+      const list = await fetchAllEmployees().catch(() => null);
+      if (!list) return;
+      setEmployees(list);
+      refreshMyTopics(); // also re-renders; the server drops DMs with people who left
+    }
+
     async function loadBackendData() {
       try {
         const [meResponse, employeesList, feedbackResponse] = await Promise.all([
@@ -4131,19 +4185,7 @@
           fetch(`${API_BASE_URL}/feedback`)
         ]);
 
-        if (employeesList) {
-          const list = employeesList;
-          EMPLOYEES.splice(0, EMPLOYEES.length, ...list.map(e => ({
-            id: e.id,
-            name: e.name,
-            role: e.role || 'Intern',
-            department: e.department || 'Internship',
-            avatar: e.avatar || '',
-            skills: Array.isArray(e.skills) ? e.skills : []
-          })));
-        } else {
-          EMPLOYEES.splice(0, EMPLOYEES.length);
-        }
+        setEmployees(employeesList || []);
         employeeTilesLoading = false;
 
         if (feedbackResponse.ok) {
@@ -4287,6 +4329,7 @@
       document.addEventListener("visibilitychange", pingPresence);
       renderAll();
       window.setInterval(refreshPublicFeed, 45000);
+      window.setInterval(refreshEmployees, 10 * 60 * 1000);
       if (currentMainTab === "feedbacks") startMyTopicsPolling();
       else { refreshEmployeeCounts(); startWallCountsPolling(); }
     });
@@ -4437,6 +4480,10 @@
           const openOne = fetched.find(t => t.id === activeTopic.id);
           if (openOne) openOne.unreadCount = 0;
         }
+        // A chat whose unread count went up since the last poll gets a banner
+        // (skipped before the first list has loaded, so sign-in doesn't flood).
+        const before = new Map(myTopics.map(t => [t.id, t.unreadCount || 0]));
+        if (before.size) fetched.filter(t => (t.unreadCount || 0) > (before.get(t.id) || 0)).slice(0, 3).forEach(showMessageBanner);
         myTopics = fetched;
         renderFeedbacksTab();
         updateFeedbacksUnreadBadge();
@@ -7890,6 +7937,39 @@
         toast.style.transition = "all 0.3s ease";
         setTimeout(() => toast.remove(), 300);
       }, 3200);
+    }
+
+    // Top-right banner for a new message; click opens that chat, it leaves by itself after 6s.
+    function showMessageBanner(topic) {
+      const sender = EMPLOYEES.find(e => e.id === topic.lastSenderId);
+      const where = topic.targetType === "user" ? ""
+        : topic.targetType === "org" ? "Organization" : (topic.groupName || topic.name || "a group");
+      const title = (sender?.name || "New message") + (where ? ` in ${where}` : "");
+      const banner = document.createElement("div");
+      banner.className = "notify-banner";
+      banner.tabIndex = 0;
+      banner.setAttribute("role", "button");
+      banner.innerHTML = `
+        <img src="${escapeHtml(avatarSrc(sender?.avatar))}" alt="" />
+        <span class="notify-banner-text">
+          <span class="notify-banner-title">${escapeHtml(title)}</span>
+          <span class="notify-banner-body">${escapeHtml(messagePreviewText(topic.lastMessagePreview || ""))}</span>
+        </span>
+        <button type="button" class="notify-banner-close" aria-label="Dismiss">×</button>`;
+      const dismiss = () => { banner.classList.add("leaving"); setTimeout(() => banner.remove(), 250); };
+      const open = async () => {
+        dismiss();
+        if (topic.targetType === "user") {
+          const counterpartId = topic.createdBy === CURRENT_USER.id ? topic.targetId : topic.createdBy;
+          return openContainer("user", counterpartId, EMPLOYEES.find(e => e.id === counterpartId)?.name || "Unknown");
+        }
+        await (topic.targetType === "org" ? openContainer("org", "organization", "Organization") : openContainer("group", topic.targetId, where));
+        openTopicById(topic.id);
+      };
+      banner.addEventListener("click", event => event.target.closest(".notify-banner-close") ? dismiss() : open());
+      banner.addEventListener("keydown", event => { if (event.key === "Enter" && event.target === banner) open(); });
+      document.getElementById("notifyStack").appendChild(banner);
+      setTimeout(dismiss, 6000);
     }
 
     function escapeHtml(str) {
