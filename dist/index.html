@@ -3959,6 +3959,13 @@
           </span>
           <input type="checkbox" id="darkModeToggle" class="theme-toggle-switch" role="switch" onchange="setDarkMode(this.checked)" />
         </label>
+        <label class="theme-toggle-row" for="notifyToggle">
+          <span>
+            <span class="theme-toggle-title">Notifications</span>
+            <span class="theme-toggle-sub" id="notifyToggleSub">Saved on this device</span>
+          </span>
+          <input type="checkbox" id="notifyToggle" class="theme-toggle-switch" role="switch" checked onchange="setNotifications(this.checked)" />
+        </label>
         <p class="profile-modal-note">A full profile page is coming soon.</p>
       </div>
     </div>
@@ -4339,7 +4346,7 @@
       // Ask once, on the first click, to allow system notifications (used
       // when a message arrives while this tab is in the background).
       document.addEventListener("click", () => {
-        if (window.Notification?.permission === "default") Notification.requestPermission();
+        if (notificationsOn() && window.Notification?.permission === "default") Notification.requestPermission();
       }, { once: true });
       // Tapping a message (not one of its buttons/links) focuses it, which
       // shows its reaction/actions bar — the touch-screen stand-in for hover.
@@ -4525,22 +4532,27 @@
     // current across every conversation, not just whichever one is open.
     function startMyTopicsPolling() {
       stopMyTopicsPolling();
-      myTopicsPollTimer = window.setInterval(pollMyTopics, 4000);
+      // The 4s tick comes from a worker: browsers slow a background tab's own
+      // timers (down to once a minute), which delayed notifications; a
+      // worker's timer keeps its pace. Falls back to a plain interval.
+      try {
+        myTopicsPollTimer = new Worker(URL.createObjectURL(new Blob(["setInterval(() => postMessage(0), 4000)"], { type: "text/javascript" })));
+        myTopicsPollTimer.onmessage = pollMyTopics;
+      } catch (error) {
+        myTopicsPollTimer = window.setInterval(pollMyTopics, 4000);
+      }
     }
     function stopMyTopicsPolling() {
-      if (myTopicsPollTimer) { window.clearInterval(myTopicsPollTimer); myTopicsPollTimer = null; }
+      if (!myTopicsPollTimer) return;
+      if (myTopicsPollTimer.terminate) myTopicsPollTimer.terminate(); else window.clearInterval(myTopicsPollTimer);
+      myTopicsPollTimer = null;
     }
-    // In a background tab the list is still checked, every ~20s instead of
-    // 4s, so new messages can raise a system notification (showMessageBanner).
+    // Keeps running in a background tab, so a new message can raise a system
+    // notification (showMessageBanner).
     // ponytail: only while the site is open somewhere; with the browser closed
-    // nothing runs — that needs Web Push (service worker + server push).
-    let lastBackgroundPollAt = 0;
+    // (or a phone's suspended tab) nothing runs — that needs Web Push.
     function pollMyTopics() {
       if (currentMainTab !== "feedbacks") return;
-      if (document.visibilityState !== "visible") {
-        if (Date.now() - lastBackgroundPollAt < 20000) return;
-        lastBackgroundPollAt = Date.now();
-      }
       refreshMyTopics();
     }
 
@@ -5496,8 +5508,15 @@
         const signature = list => list.map(m => `${m.id}\u0000${m.content}\u0000${m.pinnedAt || ""}\u0000${JSON.stringify(m.reactions || {})}`).join("\u0001");
         if (signature([...fetched, ...pending]) === signature(conversationMessages)) return;
 
+        const knownIds = new Set(conversationMessages.map(m => m.id));
+        const incoming = conversationLoading ? [] : fetched.filter(m => !knownIds.has(m.id) && m.senderId !== CURRENT_USER.id);
         conversationMessages = [...fetched, ...pending];
         renderConversationMessages();
+        // The chat is on screen but you're in another window/app: alert too.
+        if (incoming.length && !document.hasFocus()) {
+          const latest = incoming[incoming.length - 1];
+          showMessageBanner({ ...(myTopics.find(t => t.id === topicId) || activeTopic), lastSenderId: latest.senderId, lastMessagePreview: latest.content });
+        }
 
         if (fetched.length !== priorRealCount) {
           fetch(`${API_BASE_URL}/topics/${topicId}/read`, { method: "POST" }).catch(() => {});
@@ -6642,6 +6661,7 @@
       document.getElementById("profileModalRole").textContent = CURRENT_USER.role
         ? `${CURRENT_USER.role} • ${CURRENT_USER.department}` : "--";
       document.getElementById("darkModeToggle").checked = document.documentElement.dataset.theme === "dark";
+      syncNotificationToggle();
       document.getElementById("profileModalOverlay").classList.add("open");
       document.body.style.overflow = "hidden";
     }
@@ -8034,7 +8054,28 @@
     }
 
     // Top-right banner for a new message; click opens that chat, it leaves by itself after 6s.
+    // Profile switch: on unless turned off on this device (localStorage).
+    function notificationsOn() {
+      try { return localStorage.getItem("rizurf-notify") !== "off"; } catch (error) { return true; }
+    }
+    function setNotifications(on) {
+      try { localStorage.setItem("rizurf-notify", on ? "on" : "off"); } catch (error) { /* private mode: just not remembered */ }
+      if (on && window.Notification?.permission === "default") Notification.requestPermission().then(syncNotificationToggle);
+      syncNotificationToggle();
+    }
+    function syncNotificationToggle() {
+      const on = notificationsOn();
+      document.getElementById("notifyToggle").checked = on;
+      const permission = window.Notification?.permission;
+      document.getElementById("notifyToggleSub").textContent = !on ? "Off: no banners, sounds or pop-ups"
+        : permission === "granted" ? "Banner, sound and a pop-up when you're in another tab or app"
+        : permission === "denied" ? "Pop-ups are blocked for this site in your browser settings (banner and sound still work)"
+        : permission === "default" ? "Banner and sound. Click anywhere to allow pop-ups too"
+        : "Banner and sound (this browser has no pop-ups)";
+    }
+
     function showMessageBanner(topic) {
+      if (!notificationsOn()) return;
       const sender = EMPLOYEES.find(e => e.id === topic.lastSenderId);
       const where = topic.targetType === "user" ? ""
         : topic.targetType === "org" ? "Organization" : (topic.groupName || topic.name || "a group");
@@ -8063,10 +8104,13 @@
       banner.addEventListener("click", event => event.target.closest(".notify-banner-close") ? dismiss() : open());
       banner.addEventListener("keydown", event => { if (event.key === "Enter" && event.target === banner) open(); });
       document.getElementById("notifyStack").appendChild(banner);
-      // Not looking at the page (another tab/app): also a system notification.
-      if (document.visibilityState !== "visible" && window.Notification?.permission === "granted") {
-        const note = new Notification(title, { body: messagePreviewText(topic.lastMessagePreview || ""), icon: avatarSrc(sender?.avatar), tag: topic.id, renotify: true }); // renotify: a same-chat replacement still pops up
-        note.onclick = () => { window.focus(); note.close(); open(); };
+      // Not looking at the page (another tab, window or app): also a system
+      // notification. try/catch: Android Chrome throws on new Notification().
+      if (!document.hasFocus() && window.Notification?.permission === "granted") {
+        try {
+          const note = new Notification(title, { body: messagePreviewText(topic.lastMessagePreview || ""), icon: avatarSrc(sender?.avatar), tag: topic.id, renotify: true }); // renotify: a same-chat replacement still pops up
+          note.onclick = () => { window.focus(); note.close(); open(); };
+        } catch (error) { /* this browser needs a service worker for notifications */ }
       }
       playSound("receive");
       setTimeout(dismiss, 6000);
