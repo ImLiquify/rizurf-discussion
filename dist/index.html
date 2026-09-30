@@ -2027,14 +2027,8 @@
     }
     .mention-dropdown-item:hover, .mention-dropdown-item.highlighted { background: var(--bg-subtle); }
 
-    /* Solid chip: a tint disappeared on your own (same-tint) bubbles. */
-    .chat-mention {
-      color: #FFFFFF;
-      font-weight: 700;
-      background: var(--primary);
-      padding: 1px 5px;
-      border-radius: 5px;
-    }
+    /* WhatsApp-style: just the name, coloured and bold, no block behind it. */
+    .chat-mention { color: var(--accent-cyan-hover); font-weight: 700; }
 
     .feedbacks-compose-input {
       flex: 1;
