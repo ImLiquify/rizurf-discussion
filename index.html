@@ -4336,6 +4336,11 @@
 
     window.addEventListener("DOMContentLoaded", async () => {
       await loadBackendData();
+      // Ask once, on the first click, to allow system notifications (used
+      // when a message arrives while this tab is in the background).
+      document.addEventListener("click", () => {
+        if (window.Notification?.permission === "default") Notification.requestPermission();
+      }, { once: true });
       // Tapping a message (not one of its buttons/links) focuses it, which
       // shows its reaction/actions bar — the touch-screen stand-in for hover.
       document.getElementById("feedbacksMessagesScroll").addEventListener("click", event => {
@@ -4496,7 +4501,9 @@
         // report a stale non-zero unreadCount for it — force it to 0 locally
         // so the sidebar/badge never flash a wrong "unread" notification for
         // a conversation the user is actively looking at.
-        if (activeTopic) {
+        // (Only while the page is showing — in a background tab nobody is
+        // looking, so the open chat's new messages should notify too.)
+        if (activeTopic && document.visibilityState === "visible") {
           const openOne = fetched.find(t => t.id === activeTopic.id);
           if (openOne) openOne.unreadCount = 0;
         }
@@ -4523,8 +4530,17 @@
     function stopMyTopicsPolling() {
       if (myTopicsPollTimer) { window.clearInterval(myTopicsPollTimer); myTopicsPollTimer = null; }
     }
+    // In a background tab the list is still checked, every ~20s instead of
+    // 4s, so new messages can raise a system notification (showMessageBanner).
+    // ponytail: only while the site is open somewhere; with the browser closed
+    // nothing runs — that needs Web Push (service worker + server push).
+    let lastBackgroundPollAt = 0;
     function pollMyTopics() {
-      if (currentMainTab !== "feedbacks" || document.visibilityState !== "visible") return;
+      if (currentMainTab !== "feedbacks") return;
+      if (document.visibilityState !== "visible") {
+        if (Date.now() - lastBackgroundPollAt < 20000) return;
+        lastBackgroundPollAt = Date.now();
+      }
       refreshMyTopics();
     }
 
@@ -5797,6 +5813,20 @@
     // and only for a fresh topic open (refreshActiveTopicMessages) — jumps
     // to the oldest unread message instead of the very bottom, so reopening
     // a topic with unread history doesn't skip straight past it.
+    // Each chat keeps its own unsent text: when the open chat changes, what's
+    // in the box is filed under the chat being left and the new chat's draft
+    // (or nothing) is shown. Kept in memory — a reload clears drafts.
+    const composeDrafts = new Map();
+    let composeDraftKey = null;
+    function syncComposeDraft() {
+      const input = document.getElementById("feedbacksComposeInput");
+      const key = activeContainer?.type === "user" ? `user:${activeContainer.id}` : `topic:${activeTopic?.id}`;
+      if (!input || key === composeDraftKey) return;
+      if (composeDraftKey) composeDrafts.set(composeDraftKey, input.value);
+      composeDraftKey = key;
+      input.value = composeDrafts.get(key) || "";
+    }
+
     function renderConversationMessages(forceScrollBottom = false, scrollToFirstUnread = false) {
       const header = document.getElementById("feedbacksDetailHeader");
       const scroll = document.getElementById("feedbacksMessagesScroll");
@@ -5840,6 +5870,7 @@
           title="${showStarredOnly ? "Show all messages" : "Show only my starred messages"}" aria-pressed="${showStarredOnly}">★</button></div>`);
 
       composeBar.hidden = false;
+      syncComposeDraft();
       renderReplyBar();
       if (conversationLoading) {
         scroll.innerHTML = skeletonBubblesHtml();
@@ -8021,6 +8052,11 @@
       banner.addEventListener("click", event => event.target.closest(".notify-banner-close") ? dismiss() : open());
       banner.addEventListener("keydown", event => { if (event.key === "Enter" && event.target === banner) open(); });
       document.getElementById("notifyStack").appendChild(banner);
+      // Not looking at the page (another tab/app): also a system notification.
+      if (document.visibilityState !== "visible" && window.Notification?.permission === "granted") {
+        const note = new Notification(title, { body: messagePreviewText(topic.lastMessagePreview || ""), icon: avatarSrc(sender?.avatar), tag: topic.id });
+        note.onclick = () => { window.focus(); note.close(); open(); };
+      }
       playSound("receive");
       setTimeout(dismiss, 6000);
     }
