@@ -8005,21 +8005,32 @@
       }, 3200);
     }
 
-    // Browsers block sound until the person has clicked/typed on the page once; then it plays.
-    const SOUNDS = { receive: new Audio("/assets/sounds/notification.mp3"), send: new Audio("/assets/sounds/send.wav") };
-    SOUNDS.send.volume = 0.25; // subtle: your own send is just a tick, the receive sound stays full
-    // An <audio> volume tops out at 1, so the receive sound goes through a
-    // Web Audio gain. notification.mp3 peaks at 0.658, so 1.52 is the most it
-    // takes before clipping (distortion) — re-measure if the file changes.
-    const RECEIVE_GAIN = 1.5;
-    const soundBoost = new (window.AudioContext || window.webkitAudioContext)();
-    const receiveGain = soundBoost.createGain();
-    receiveGain.gain.value = RECEIVE_GAIN;
-    soundBoost.createMediaElementSource(SOUNDS.receive).connect(receiveGain).connect(soundBoost.destination);
+    // Sounds play through Web Audio from decoded buffers, not <audio> elements:
+    // browsers hold an <audio> back in a background tab (it only played once
+    // you returned), and a gain above 1 needs Web Audio anyway. Silent until
+    // the person has clicked/typed on the page once (browser rule).
+    // Gains: notification.mp3 peaks at 0.658, so 1.52 is the most it takes
+    // before clipping — re-measure if the file changes. Send is a subtle tick.
+    const SOUND_FILES = { receive: ["/assets/sounds/notification.mp3", 1.5], send: ["/assets/sounds/send.wav", 0.25] };
+    const soundContext = new (window.AudioContext || window.webkitAudioContext)();
+    const soundBuffers = {};
+    for (const [name, [url]] of Object.entries(SOUND_FILES)) {
+      fetch(url).then(response => response.arrayBuffer()).then(data => soundContext.decodeAudioData(data))
+        .then(buffer => { soundBuffers[name] = buffer; }).catch(() => {});
+    }
     function playSound(name) {
-      soundBoost.resume().catch(() => {}); // starts suspended until the first click/keypress
-      SOUNDS[name].currentTime = 0;
-      SOUNDS[name].play().catch(() => {});
+      const buffer = soundBuffers[name];
+      if (!buffer) return;
+      const asked = Date.now();
+      soundContext.resume().then(() => {
+        if (Date.now() - asked > 2000) return; // resumed much later (first click): don't replay old sounds
+        const source = soundContext.createBufferSource();
+        const gain = soundContext.createGain();
+        source.buffer = buffer;
+        gain.gain.value = SOUND_FILES[name][1];
+        source.connect(gain).connect(soundContext.destination);
+        source.start();
+      }).catch(() => {});
     }
 
     // Top-right banner for a new message; click opens that chat, it leaves by itself after 6s.
@@ -8054,7 +8065,7 @@
       document.getElementById("notifyStack").appendChild(banner);
       // Not looking at the page (another tab/app): also a system notification.
       if (document.visibilityState !== "visible" && window.Notification?.permission === "granted") {
-        const note = new Notification(title, { body: messagePreviewText(topic.lastMessagePreview || ""), icon: avatarSrc(sender?.avatar), tag: topic.id });
+        const note = new Notification(title, { body: messagePreviewText(topic.lastMessagePreview || ""), icon: avatarSrc(sender?.avatar), tag: topic.id, renotify: true }); // renotify: a same-chat replacement still pops up
         note.onclick = () => { window.focus(); note.close(); open(); };
       }
       playSound("receive");
