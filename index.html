@@ -7976,6 +7976,7 @@
 
     // Browsers block sound until the person has clicked/typed on the page once; then it plays.
     const SOUNDS = { receive: new Audio("/assets/sounds/notification.wav"), send: new Audio("/assets/sounds/send.wav") };
+    SOUNDS.send.volume = 0.25; // subtle: your own send is just a tick, the receive sound stays full
     function playSound(name) {
       SOUNDS[name].currentTime = 0;
       SOUNDS[name].play().catch(() => {});
