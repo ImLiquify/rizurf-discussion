@@ -6040,6 +6040,7 @@
         content: content || `📎 ${attachment.name}`, ...attachmentFields, ...replyFields
       });
       renderConversationMessages(true);
+      playSound("send");
 
       try {
         sentTopicId = await ensureActiveTopicId();
@@ -7973,7 +7974,12 @@
       }, 3200);
     }
 
-    const NOTIFY_SOUND = new Audio("/assets/sounds/notification.mp3");
+    // Browsers block sound until the person has clicked/typed on the page once; then it plays.
+    const SOUNDS = { receive: new Audio("/assets/sounds/notification.wav"), send: new Audio("/assets/sounds/send.wav") };
+    function playSound(name) {
+      SOUNDS[name].currentTime = 0;
+      SOUNDS[name].play().catch(() => {});
+    }
 
     // Top-right banner for a new message; click opens that chat, it leaves by itself after 6s.
     function showMessageBanner(topic) {
@@ -8005,9 +8011,7 @@
       banner.addEventListener("click", event => event.target.closest(".notify-banner-close") ? dismiss() : open());
       banner.addEventListener("keydown", event => { if (event.key === "Enter" && event.target === banner) open(); });
       document.getElementById("notifyStack").appendChild(banner);
-      // Browsers block sound until the person has clicked/typed on the page once; then it plays.
-      NOTIFY_SOUND.currentTime = 0;
-      NOTIFY_SOUND.play().catch(() => {});
+      playSound("receive");
       setTimeout(dismiss, 6000);
     }
 
