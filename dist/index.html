@@ -1705,6 +1705,9 @@
       object-fit: cover;
     }
 
+    .feedbacks-unread-dot.muted { background: var(--text-subtle); }
+    .feedbacks-muted-icon { display: inline-flex; margin-left: 6px; color: var(--text-subtle); vertical-align: -2px; }
+    .feedbacks-muted-icon svg { width: 13px; height: 13px; }
     .feedbacks-unread-dot {
       flex-shrink: 0;
       min-width: 18px;
@@ -2024,12 +2027,13 @@
     }
     .mention-dropdown-item:hover, .mention-dropdown-item.highlighted { background: var(--bg-subtle); }
 
+    /* Solid chip: a tint disappeared on your own (same-tint) bubbles. */
     .chat-mention {
-      color: var(--accent-cyan-hover);
+      color: #FFFFFF;
       font-weight: 700;
-      background: var(--accent-cyan-light);
-      padding: 0 3px;
-      border-radius: 4px;
+      background: var(--primary);
+      padding: 1px 5px;
+      border-radius: 5px;
     }
 
     .feedbacks-compose-input {
@@ -4513,7 +4517,7 @@
         const topic = myTopics.find(t => t.id === r.topicId);
         // Watching that chat right now: the reaction appears on the message itself.
         if (!topic || (activeTopic?.id === r.topicId && document.hasFocus())) return;
-        showMessageBanner({ ...topic, lastSenderId: r.userId, lastMessagePreview: `Reacted ${r.reaction} to "${messagePreviewText(r.content || "")}"` });
+        showMessageBanner({ ...topic, isReaction: true, lastSenderId: r.userId, lastMessagePreview: `Reacted ${r.reaction} to "${messagePreviewText(r.content || "")}"` });
       });
     }
 
@@ -4578,8 +4582,20 @@
     // notification (showMessageBanner).
     // ponytail: only while the site is open somewhere; with the browser closed
     // (or a phone's suspended tab) nothing runs — that needs Web Push.
+    // Every list poll costs a gateway session check plus database queries, and
+    // the MySQL server is shared with the gateway: polling every tab at 4s
+    // overloaded it. So: 4s only for the tab being looked at, 30s for a
+    // background tab, and nothing once a tab has sat in the background for
+    // 30 minutes (it resumes when shown again).
+    let lastBackgroundPollAt = 0;
+    let hiddenSince = 0;
     function pollMyTopics() {
       if (currentMainTab !== "feedbacks") return;
+      if (document.visibilityState === "visible") { hiddenSince = 0; return refreshMyTopics(); }
+      const now = Date.now();
+      hiddenSince = hiddenSince || now;
+      if (now - hiddenSince > 30 * 60 * 1000 || now - lastBackgroundPollAt < 30000) return;
+      lastBackgroundPollAt = now;
       refreshMyTopics();
     }
 
@@ -4615,8 +4631,33 @@
       renderFeedbacksTab();
     }
 
+    // Muted groups (WhatsApp-style): no banner, sound or pop-up unless the
+    // message @mentions you. Unread counts still show, in grey.
+    // ponytail: saved per device (localStorage); a server-side table if it must follow the person across devices.
+    const BELL_SVG = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>`;
+    const BELL_OFF_SVG = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.73 21a2 2 0 0 1-3.46 0"></path><path d="M18.63 13A17.9 17.9 0 0 1 18 8"></path><path d="M6.26 6.26A5.9 5.9 0 0 0 6 8c0 7-3 9-3 9h14"></path><path d="M18 8a6 6 0 0 0-9.33-5"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
+    const mutedChats = new Set((() => { try { return JSON.parse(localStorage.getItem("rizurf-muted") || "[]"); } catch (error) { return []; } })());
+    const muteKey = (type, id) => type === "org" ? "org" : `group:${id}`;
+    const isMuted = (type, id) => type !== "user" && mutedChats.has(muteKey(type, id));
+    function toggleMute() {
+      if (!activeContainer || activeContainer.type === "user") return;
+      const key = muteKey(activeContainer.type, activeContainer.id);
+      if (!mutedChats.delete(key)) mutedChats.add(key);
+      try { localStorage.setItem("rizurf-muted", JSON.stringify([...mutedChats])); } catch (error) { /* private mode: just not remembered */ }
+      showToast(mutedChats.has(key) ? "Muted. You'll only be notified when you're mentioned." : "Unmuted.");
+      renderFeedbacksTab();
+      renderTopicList();
+    }
+    function muteToggleHtml() {
+      if (!activeContainer || activeContainer.type === "user") return "";
+      const muted = isMuted(activeContainer.type, activeContainer.id);
+      return `<button type="button" class="feedbacks-row-icon-btn${muted ? " active" : ""}" onclick="toggleMute()" aria-pressed="${muted}"
+        title="${muted ? "Unmute notifications" : "Mute notifications (you're still notified when mentioned)"}">${muted ? BELL_OFF_SVG : BELL_SVG}</button>`;
+    }
+
     function feedbacksListItemHtml({ type, id, name, icon, avatarUrl, preview, previewIsNew, unread, active }) {
       const safeName = escapeHtml(name || "");
+      const muted = isMuted(type, id);
       const iconHtml = (avatarUrl
         ? `<img src="${escapeHtml(avatarUrl)}" alt="${safeName}" class="feedbacks-list-item-avatar" />`
         : `<span>${icon}</span>`) + (type === "user" ? presenceDotHtml(id) : "");
@@ -4625,10 +4666,10 @@
           onclick="openContainer('${type}', '${escapeHtml(id)}', '${safeName.replace(/'/g, "&#039;")}')">
           <div class="feedbacks-list-item-icon">${iconHtml}</div>
           <div class="feedbacks-list-item-body">
-            <div class="feedbacks-list-item-name">${safeName}</div>
+            <div class="feedbacks-list-item-name">${safeName}${muted ? `<span class="feedbacks-muted-icon" title="Muted">${BELL_OFF_SVG}</span>` : ""}</div>
             <div class="feedbacks-list-item-preview${previewIsNew ? " is-new" : ""}">${escapeHtml(messagePreviewText(preview || ""))}</div>
           </div>
-          ${unread ? `<span class="feedbacks-unread-dot">${unread}</span>` : ""}
+          ${unread ? `<span class="feedbacks-unread-dot${muted ? " muted" : ""}">${unread}</span>` : ""}
         </button>
       `;
     }
@@ -5501,7 +5542,7 @@
     // without adding one.
     function startTopicPolling() {
       stopTopicPolling();
-      topicPollTimer = window.setInterval(pollActiveTopicMessages, 1500);
+      topicPollTimer = window.setInterval(pollActiveTopicMessages, 3000);
     }
 
     function stopTopicPolling() {
@@ -5805,12 +5846,12 @@
 
       const isGroup = activeContainer.type === "group";
       const canManageGroup = isGroup && (isGroupOwner(activeContainer.id) || groupCan(activeContainer.id, "manage_group") || groupCan(activeContainer.id, "manage_members"));
-      const groupActionsHtml = isGroup
-        ? `<div class="group-header-actions">
+      const groupActionsHtml = !isGroup ? `<div class="group-header-actions">${muteToggleHtml()}</div>`
+        : `<div class="group-header-actions">
+             ${muteToggleHtml()}
              ${membersToggleHtml()}
              ${canManageGroup ? `<button type="button" class="feedbacks-row-icon-btn" onclick="editGroupPrompt('${activeContainer.id}')" title="Group settings — members, roles, name, photo">${SETTINGS_GEAR_SVG}</button>` : ""}
-           </div>`
-        : "";
+           </div>`;
       header.innerHTML = `<div class="feedbacks-detail-title-group">${MOBILE_BACK_HTML}<div class="feedbacks-detail-title">${escapeHtml(activeContainer.name)}</div></div>${groupActionsHtml}`;
 
       composeBar.hidden = true;
@@ -5911,7 +5952,7 @@
         `;
       }
       renderPinnedTicker();
-      header.insertAdjacentHTML("beforeend", `<div class="group-header-actions">${activeContainer?.type === "group" ? membersToggleHtml() : ""}
+      header.insertAdjacentHTML("beforeend", `<div class="group-header-actions">${muteToggleHtml()}${activeContainer?.type === "group" ? membersToggleHtml() : ""}
         <button type="button" class="feedbacks-row-icon-btn${showStarredOnly ? " active" : ""}" onclick="toggleStarredFilter()"
           title="${showStarredOnly ? "Show all messages" : "Show only my starred messages"}" aria-pressed="${showStarredOnly}">★</button></div>`);
 
@@ -8103,6 +8144,9 @@
 
     function showMessageBanner(topic) {
       if (!notificationsOn()) return;
+      // A muted group only gets through when the message mentions you.
+      if (isMuted(topic.targetType, topic.targetId)
+        && (topic.isReaction || !mentionsMe({ senderId: topic.lastSenderId, targetType: topic.targetType, content: topic.lastMessagePreview || "" }))) return;
       const sender = EMPLOYEES.find(e => e.id === topic.lastSenderId);
       const where = topic.targetType === "user" ? ""
         : topic.targetType === "org" ? "Organization" : (topic.groupName || topic.name || "a group");

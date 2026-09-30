@@ -24,6 +24,10 @@ export const pool = mysql.createPool({
   ...config.db,
   waitForConnections: true,
   connectionLimit: process.env.VERCEL ? 3 : 10,
+  // Give connections back quickly: the MySQL server is shared with the
+  // gateway and has a fixed max_connections, and every Vercel instance
+  // (several per deploy, more under load) holds its own pool.
+  ...(process.env.VERCEL ? { maxIdle: 1, idleTimeout: 10000 } : {}),
   namedPlaceholders: true,
   ...(config.db.ssl ? { ssl: { rejectUnauthorized: true } } : {})
 });
