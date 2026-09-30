@@ -4375,6 +4375,9 @@
     let feedbacksSection = "chat";
     function showFeedbacksSection(section) {
       feedbacksSection = section;
+      // A chat from the other section (e.g. a group while picking Chat) closes,
+      // so the phone shows that section's list instead of the old chat.
+      if (activeContainer && (activeContainer.type === "user" ? "chat" : "groups") !== section) closeContainer();
       switchMainTab("feedbacks");
     }
     function syncFeedbacksSectionNav() {
