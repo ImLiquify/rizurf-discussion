@@ -2029,6 +2029,8 @@
 
     /* WhatsApp-style: just the name, coloured and bold, no block behind it. */
     .chat-mention { color: var(--accent-cyan-hover); font-weight: 700; }
+    /* A mention of you gets a highlight behind it; other people's are just coloured. */
+    .chat-mention.me { padding: 1px 4px; border-radius: 4px; background: color-mix(in srgb, var(--primary) 20%, transparent); }
 
     .feedbacks-compose-input {
       flex: 1;
@@ -3456,7 +3458,10 @@
     .notify-banner.leaving { opacity: 0; transform: translateX(24px); }
     .notify-banner img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex: none; }
     .notify-banner-text { min-width: 0; display: grid; gap: 2px; }
-    .notify-banner-title { font-size: 0.85rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .notify-banner-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+    .notify-banner-title { flex: 1; min-width: 0; font-size: 0.85rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .notify-banner-time { flex: none; font-size: 0.72rem; color: var(--text-subtle); }
+    .notify-banner-sub { font-size: 0.82rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .notify-banner-body { font-size: 0.82rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .notify-banner-close {
       position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; display: grid; place-items: center;
@@ -4578,11 +4583,12 @@
     // (or a phone's suspended tab) nothing runs — that needs Web Push.
     // Every list poll costs a gateway session check plus database queries, and
     // the MySQL server is shared with the gateway: it went down the day every
-    // tab polled at 4s around the clock. So: 4s for the tab being looked at,
-    // every other tick (8s) for a background tab, and nothing once a tab has
-    // sat in the background for 30 minutes (it resumes when shown again).
-    // BACKGROUND_POLL_MS is the knob if the server struggles again.
-    const BACKGROUND_POLL_MS = 7000;
+    // tab polled at 4s around the clock. Now a background tab also polls every
+    // tick (4s), but only for its first 30 minutes in the background (it
+    // resumes when shown again), and the server releases idle connections.
+    // BACKGROUND_POLL_MS is the knob if the server struggles again: 7000
+    // makes it every other tick (8s), 30000 twice a minute.
+    const BACKGROUND_POLL_MS = 3000;
     let lastBackgroundPollAt = 0;
     let hiddenSince = 0;
     function pollMyTopics() {
@@ -5631,7 +5637,7 @@
       let match;
       while ((match = mentionRe.exec(content))) {
         out += escapeHtml(content.slice(lastIndex, match.index));
-        out += `<span class="chat-mention">@${escapeHtml(match[1])}</span>`;
+        out += `<span class="chat-mention${match[1] === CURRENT_USER.name ? " me" : ""}">@${escapeHtml(match[1])}</span>`;
         lastIndex = match.index + match[0].length;
       }
       out += escapeHtml(content.slice(lastIndex));
@@ -5908,7 +5914,18 @@
       if (composeDraftKey) composeDrafts.set(composeDraftKey, input.value);
       composeDraftKey = key;
       input.value = composeDrafts.get(key) || "";
+      focusCompose();
     }
+    // Ready to type without clicking the box — on opening a chat and on coming
+    // back to the tab. Not on touch screens (it would pop the keyboard up), and
+    // never stealing focus from another field or an open pop-up.
+    function focusCompose() {
+      const input = document.getElementById("feedbacksComposeInput");
+      if (!input || input.closest("[hidden]") || !window.matchMedia("(hover: hover)").matches) return;
+      if (document.querySelector(".modal-overlay.open") || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "")) return;
+      input.focus({ preventScroll: true });
+    }
+    window.addEventListener("focus", focusCompose);
 
     function renderConversationMessages(forceScrollBottom = false, scrollToFirstUnread = false) {
       const header = document.getElementById("feedbacksDetailHeader");
@@ -8146,9 +8163,10 @@
       const sender = EMPLOYEES.find(e => e.id === topic.lastSenderId);
       const where = topic.targetType === "user" ? ""
         : topic.targetType === "org" ? "Organization" : (topic.groupName || topic.name || "a group");
-      // A tag reads "<name>" / "Mentioned you - <group>: <message>".
+      // A tag is three lines: "<name>" / "Mentioned you – <group>" / "<message>".
       const title = (sender?.name || "New message") + (where && !mentioned ? ` in ${where}` : "");
-      const body = (mentioned ? `Mentioned you - ${where}: ` : "") + messagePreviewText(topic.lastMessagePreview || "");
+      const sub = mentioned ? `Mentioned you – ${where}` : "";
+      const body = messagePreviewText(topic.lastMessagePreview || "");
       const banner = document.createElement("div");
       banner.className = "notify-banner";
       banner.tabIndex = 0;
@@ -8156,7 +8174,8 @@
       banner.innerHTML = `
         <img src="${escapeHtml(avatarSrc(sender?.avatar))}" alt="" />
         <span class="notify-banner-text">
-          <span class="notify-banner-title">${escapeHtml(title)}</span>
+          <span class="notify-banner-head"><span class="notify-banner-title">${escapeHtml(title)}</span><span class="notify-banner-time">now</span></span>
+          ${sub ? `<span class="notify-banner-sub">${escapeHtml(sub)}</span>` : ""}
           <span class="notify-banner-body">${escapeHtml(body)}</span>
         </span>
         <button type="button" class="notify-banner-close" aria-label="Dismiss">×</button>`;
@@ -8177,7 +8196,7 @@
       // notification. try/catch: Android Chrome throws on new Notification().
       if (!document.hasFocus() && window.Notification?.permission === "granted") {
         try {
-          const note = new Notification(title, { body, icon: avatarSrc(sender?.avatar), tag: topic.id, renotify: true }); // renotify: a same-chat replacement still pops up
+          const note = new Notification(title, { body: sub ? `${sub}\n${body}` : body, icon: avatarSrc(sender?.avatar), tag: topic.id, renotify: true }); // renotify: a same-chat replacement still pops up
           note.onclick = () => { window.focus(); note.close(); open(); };
         } catch (error) { /* this browser needs a service worker for notifications */ }
       }
