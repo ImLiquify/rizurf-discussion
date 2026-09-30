@@ -3391,8 +3391,9 @@
 
     .sidebar-brand { padding: 18px 16px !important; border-bottom: 1px solid var(--border-color) !important; overflow: hidden; white-space: nowrap; }
     .brand-icon, .brand-full { display: block; height: 28px; width: auto; }
-    /* Dark mode keeps the logo's real colours on a small white backing, so the navy lettering stays readable. */
-    :root[data-theme="dark"] :is(.brand-icon, .brand-full) { box-sizing: content-box; padding: 4px 8px; background: #FFFFFF; border-radius: var(--radius-sm); }
+    /* Dark mode swaps in the light-lettered logos (public/assets/brand/). */
+    :root:not([data-theme="dark"]) .brand-dark,
+    :root[data-theme="dark"] :is(.brand-icon, .brand-full):not(.brand-dark) { display: none !important; }
     .sidebar-nav-label { display: none; }
     .sidebar-nav { gap: 0; padding: 10px 8px 8px; overflow-x: hidden; scrollbar-width: none; }
     .sidebar-nav::-webkit-scrollbar { width: 0; height: 0; }
@@ -3502,6 +3503,8 @@
     <div class="sidebar-brand" style="padding: 20px 16px; border-bottom: 1px solid rgba(255,255,255,0.08);">
       <img class="brand-icon" src="https://web-omega-two-47.vercel.app/logo-icon.png" alt="Rizurf" />
       <img class="brand-full" src="https://web-omega-two-47.vercel.app/logo.png" alt="Rizurf Realty" />
+      <img class="brand-icon brand-dark" src="/assets/brand/logo-icon-dark.png" alt="Rizurf" />
+      <img class="brand-full brand-dark" src="/assets/brand/logo-dark.png" alt="Rizurf Realty" />
     </div>
 
     <!-- Navigation Links -->
