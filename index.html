@@ -2210,6 +2210,14 @@
     }
     .chat-float-reply:hover span, .chat-float-reply:focus-visible span { color: var(--primary); border-color: var(--primary); }
     .chat-float-reply:focus-visible { outline: none; }
+    /* Swipe-to-reply (enableSwipeToReply): the ↩ fades in as the message slides right. */
+    .chat-message-row { transition: transform 0.18s ease; }
+    .chat-message-row.swiping { transition: none; }
+    .chat-message-row.swiping::before {
+      content: "↩"; position: absolute; left: -30px; top: 50%; transform: translateY(-50%);
+      width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%;
+      background: var(--bg-surface); color: var(--primary); font-size: 0.9rem; opacity: var(--swipe, 0);
+    }
     .chat-message-row:hover .chat-float-reply,
     .chat-message-row:focus-within .chat-float-reply { opacity: 1; pointer-events: auto; }
     .chat-message-row:hover .chat-message-actions,
@@ -4387,6 +4395,7 @@
       document.getElementById("feedbacksMessagesScroll").addEventListener("click", event => {
         if (!event.target.closest("button, a, input, textarea, img")) event.target.closest(".chat-message-row")?.focus({ preventScroll: true });
       });
+      enableSwipeToReply(document.getElementById("feedbacksMessagesScroll"));
       pingPresence();
       window.setInterval(pingPresence, 60000);
       document.addEventListener("visibilitychange", pingPresence);
@@ -6466,6 +6475,49 @@
         }
         showToast(error.message || "Could not delete that message.");
       }
+    }
+
+    // WhatsApp-style: on a touch screen, drag a message to the right to reply.
+    // It follows the finger (up to 72px) with a ↩ fading in behind it; let go
+    // past 56px and it replies. A mostly-vertical drag is left to scrolling.
+    function enableSwipeToReply(scroller) {
+      const THRESHOLD = 56;
+      let row = null, startX = 0, startY = 0, dx = 0, swiping = false;
+      const reset = () => {
+        if (!row) return;
+        row.classList.remove("swiping");
+        row.style.transform = "";
+        row.style.removeProperty("--swipe");
+        row = null;
+      };
+      scroller.addEventListener("touchstart", event => {
+        reset();
+        const target = event.target.closest(".chat-message-row");
+        if (!target || event.touches.length > 1 || event.target.closest("textarea, input")) return;
+        row = target; swiping = false; dx = 0;
+        startX = event.touches[0].clientX; startY = event.touches[0].clientY;
+      }, { passive: true });
+      scroller.addEventListener("touchmove", event => {
+        if (!row) return;
+        const moveX = event.touches[0].clientX - startX, moveY = event.touches[0].clientY - startY;
+        if (!swiping) {
+          if (Math.abs(moveY) > 10 && Math.abs(moveY) > Math.abs(moveX)) { reset(); return; } // it's a scroll
+          if (moveX < 10) return;
+          swiping = true;
+          row.classList.add("swiping");
+        }
+        const before = dx;
+        dx = Math.max(0, Math.min(72, moveX));
+        if (before < THRESHOLD && dx >= THRESHOLD) navigator.vibrate?.(10);
+        row.style.transform = `translateX(${dx}px)`;
+        row.style.setProperty("--swipe", Math.min(1, dx / THRESHOLD));
+      }, { passive: true });
+      const finish = () => {
+        if (row && swiping && dx >= THRESHOLD) startReply(row.id.replace("chat-msg-", ""));
+        reset();
+      };
+      scroller.addEventListener("touchend", finish);
+      scroller.addEventListener("touchcancel", reset);
     }
 
     function startReply(id) {
