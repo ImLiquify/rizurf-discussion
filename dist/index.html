@@ -2026,6 +2026,11 @@
       width: 22px; height: 22px; border-radius: 50%; object-fit: cover; flex-shrink: 0;
     }
     .mention-dropdown-item:hover, .mention-dropdown-item.highlighted { background: var(--bg-subtle); }
+    .mention-everyone-icon {
+      width: 22px; height: 22px; flex-shrink: 0; display: grid; place-items: center;
+      border-radius: 50%; background: var(--primary); color: #FFFFFF; font-size: 0.75rem; font-weight: 800;
+    }
+    .mention-dropdown-item small { margin-left: 6px; color: var(--text-muted); font-weight: 500; }
 
     /* WhatsApp-style: just the name, coloured and bold, no block behind it. */
     .chat-mention { color: var(--accent-cyan-hover); font-weight: 700; }
@@ -2188,6 +2193,25 @@
       transition: opacity 0.12s ease;
     }
     .chat-message-row.mine .chat-message-actions { left: auto; right: 8px; }
+    /* Reply button floating beside the bubble on hover (outside, on the open
+       side). Its 8px transparent padding bridges the gap, so moving the
+       mouse from the bubble to it doesn't drop the hover. */
+    .chat-float-reply {
+      position: absolute; top: 50%; right: -40px; transform: translateY(-50%); z-index: 3;
+      width: 40px; height: 32px; padding: 0 0 0 8px; border: 0; background: none;
+      display: flex; align-items: center; justify-content: flex-start;
+      opacity: 0; pointer-events: none; transition: opacity 0.12s ease;
+    }
+    .chat-message-row.mine .chat-float-reply { right: auto; left: -40px; padding: 0 8px 0 0; justify-content: flex-end; }
+    .chat-float-reply span {
+      width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%;
+      background: var(--bg-surface); border: 1px solid var(--border-color); box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.08));
+      color: var(--text-muted); font-size: 1rem; line-height: 1;
+    }
+    .chat-float-reply:hover span, .chat-float-reply:focus-visible span { color: var(--primary); border-color: var(--primary); }
+    .chat-float-reply:focus-visible { outline: none; }
+    .chat-message-row:hover .chat-float-reply,
+    .chat-message-row:focus-within .chat-float-reply { opacity: 1; pointer-events: auto; }
     .chat-message-row:hover .chat-message-actions,
     .chat-message-row:focus-within .chat-message-actions,
     .chat-message-row.menu-open .chat-message-actions { opacity: 1; pointer-events: auto; }
@@ -5606,7 +5630,7 @@
     // Never called for a DM message (see chatMessageBubbleHtml) — there's
     // no one to mention in a 1:1 besides the two people already talking.
     function mentionRegex() {
-      const names = [...new Set([...EMPLOYEES, CURRENT_USER].map(e => e.name).filter(Boolean))]
+      const names = [...new Set([...EMPLOYEES, CURRENT_USER, EVERYONE_MENTION].map(e => e.name).filter(Boolean))]
         .sort((a, b) => b.length - a.length); // longest first, so "Bob Test" wins over a shorter "Bob"
       if (!names.length) return null;
       const pattern = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
@@ -5618,7 +5642,8 @@
     function mentionsMe(message) {
       if (message.senderId === CURRENT_USER.id || message.targetType === "user" || !CURRENT_USER.name) return false;
       const re = mentionRegex();
-      return Boolean(re) && [...message.content.matchAll(re)].some(match => match[1] === CURRENT_USER.name);
+      return Boolean(re) && [...message.content.matchAll(re)]
+        .some(match => match[1] === CURRENT_USER.name || (match[1] === "everyone" && message.targetType === "group"));
     }
 
     // A message that mentions me gets a full-width highlighted line around its
@@ -5637,7 +5662,7 @@
       let match;
       while ((match = mentionRe.exec(content))) {
         out += escapeHtml(content.slice(lastIndex, match.index));
-        out += `<span class="chat-mention${match[1] === CURRENT_USER.name ? " me" : ""}">@${escapeHtml(match[1])}</span>`;
+        out += `<span class="chat-mention${match[1] === CURRENT_USER.name || match[1] === "everyone" ? " me" : ""}">@${escapeHtml(match[1])}</span>`;
         lastIndex = match.index + match[0].length;
       }
       out += escapeHtml(content.slice(lastIndex));
@@ -5696,7 +5721,8 @@
             `<button type="button" onclick="toggleChatReaction('${message.id}', '${emoji}')" title="React ${emoji}" aria-label="React ${emoji}">${emoji}</button>`).join("")}</span>
           <button type="button" class="chat-message-action-btn" onclick="startReply('${message.id}')" title="Reply" aria-label="Reply">↩</button>
           <button type="button" class="chat-message-action-btn" onclick="openMessageMenu(event, '${message.id}')" title="More" aria-label="More actions" aria-haspopup="menu">⋯</button>
-        </div>`;
+        </div>
+        <button type="button" class="chat-float-reply" onclick="startReply('${message.id}')" title="Reply" aria-label="Reply"><span>↩</span></button>`;
       const replyHtml = message.replyToId
         ? `<button type="button" class="chat-reply-quote" onclick="jumpToMessage('${message.replyToId}')" title="Go to the original message">${replyThumbHtml(message.replyToAttachmentId, message.replyToAttachmentType)}<span class="chat-reply-quote-text">${message.replyToSenderName ? `<strong>${escapeHtml(message.replyToSenderName)}</strong>` : ""}${escapeHtml(message.replyToContent == null ? "Original message was deleted" : replyLabel(message.replyToContent, message.replyToAttachmentType, message.replyToAttachmentName))}</span></button>`
         : "";
@@ -6046,10 +6072,14 @@
       // company-wide, so any employee is fair game.
       const pool = activeContainer.type === "group" ? activeGroupMembers : EMPLOYEES;
       mentionMatches = pool.filter(e => e.id !== CURRENT_USER.id && e.name.toLowerCase().includes(query)).slice(0, 6);
+      // A group can tag all its members at once with @everyone.
+      if (activeContainer.type === "group" && "everyone".startsWith(query)) mentionMatches.unshift(EVERYONE_MENTION);
       mentionHighlightIndex = 0;
       mentionActive = mentionMatches.length > 0;
       renderMentionDropdown();
     }
+
+    const EVERYONE_MENTION = { id: "everyone", name: "everyone" };
 
     function renderMentionDropdown() {
       const dropdown = document.getElementById("mentionDropdown");
@@ -6059,8 +6089,9 @@
       dropdown.innerHTML = mentionMatches.map((e, index) => `
         <button type="button" class="mention-dropdown-item${index === mentionHighlightIndex ? " highlighted" : ""}"
           onmousedown="event.preventDefault(); insertMention(${index})">
-          <img src="${escapeHtml(avatarSrc(e.avatar))}" alt="" />
-          <span>${escapeHtml(e.name)}</span>
+          ${e === EVERYONE_MENTION
+            ? `<span class="mention-everyone-icon" aria-hidden="true">@</span><span>everyone <small>Notify everyone in this group</small></span>`
+            : `<img src="${escapeHtml(avatarSrc(e.avatar))}" alt="" /><span>${escapeHtml(e.name)}</span>`}
         </button>
       `).join("");
     }
